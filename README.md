@@ -125,12 +125,7 @@ bun run compile    # compile standalone binary
 
 ### Releasing
 
-```bash
-npm version patch    # bumps package.json, creates git tag
-git push && git push --tags   # triggers GitHub Actions release
-```
-
-GitHub Actions builds binaries for macOS (x64, arm64) and Linux (x64, arm64), generates SHA256SUMS, and creates a GitHub release.
+Trigger the **Release** workflow from GitHub Actions (workflow_dispatch). It automatically computes a `0.1.<timestamp>` version, builds binaries for macOS (x64, arm64) and Linux (x64, arm64), generates SHA256SUMS, creates a git tag, and publishes a GitHub release. No manual version bumping needed.
 
 ## Project Structure
 

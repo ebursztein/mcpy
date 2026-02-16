@@ -101,10 +101,12 @@ Group labels are defined in both `ui/src/routes/tools/+page.svelte` and `ui/src/
 
 ## Version and release
 
-- Version is defined in `package.json` and imported via `src/version.ts`
+- Version `0.1.<unix-timestamp>` is computed at build time by the GitHub Actions workflow and written into `package.json` before compiling
+- `package.json` has `0.1.0-dev` in the repo -- never bump it manually
+- `src/version.ts` imports version from `package.json` at compile time
 - `src/update.ts` handles checking GitHub releases and performing binary updates with SHA256 verification
 - CLI commands: `mcpy version`, `mcpy update`, `mcpy install`, `mcpy uninstall`
-- Release workflow: `npm version patch && git push --tags` triggers GitHub Actions to build 4 platform binaries + SHA256SUMS
+- Release: trigger the "Release" workflow manually from GitHub Actions (workflow_dispatch). It computes the version, builds 4 platform binaries, generates SHA256SUMS, creates a git tag, and publishes a GitHub release.
 - Website is mcpy.app, deployed from `site/` to Cloudflare Pages
 
 ## Port
