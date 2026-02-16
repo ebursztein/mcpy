@@ -43,16 +43,16 @@ export async function testInstall(builtBinary: string) {
   } catch {}
   assert("installed binary is executable", executable);
 
-  // Verify config registration
+  // Verify config registration (only if Claude Desktop is detected on this system)
   const configPath = getClaudeConfigPath();
-  let registered = false;
   if (existsSync(configPath)) {
+    let registered = false;
     try {
       const config = JSON.parse(await Bun.file(configPath).text());
       registered = config?.mcpServers?.mcpy?.command === INSTALLED_BINARY;
     } catch {}
+    assert("registered in Claude Desktop config", registered);
   }
-  assert("registered in Claude Desktop config", registered);
 
   // Verify the installed copy runs
   const versionProc = Bun.spawn([INSTALLED_BINARY, "version"], {
