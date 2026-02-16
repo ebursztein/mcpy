@@ -1,6 +1,15 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../base.ts";
+import type { ToolDefinition, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
+
+export const packagesGroup: GroupDefinition = {
+  id: "packages",
+  category: "developer",
+  label: "Packages",
+  description: "Look up npm and PyPI package information",
+  requiresConfig: false,
+  enabledByDefault: true,
+};
 
 const tool: ToolDefinition = {
   name: "npm_info",

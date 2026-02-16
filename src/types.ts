@@ -49,6 +49,26 @@ export interface ToolInfo {
   missingSettings?: string[];
 }
 
+export interface SettingsFieldDef {
+  key: string;
+  label: string;
+  type: "text" | "password" | "number";
+  placeholder?: string;
+  gridSpan?: 1 | 2;
+}
+
+export interface GroupInfo {
+  id: string;
+  category: string;
+  label: string;
+  description: string;
+  url?: string;
+  remote?: boolean;
+  requiresConfig: boolean;
+  enabledByDefault: boolean;
+  settingsFields?: SettingsFieldDef[];
+}
+
 export interface DatabaseConfig {
   host: string;
   port: number;
@@ -60,6 +80,7 @@ export interface DatabaseConfig {
 export interface Settings {
   apiKeys: {
     perplexity?: string;
+    github?: string;
   };
   database: {
     mysql?: DatabaseConfig;
@@ -73,4 +94,11 @@ export interface AggregateStats {
   successCount: number;
   errorCount: number;
   tools: Record<string, ToolStats>;
+}
+
+export interface TimeseriesPoint {
+  timestamp: string;
+  tool: string;
+  duration: number;
+  success: boolean;
 }

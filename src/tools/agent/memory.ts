@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { join } from "path";
-import type { ToolDefinition } from "../base.ts";
+import type { ToolDefinition, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
+
+export const memoryGroup: GroupDefinition = {
+  id: "memory",
+  category: "agent",
+  label: "Memory",
+  description: "Key-value store for facts and preferences across sessions",
+  requiresConfig: false,
+  enabledByDefault: true,
+};
 
 interface MemoryEntry {
   key: string;

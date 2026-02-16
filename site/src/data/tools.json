@@ -1,0 +1,165 @@
+[
+  {
+    "id": "mcpy",
+    "category": "agent",
+    "label": "mcpy",
+    "description": "Server management, logs, stats, and updates",
+    "url": "https://github.com/ebursztein/mcpy",
+    "requiresConfig": false,
+    "tools": [
+      {
+        "name": "mcpy_log",
+        "title": "mcpy Server Log",
+        "description": "Read the mcpy server log file (~/.mcpy/mcpy.log)"
+      },
+      {
+        "name": "mcpy_restart",
+        "title": "Restart mcpy",
+        "description": "Restart the mcpy server process"
+      },
+      {
+        "name": "mcpy_stats",
+        "title": "mcpy Server Stats",
+        "description": "Show runtime statistics: uptime, process info, tool invocation counts"
+      },
+      {
+        "name": "mcpy_update",
+        "title": "Update mcpy",
+        "description": "Check for and install mcpy updates"
+      }
+    ]
+  },
+  {
+    "id": "todo",
+    "category": "agent",
+    "label": "Todo List",
+    "description": "Persistent task tracking across conversations",
+    "requiresConfig": false,
+    "tools": [
+      {
+        "name": "todo_list",
+        "title": "Todo List",
+        "description": "Persistent todo list with add, update, remove, and clear actions"
+      }
+    ]
+  },
+  {
+    "id": "memory",
+    "category": "agent",
+    "label": "Memory",
+    "description": "Key-value store for facts and preferences across sessions",
+    "requiresConfig": false,
+    "tools": [
+      {
+        "name": "memory",
+        "title": "Memory Store",
+        "description": "Persistent key-value memory with get, set, delete, list, and search"
+      }
+    ]
+  },
+  {
+    "id": "mysql",
+    "category": "database",
+    "label": "MySQL",
+    "description": "Query and explore MySQL databases on your network",
+    "url": "https://dev.mysql.com/doc/",
+    "requiresConfig": true,
+    "tools": [
+      {
+        "name": "mysql_query",
+        "title": "MySQL Query",
+        "description": "Execute SQL queries with parameterized inputs and read-only mode"
+      },
+      {
+        "name": "mysql_list_tables",
+        "title": "MySQL List Tables",
+        "description": "List all tables with row counts and engine info"
+      },
+      {
+        "name": "mysql_describe_table",
+        "title": "MySQL Describe Table",
+        "description": "Show columns, indexes, and foreign keys"
+      }
+    ]
+  },
+  {
+    "id": "postgres",
+    "category": "database",
+    "label": "PostgreSQL",
+    "description": "Query and explore PostgreSQL databases on your network",
+    "url": "https://www.postgresql.org/docs/",
+    "requiresConfig": true,
+    "tools": [
+      {
+        "name": "postgres_query",
+        "title": "PostgreSQL Query",
+        "description": "Execute SQL queries with parameterized inputs and read-only mode"
+      },
+      {
+        "name": "postgres_list_tables",
+        "title": "PostgreSQL List Tables",
+        "description": "List all tables with row count estimates"
+      },
+      {
+        "name": "postgres_describe_table",
+        "title": "PostgreSQL Describe Table",
+        "description": "Show columns, indexes, and foreign keys"
+      }
+    ]
+  },
+  {
+    "id": "packages",
+    "category": "developer",
+    "label": "Packages",
+    "description": "Look up npm and PyPI package information",
+    "requiresConfig": false,
+    "tools": [
+      {
+        "name": "npm_info",
+        "title": "npm Package Info",
+        "description": "Look up version, description, dependencies, license, and downloads"
+      },
+      {
+        "name": "pypi_info",
+        "title": "PyPI Package Info",
+        "description": "Look up version, description, dependencies, license, and author"
+      }
+    ]
+  },
+  {
+    "id": "fetch",
+    "category": "web",
+    "label": "Fetch",
+    "description": "Fetch web pages and inspect HTTP headers",
+    "requiresConfig": false,
+    "tools": [
+      {
+        "name": "web_fetch",
+        "title": "Web Fetch",
+        "description": "Fetch a webpage and extract clean readable text or raw HTML"
+      },
+      {
+        "name": "http_headers",
+        "title": "HTTP Headers",
+        "description": "Inspect HTTP response headers, redirects, and server info"
+      }
+    ]
+  },
+  {
+    "id": "perplexity",
+    "category": "web",
+    "label": "Perplexity",
+    "description": "AI-powered web search with citations",
+    "url": "https://docs.perplexity.ai/",
+    "remote": true,
+    "requiresConfig": true,
+    "tools": [
+      {
+        "name": "web_search",
+        "title": "Web Search",
+        "description": "Search the web using Perplexity AI with citations",
+        "remote": true
+      }
+    ]
+  }
+]

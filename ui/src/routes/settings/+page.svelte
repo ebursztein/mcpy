@@ -1,84 +1,51 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
-		fetchSettings,
-		updateSettings,
-		fetchInstallStatus,
-		installToClaude,
-		uninstallFromClaude,
 		fetchVersion,
 		triggerUpdate,
-		type Settings,
-		type InstallStatus,
-		type VersionInfo
+		fetchClients,
+		installToClient,
+		uninstallFromClient,
+		type VersionInfo,
+		type ClientsStatus
 	} from '$lib/api';
-	import SettingsField from '$lib/components/SettingsField.svelte';
 
-	let settings: Settings | null = $state(null);
-	let saving = $state(false);
-	let saved = $state(false);
-	let installStatus: InstallStatus | null = $state(null);
-	let installing = $state(false);
-	let installError: string | null = $state(null);
 	let versionInfo: VersionInfo | null = $state(null);
 	let updating = $state(false);
 	let updateError: string | null = $state(null);
+	let clientsStatus: ClientsStatus | null = $state(null);
+	let copied = $state(false);
+	let busyClient: string | null = $state(null);
+	let clientError: string | null = $state(null);
+
+	const configSnippet = $derived(
+		clientsStatus
+			? JSON.stringify({ mcpServers: { mcpy: { command: clientsStatus.binaryPath } } }, null, 2)
+			: ''
+	);
 
 	onMount(async () => {
-		settings = await fetchSettings();
-		installStatus = await fetchInstallStatus();
-		versionInfo = await fetchVersion();
+		[versionInfo, clientsStatus] = await Promise.all([fetchVersion(), fetchClients()]);
 	});
 
-	async function handleInstall() {
-		installing = true;
-		installError = null;
-		const result = await installToClaude();
+	async function toggleClient(clientId: string, installed: boolean) {
+		busyClient = clientId;
+		clientError = null;
+		const result = installed
+			? await uninstallFromClient(clientId)
+			: await installToClient(clientId);
 		if (result.ok) {
-			installStatus = await fetchInstallStatus();
+			clientsStatus = await fetchClients();
 		} else {
-			installError = result.error || 'Failed to install';
+			clientError = result.error || 'Failed';
 		}
-		installing = false;
+		busyClient = null;
 	}
 
-	async function handleUninstall() {
-		installing = true;
-		installError = null;
-		const result = await uninstallFromClaude();
-		if (result.ok) {
-			installStatus = await fetchInstallStatus();
-		} else {
-			installError = result.error || 'Failed to uninstall';
-		}
-		installing = false;
-	}
-
-	async function save(path: string, value: string) {
-		if (!settings) return;
-		saving = true;
-		saved = false;
-
-		// Build nested update object from dot path
-		const parts = path.split('.');
-		const update: Record<string, unknown> = {};
-		let current: Record<string, unknown> = update;
-		for (let i = 0; i < parts.length - 1; i++) {
-			current[parts[i]] = {};
-			current = current[parts[i]] as Record<string, unknown>;
-		}
-		current[parts[parts.length - 1]] = value;
-
-		settings = await updateSettings(update);
-		saving = false;
-		saved = true;
-		setTimeout(() => saved = false, 2000);
-	}
-
-	async function saveDbField(db: string, field: string, value: string) {
-		const numFields = ['port'];
-		const val = numFields.includes(field) ? parseInt(value, 10) || 0 : value;
-		await save(`database.${db}.${field}`, val as unknown as string);
+	async function copySnippet() {
+		await navigator.clipboard.writeText(configSnippet);
+		copied = true;
+		setTimeout(() => copied = false, 2000);
 	}
 
 	async function handleUpdate() {
@@ -89,7 +56,6 @@
 			if (!result.ok) {
 				updateError = result.error || 'Update failed';
 			}
-			// Server will restart, so we just show the message
 		} catch (err) {
 			updateError = 'Update request failed';
 		}
@@ -98,15 +64,7 @@
 </script>
 
 <div class="flex flex-col gap-6 max-w-4xl">
-	<div class="flex items-center gap-2">
-		<h2 class="text-2xl font-bold">Settings</h2>
-		{#if saving}
-			<span class="badge badge-ghost badge-sm">saving...</span>
-		{/if}
-		{#if saved}
-			<span class="badge badge-success badge-sm">saved</span>
-		{/if}
-	</div>
+	<h2 class="text-2xl font-bold">Settings</h2>
 
 	<!-- Version & Update -->
 	{#if versionInfo}
@@ -150,184 +108,72 @@
 		</div>
 	{/if}
 
-	<!-- Claude Desktop Integration -->
-	{#if installStatus}
+	<!-- MCP Clients -->
+	{#if clientsStatus}
 		<div class="card bg-base-200 shadow">
-			<div class="card-body p-4 gap-3">
-				<div class="flex items-center justify-between">
-					<div class="flex flex-col gap-1">
-						<div class="flex items-center gap-2">
-							<h3 class="font-semibold">Claude Desktop</h3>
-							{#if installStatus.installed}
-								<span class="badge badge-success badge-sm">installed</span>
-							{:else}
-								<span class="badge badge-ghost badge-sm">not installed</span>
-							{/if}
-						</div>
-						<p class="text-xs text-base-content/50">
-							{#if installStatus.installed}
-								mcpy is registered as an MCP server in Claude Desktop. Restart Claude Desktop to apply changes.
-							{:else}
-								Compile and register mcpy as a standalone MCP server in Claude Desktop. No runtime dependencies needed.
-							{/if}
-						</p>
-					</div>
-					<div class="flex items-center gap-2">
-						{#if installStatus.installed}
-							<button
-								class="btn btn-sm btn-ghost btn-error"
-								onclick={handleUninstall}
-								disabled={installing}
-							>
-								{#if installing}
-									<span class="loading loading-spinner loading-xs"></span>
-								{/if}
-								Remove
-							</button>
-						{:else}
-							<button
-								class="btn btn-sm btn-primary"
-								onclick={handleInstall}
-								disabled={installing}
-							>
-								{#if installing}
+			<div class="card-body p-4 gap-4">
+				<h3 class="font-semibold">MCP Clients</h3>
+
+				<!-- Client status rows -->
+				<div class="flex flex-col gap-2">
+					{#each clientsStatus.clients as client}
+						<div class="flex items-center justify-between py-1.5 px-2 rounded-lg bg-base-300/50">
+							<div class="flex flex-col min-w-0">
+								<span class="font-medium text-sm">{client.name}</span>
+								<span class="text-xs text-base-content/30 font-mono truncate" title={client.configPath}>
+									{client.configPath}
+								</span>
+							</div>
+							<div class="flex items-center gap-2 shrink-0">
+								{#if busyClient === client.id}
 									<span class="loading loading-spinner loading-xs"></span>
 								{:else}
-									Install
+									<input
+										type="checkbox"
+										class="toggle toggle-sm toggle-success"
+										checked={client.installed}
+										onchange={() => toggleClient(client.id, client.installed)}
+									/>
 								{/if}
-							</button>
-						{/if}
-					</div>
+							</div>
+						</div>
+					{/each}
 				</div>
-				{#if installing}
-					<div class="text-xs text-base-content/50">Compiling binary and registering with Claude Desktop...</div>
+				{#if clientError}
+					<div class="text-xs text-error">{clientError}</div>
 				{/if}
-				{#if installError}
-					<div class="text-xs text-error">{installError}</div>
-				{/if}
-				<div class="text-xs text-base-content/30 font-mono truncate" title={installStatus.binaryPath}>
-					{installStatus.binaryPath}
+
+				<!-- JSON config snippet -->
+				<div class="divider my-0"></div>
+				<div class="flex flex-col gap-2">
+					<div class="flex items-center justify-between">
+						<div>
+							<h4 class="font-medium text-sm">Add to any MCP client</h4>
+							<p class="text-xs text-base-content/50">Paste this into your client's MCP config file</p>
+						</div>
+						<button
+							class="btn btn-sm btn-ghost"
+							onclick={copySnippet}
+						>
+							{#if copied}
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" viewBox="0 0 20 20" fill="currentColor">
+									<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+								</svg>
+								Copied
+							{:else}
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+									<path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+									<path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+								</svg>
+								Copy
+							{/if}
+						</button>
+					</div>
+					<pre class="bg-base-300 rounded-lg p-3 text-xs font-mono overflow-x-auto select-all">{configSnippet}</pre>
 				</div>
 			</div>
 		</div>
 	{/if}
 
-	{#if settings}
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-			<!-- Hosted Services Panel -->
-			<div class="flex flex-col gap-4">
-				<div class="flex items-center gap-2">
-					<span class="badge badge-accent badge-sm">hosted</span>
-					<h3 class="text-lg font-semibold">Hosted Services</h3>
-				</div>
-				<p class="text-xs text-base-content/50 -mt-2">Third-party APIs -- requires an account and API key</p>
-
-				<div class="card bg-base-200 shadow">
-					<div class="card-body p-4 gap-3">
-						<h4 class="font-medium text-sm">Perplexity AI</h4>
-						<p class="text-xs text-base-content/50 -mt-2">Powers web_search -- AI-powered web search with citations</p>
-						<SettingsField
-							label="API Key"
-							value={settings.apiKeys.perplexity || ''}
-							type="password"
-							placeholder="pplx-..."
-							onSave={(v) => save('apiKeys.perplexity', v)}
-						/>
-					</div>
-				</div>
-
-			</div>
-
-			<!-- Local Tools Panel -->
-			<div class="flex flex-col gap-4">
-				<div class="flex items-center gap-2">
-					<span class="badge badge-success badge-sm">local</span>
-					<h3 class="text-lg font-semibold">Local Connections</h3>
-				</div>
-				<p class="text-xs text-base-content/50 -mt-2">Database connections on your network -- no data leaves your machine</p>
-
-				<div class="card bg-base-200 shadow">
-					<div class="card-body p-4 gap-3">
-						<h4 class="font-medium text-sm">MySQL</h4>
-						<div class="grid grid-cols-2 gap-3">
-							<SettingsField
-								label="Host"
-								value={String(settings.database.mysql?.host || '')}
-								placeholder="localhost"
-								onSave={(v) => saveDbField('mysql', 'host', v)}
-							/>
-							<SettingsField
-								label="Port"
-								value={String(settings.database.mysql?.port || '3306')}
-								placeholder="3306"
-								onSave={(v) => saveDbField('mysql', 'port', v)}
-							/>
-							<SettingsField
-								label="User"
-								value={String(settings.database.mysql?.user || '')}
-								placeholder="root"
-								onSave={(v) => saveDbField('mysql', 'user', v)}
-							/>
-							<SettingsField
-								label="Password"
-								value={String(settings.database.mysql?.password || '')}
-								type="password"
-								placeholder="password"
-								onSave={(v) => saveDbField('mysql', 'password', v)}
-							/>
-						</div>
-						<SettingsField
-							label="Database"
-							value={String(settings.database.mysql?.database || '')}
-							placeholder="mydb"
-							onSave={(v) => saveDbField('mysql', 'database', v)}
-						/>
-					</div>
-				</div>
-
-				<div class="card bg-base-200 shadow">
-					<div class="card-body p-4 gap-3">
-						<h4 class="font-medium text-sm">PostgreSQL</h4>
-						<div class="grid grid-cols-2 gap-3">
-							<SettingsField
-								label="Host"
-								value={String(settings.database.postgres?.host || '')}
-								placeholder="localhost"
-								onSave={(v) => saveDbField('postgres', 'host', v)}
-							/>
-							<SettingsField
-								label="Port"
-								value={String(settings.database.postgres?.port || '5432')}
-								placeholder="5432"
-								onSave={(v) => saveDbField('postgres', 'port', v)}
-							/>
-							<SettingsField
-								label="User"
-								value={String(settings.database.postgres?.user || '')}
-								placeholder="postgres"
-								onSave={(v) => saveDbField('postgres', 'user', v)}
-							/>
-							<SettingsField
-								label="Password"
-								value={String(settings.database.postgres?.password || '')}
-								type="password"
-								placeholder="password"
-								onSave={(v) => saveDbField('postgres', 'password', v)}
-							/>
-						</div>
-						<SettingsField
-							label="Database"
-							value={String(settings.database.postgres?.database || '')}
-							placeholder="postgres"
-							onSave={(v) => saveDbField('postgres', 'database', v)}
-						/>
-					</div>
-				</div>
-			</div>
-		</div>
-	{:else}
-		<div class="flex justify-center p-8">
-			<span class="loading loading-spinner loading-md"></span>
-		</div>
-	{/if}
+	<p class="text-xs text-base-content/40">Tool-specific settings (API keys, database connections) are configured on the <a href="/tools" class="link link-primary">Tools</a> page.</p>
 </div>

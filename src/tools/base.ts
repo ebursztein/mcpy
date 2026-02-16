@@ -15,6 +15,26 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+export interface SettingsFieldDef {
+  key: string;
+  label: string;
+  type: "text" | "password" | "number";
+  placeholder?: string;
+  gridSpan?: 1 | 2;
+}
+
+export interface GroupDefinition {
+  id: string;
+  category: ToolCategory;
+  label: string;
+  description: string;
+  url?: string;
+  remote?: boolean;
+  requiresConfig: boolean;
+  enabledByDefault: boolean;
+  settingsFields?: SettingsFieldDef[];
+}
+
 export interface ToolDefinition {
   name: string;
   category: ToolCategory;

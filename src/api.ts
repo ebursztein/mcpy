@@ -8,20 +8,48 @@ import {
   redactSettings,
   saveSettings,
 } from "./settings.ts";
-import { getToolInfoList } from "./tools/index.ts";
+import { getToolInfoList, getGroupInfoList } from "./tools/index.ts";
 import { getVersionInfo, checkForUpdate, performUpdate } from "./update.ts";
+import { shutdownHttpServer } from "./server.ts";
 
-// Claude Desktop config path varies by platform
+// --- MCP client config paths (from official docs) ---
+
+interface McpClientDef {
+  id: string;
+  name: string;
+  getConfigPath: () => string;
+}
+
+const MCP_CLIENTS: McpClientDef[] = [
+  {
+    id: "claude-desktop",
+    name: "Claude Desktop",
+    getConfigPath: () => {
+      const home = homedir();
+      switch (platform()) {
+        case "darwin":
+          return join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
+        case "win32":
+          return join(process.env.APPDATA || join(home, "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
+        default:
+          return join(home, ".config", "claude", "claude_desktop_config.json");
+      }
+    },
+  },
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    getConfigPath: () => join(homedir(), ".claude.json"),
+  },
+  {
+    id: "cursor",
+    name: "Cursor",
+    getConfigPath: () => join(homedir(), ".cursor", "mcp.json"),
+  },
+];
+
 function getClaudeConfigPath(): string {
-  const home = homedir();
-  switch (platform()) {
-    case "darwin":
-      return join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
-    case "win32":
-      return join(process.env.APPDATA || join(home, "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
-    default: // linux
-      return join(home, ".config", "claude", "claude_desktop_config.json");
-  }
+  return MCP_CLIENTS[0].getConfigPath();
 }
 
 function getMcpyBinaryPath(): string {
@@ -33,9 +61,40 @@ function getMcpyBinaryPath(): string {
   return join(import.meta.dir, "..", "mcpy");
 }
 
-interface ClaudeDesktopConfig {
-  mcpServers?: Record<string, { command: string; args?: string[] }>;
+interface McpConfig {
+  mcpServers?: Record<string, { command?: string; args?: string[] }>;
   [key: string]: unknown;
+}
+
+interface ClientInfo {
+  id: string;
+  name: string;
+  configPath: string;
+  configExists: boolean;
+  installed: boolean;
+}
+
+async function checkClientInstalled(configPath: string): Promise<boolean> {
+  if (!existsSync(configPath)) return false;
+  try {
+    const config: McpConfig = await Bun.file(configPath).json();
+    return !!config.mcpServers?.mcpy;
+  } catch {
+    return false;
+  }
+}
+
+async function getClientsStatus(): Promise<{ clients: ClientInfo[]; binaryPath: string }> {
+  const binaryPath = getMcpyBinaryPath();
+  const clients: ClientInfo[] = await Promise.all(
+    MCP_CLIENTS.map(async (client) => {
+      const configPath = client.getConfigPath();
+      const configExists = existsSync(configPath);
+      const installed = await checkClientInstalled(configPath);
+      return { id: client.id, name: client.name, configPath, configExists, installed };
+    })
+  );
+  return { clients, binaryPath };
 }
 
 async function getInstallStatus(): Promise<{
@@ -49,25 +108,13 @@ async function getInstallStatus(): Promise<{
   const binaryPath = getMcpyBinaryPath();
   const configExists = existsSync(configPath);
   const binaryExists = existsSync(binaryPath);
-
-  if (!configExists) {
-    return { installed: false, configPath, configExists, binaryPath, binaryExists };
-  }
-
-  try {
-    const file = Bun.file(configPath);
-    const config: ClaudeDesktopConfig = await file.json();
-    const installed = !!config.mcpServers?.mcpy;
-    return { installed, configPath, configExists, binaryPath, binaryExists };
-  } catch {
-    return { installed: false, configPath, configExists, binaryPath, binaryExists };
-  }
+  const installed = await checkClientInstalled(configPath);
+  return { installed, configPath, configExists, binaryPath, binaryExists };
 }
 
 async function compileBinary(): Promise<{ ok: boolean; error?: string }> {
   const IS_COMPILED = import.meta.dir.startsWith("/$bunfs/");
   if (IS_COMPILED) {
-    // Already a compiled binary, no need to recompile
     return { ok: true };
   }
 
@@ -87,17 +134,15 @@ async function compileBinary(): Promise<{ ok: boolean; error?: string }> {
   return { ok: true };
 }
 
-async function installToClaude(): Promise<{
-  ok: boolean;
-  error?: string;
-}> {
-  // Step 1: Compile binary if needed
-  const compileResult = await compileBinary();
-  if (!compileResult.ok) {
-    return compileResult;
-  }
+async function installToClient(clientId: string): Promise<{ ok: boolean; error?: string }> {
+  const client = MCP_CLIENTS.find((c) => c.id === clientId);
+  if (!client) return { ok: false, error: `Unknown client: ${clientId}` };
 
-  // Step 2: Build UI if needed
+  // Compile binary if needed (dev mode only)
+  const compileResult = await compileBinary();
+  if (!compileResult.ok) return compileResult;
+
+  // Build UI if needed (dev mode only)
   const IS_COMPILED = import.meta.dir.startsWith("/$bunfs/");
   if (!IS_COMPILED) {
     const projectRoot = join(import.meta.dir, "..");
@@ -116,67 +161,52 @@ async function installToClaude(): Promise<{
     }
   }
 
-  // Step 3: Register the binary in Claude Desktop config
-  const configPath = getClaudeConfigPath();
+  const configPath = client.getConfigPath();
   const binaryPath = getMcpyBinaryPath();
 
-  let config: ClaudeDesktopConfig = {};
-
+  let config: McpConfig = {};
   if (existsSync(configPath)) {
     try {
-      const file = Bun.file(configPath);
-      config = await file.json();
+      config = await Bun.file(configPath).json();
     } catch {
       config = {};
     }
   }
 
-  if (!config.mcpServers) {
-    config.mcpServers = {};
-  }
-
+  if (!config.mcpServers) config.mcpServers = {};
   config.mcpServers.mcpy = { command: binaryPath };
 
   try {
-    const configDir = dirname(configPath);
-    mkdirSync(configDir, { recursive: true });
+    mkdirSync(dirname(configPath), { recursive: true });
     await Bun.write(configPath, JSON.stringify(config, null, 2));
     return { ok: true };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
-async function uninstallFromClaude(): Promise<{
-  ok: boolean;
-  error?: string;
-}> {
-  const configPath = getClaudeConfigPath();
+async function uninstallFromClient(clientId: string): Promise<{ ok: boolean; error?: string }> {
+  const client = MCP_CLIENTS.find((c) => c.id === clientId);
+  if (!client) return { ok: false, error: `Unknown client: ${clientId}` };
 
-  if (!existsSync(configPath)) {
-    return { ok: true };
-  }
+  const configPath = client.getConfigPath();
+  if (!existsSync(configPath)) return { ok: true };
 
   try {
-    const file = Bun.file(configPath);
-    const config: ClaudeDesktopConfig = await file.json();
-
+    const config: McpConfig = await Bun.file(configPath).json();
     if (config.mcpServers?.mcpy) {
       delete config.mcpServers.mcpy;
     }
-
     await Bun.write(configPath, JSON.stringify(config, null, 2));
     return { ok: true };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// Legacy wrappers for backwards compat
+async function installToClaude() { return installToClient("claude-desktop"); }
+async function uninstallFromClaude() { return uninstallFromClient("claude-desktop"); }
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -210,6 +240,10 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
   if (path === "/api/tools" && req.method === "GET") {
     const settings = await loadSettings();
     return json(getToolInfoList(settings));
+  }
+
+  if (path === "/api/groups" && req.method === "GET") {
+    return json(getGroupInfoList());
   }
 
   if (path === "/api/tools" && req.method === "POST") {
@@ -247,11 +281,30 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
     return json(eventBus.getStats());
   }
 
+  if (path === "/api/stats/timeseries" && req.method === "GET") {
+    return json(eventBus.getTimeseries());
+  }
+
   if (path === "/api/sessions" && req.method === "GET") {
     return json(eventBus.getSessions());
   }
 
-  // Claude Desktop install management
+  // MCP client detection and per-client install/uninstall
+  if (path === "/api/clients" && req.method === "GET") {
+    return json(await getClientsStatus());
+  }
+
+  const clientMatch = path.match(/^\/api\/clients\/([^/]+)\/install$/);
+  if (clientMatch && req.method === "POST") {
+    const result = await installToClient(clientMatch[1]);
+    return json(result, result.ok ? 200 : 500);
+  }
+  if (clientMatch && req.method === "DELETE") {
+    const result = await uninstallFromClient(clientMatch[1]);
+    return json(result, result.ok ? 200 : 500);
+  }
+
+  // Legacy Claude Desktop install management
   if (path === "/api/install" && req.method === "GET") {
     return json(await getInstallStatus());
   }
@@ -278,8 +331,11 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
         return json({ ok: true, message: "Already up to date" });
       }
       await performUpdate(update);
-      // Schedule restart so the response gets sent
-      setTimeout(() => process.exit(0), 500);
+      // Stop HTTP server to release port, then exit so MCP client respawns us
+      setTimeout(async () => {
+        await shutdownHttpServer();
+        process.exit(0);
+      }, 500);
       return json({ ok: true, message: `Updated to ${update.latest}. Restarting...` });
     } catch (err) {
       return json(

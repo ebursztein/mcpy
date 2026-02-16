@@ -1,0 +1,18 @@
+FROM oven/bun:latest
+
+WORKDIR /app
+
+# curl needed for tools like web_fetch/npm_info
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Copy everything (.containerignore excludes node_modules, build, .git)
+COPY . .
+
+# Install deps
+RUN bun install && cd ui && bun install
+
+# Build UI + compile binary from source
+RUN cd ui && bun run build
+RUN bun build src/index.ts --compile --outfile mcpy
+
+CMD ["bun", "run", "test/integration.ts"]

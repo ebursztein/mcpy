@@ -120,9 +120,34 @@ bun run build      # build web UI
 bun run compile    # compile standalone binary
 ```
 
+## Testing
+
+Tests live in `test/` with a modular structure: shared harness, per-tool-group test files, and integration suites.
+
+### Local (development)
+
+Run all tests against the compiled binary in the repo root:
+
+```bash
+bun run build && bun run compile   # build UI + compile binary
+bun run test                       # run all tests against ./mcpy
+```
+
+This connects to the binary via MCP stdio, exercises every tool group, then validates the HTTP API and web UI. Results are printed with pass/fail counts and the process exits non-zero on any failure.
+
+### Integration (Podman container)
+
+Full end-to-end validation in an isolated container -- builds from source, compiles, installs, and tests:
+
+```bash
+bun run test:integration
+```
+
+Requires [Podman](https://podman.io). The container uses `oven/bun:latest`, builds the UI, compiles the binary, then runs the same test suite.
+
 ### Releasing
 
-Trigger the **Release** workflow from GitHub Actions (workflow_dispatch). It automatically computes a `0.1.<timestamp>` version, builds binaries for macOS (x64, arm64) and Linux (x64, arm64), generates SHA256SUMS, creates a git tag, and publishes a GitHub release. No manual version bumping needed.
+Trigger the **Release** workflow from GitHub Actions (workflow_dispatch). It runs integration tests first, then builds binaries for macOS (x64, arm64) and Linux (x64, arm64), generates SHA256SUMS, creates a git tag, and publishes a GitHub release. The release is blocked if any test fails. No manual version bumping needed.
 
 ## Project Structure
 
@@ -143,9 +168,16 @@ src/
     database/           mysql (3 tools), postgres (3 tools)
     developer/          npm_info, pypi_info
     web/                web_fetch, http_headers, web_search
+test/
+  lib/                  Shared test harness + MCP client helpers
+  tools/                Per-tool-group tests (todo, memory, mcpy, packages, fetch)
+  suites/               Integration suites (install, http, ui)
+  integration.ts        Test orchestrator
+  Containerfile         Podman build-from-source container
+  run.sh                Podman wrapper script
 site/                   Landing page (mcpy.app) + install script
 ui/                     SvelteKit 5 + TailwindCSS v4 + DaisyUI v5
-.github/workflows/      Release CI (4-platform cross-compile)
+.github/workflows/      Release CI (test gate + 4-platform cross-compile)
 ```
 
 ## License

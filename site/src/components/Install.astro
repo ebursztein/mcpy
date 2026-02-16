@@ -1,0 +1,31 @@
+---
+---
+<div class="card bg-base-200 shadow-lg my-12">
+  <div class="card-body">
+    <div class="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">Install</div>
+    <div class="relative">
+      <pre class="bg-base-300 rounded-lg px-5 py-4 font-mono text-sm text-success overflow-x-auto select-all" id="installCmd">curl -fsSL https://mcpy.app/install.sh | bash</pre>
+      <button
+        class="btn btn-sm btn-ghost absolute right-2 top-1/2 -translate-y-1/2"
+        id="copyBtn"
+      >copy</button>
+    </div>
+    <p class="text-xs text-base-content/50 mt-3">
+      Downloads the binary, verifies SHA256 checksum, installs to <code class="bg-base-300 px-1.5 py-0.5 rounded text-xs">~/.mcpy/bin/mcpy</code>, and registers with Claude Desktop and Claude Code automatically.
+    </p>
+  </div>
+</div>
+
+<script>
+document.getElementById('copyBtn')?.addEventListener('click', function() {
+  const text = 'curl -fsSL https://mcpy.app/install.sh | bash';
+  navigator.clipboard.writeText(text);
+  const btn = this as HTMLButtonElement;
+  btn.textContent = 'copied';
+  btn.classList.add('text-success');
+  setTimeout(() => {
+    btn.textContent = 'copy';
+    btn.classList.remove('text-success');
+  }, 2000);
+});
+</script>

@@ -1,6 +1,23 @@
 import { z } from "zod";
-import type { ToolDefinition, ToolContext } from "../base.ts";
+import type { ToolDefinition, ToolContext, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
+
+export const postgresGroup: GroupDefinition = {
+  id: "postgres",
+  category: "database",
+  label: "PostgreSQL",
+  description: "Query and explore PostgreSQL databases on your network",
+  url: "https://www.postgresql.org/docs/",
+  requiresConfig: true,
+  enabledByDefault: false,
+  settingsFields: [
+    { key: "database.postgres.host", label: "Host", type: "text", placeholder: "localhost" },
+    { key: "database.postgres.port", label: "Port", type: "number", placeholder: "5432" },
+    { key: "database.postgres.user", label: "User", type: "text", placeholder: "postgres" },
+    { key: "database.postgres.password", label: "Password", type: "password", placeholder: "password" },
+    { key: "database.postgres.database", label: "Database", type: "text", placeholder: "postgres", gridSpan: 2 },
+  ],
+};
 
 async function getClient(context: ToolContext) {
   const dbConfig = context.settings.database.postgres;

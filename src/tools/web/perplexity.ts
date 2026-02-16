@@ -1,13 +1,27 @@
 import { z } from "zod";
-import type { ToolDefinition } from "../base.ts";
+import type { ToolDefinition, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
 
+export const perplexityGroup: GroupDefinition = {
+  id: "perplexity",
+  category: "web",
+  label: "Perplexity",
+  description: "AI-powered web search with citations",
+  url: "https://docs.perplexity.ai/",
+  remote: true,
+  requiresConfig: true,
+  enabledByDefault: false,
+  settingsFields: [
+    { key: "apiKeys.perplexity", label: "API Key", type: "password", placeholder: "pplx-...", gridSpan: 2 },
+  ],
+};
+
 const tool: ToolDefinition = {
-  name: "web_search",
+  name: "perplexity_search",
   category: "web",
   group: "perplexity",
   remote: true,
-  title: "Web Search",
+  title: "Perplexity Search",
   description:
     "Search the web using Perplexity AI. Returns an AI-generated answer with citations. Requires a Perplexity API key.",
   inputSchema: {

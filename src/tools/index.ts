@@ -1,8 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ToolDefinition, ToolContext } from "./base.ts";
+import type { ToolDefinition, ToolContext, GroupDefinition } from "./base.ts";
 import { eventBus, makeEventId } from "../events.ts";
 import { getSettingValue, DATA_DIR } from "../settings.ts";
-import type { Settings, ToolInfo } from "../types.ts";
+import type { Settings, ToolInfo, GroupInfo } from "../types.ts";
 
 // Explicit imports -- works in both dev and compiled binary
 import todoList from "./agent/todo_list.ts";
@@ -10,11 +10,22 @@ import memory from "./agent/memory.ts";
 import npmInfo from "./developer/npm_info.ts";
 import pypiInfo from "./developer/pypi_info.ts";
 import { mcpyLog, mcpyRestart, mcpyStats, mcpyUpdate } from "./debug/mcpy.ts";
-import webFetch from "./web/web_fetch.ts";
-import httpHeaders from "./web/http_headers.ts";
-import webSearch from "./web/web_search.ts";
+import { webFetchText, webFetchRaw, webHttpHeaders, webGrep, webFetchBinary } from "./web/fetch.ts";
+import perplexitySearch from "./web/perplexity.ts";
 import { mysqlQuery, mysqlListTables, mysqlDescribeTable } from "./database/mysql.ts";
 import { postgresQuery, postgresListTables, postgresDescribeTable } from "./database/postgres.ts";
+import { githubSearch, githubFile, githubGrep } from "./developer/github.ts";
+
+// Group definitions
+import { todoGroup } from "./agent/todo_list.ts";
+import { memoryGroup } from "./agent/memory.ts";
+import { packagesGroup } from "./developer/npm_info.ts";
+import { mcpyGroup } from "./debug/mcpy.ts";
+import { fetchGroup } from "./web/fetch.ts";
+import { perplexityGroup } from "./web/perplexity.ts";
+import { mysqlGroup } from "./database/mysql.ts";
+import { postgresGroup } from "./database/postgres.ts";
+import { githubGroup } from "./developer/github.ts";
 
 const ALL_TOOLS: ToolDefinition[] = [
   todoList,
@@ -25,19 +36,38 @@ const ALL_TOOLS: ToolDefinition[] = [
   mcpyRestart,
   mcpyStats,
   mcpyUpdate,
-  webFetch,
-  httpHeaders,
-  webSearch,
+  webFetchText,
+  webFetchRaw,
+  webHttpHeaders,
+  webGrep,
+  webFetchBinary,
+  perplexitySearch,
   mysqlQuery,
   mysqlListTables,
   mysqlDescribeTable,
   postgresQuery,
   postgresListTables,
   postgresDescribeTable,
+  githubSearch,
+  githubFile,
+  githubGrep,
+];
+
+const ALL_GROUPS: GroupDefinition[] = [
+  todoGroup,
+  memoryGroup,
+  packagesGroup,
+  mcpyGroup,
+  fetchGroup,
+  perplexityGroup,
+  mysqlGroup,
+  postgresGroup,
+  githubGroup,
 ];
 
 // All discovered tools (enabled or not)
 const registry = new Map<string, ToolDefinition>();
+const groupRegistry = new Map<string, GroupDefinition>();
 
 function hasRequiredSettings(tool: ToolDefinition, settings: Settings): boolean {
   if (!tool.requiredSettings) return true;
@@ -47,13 +77,26 @@ function hasRequiredSettings(tool: ToolDefinition, settings: Settings): boolean 
 }
 
 function isToolEnabled(tool: ToolDefinition, settings: Settings): boolean {
+  // Explicit per-tool toggle always wins
   const explicit = settings.tools[tool.name];
-  if (explicit !== undefined) return explicit.enabled;
-  // Default: disabled if missing required settings, enabled otherwise
-  return hasRequiredSettings(tool, settings);
+  if (explicit !== undefined) return explicit.enabled && hasRequiredSettings(tool, settings);
+
+  const group = tool.group ? groupRegistry.get(tool.group) : undefined;
+
+  // Tools with required settings: auto-enable once configured, regardless of enabledByDefault
+  if (tool.requiredSettings && tool.requiredSettings.length > 0) {
+    return hasRequiredSettings(tool, settings);
+  }
+
+  // No required settings: use group default
+  if (group) return group.enabledByDefault;
+  return true;
 }
 
 export async function discoverTools(): Promise<Map<string, ToolDefinition>> {
+  for (const group of ALL_GROUPS) {
+    groupRegistry.set(group.id, group);
+  }
   for (const tool of ALL_TOOLS) {
     if (tool?.name && tool?.handler) {
       registry.set(tool.name, tool);
@@ -189,6 +232,20 @@ export function getToolInfoList(settings: Settings): ToolInfo[] {
   }
 
   return tools;
+}
+
+export function getGroupInfoList(): GroupInfo[] {
+  return Array.from(groupRegistry.values()).map((g) => ({
+    id: g.id,
+    category: g.category,
+    label: g.label,
+    description: g.description,
+    url: g.url,
+    remote: g.remote,
+    requiresConfig: g.requiresConfig,
+    enabledByDefault: g.enabledByDefault,
+    settingsFields: g.settingsFields,
+  }));
 }
 
 export function getRegistry(): Map<string, ToolDefinition> {

@@ -67,26 +67,36 @@ export async function updateSettings(
 ): Promise<Settings> {
   const current = await loadSettings();
 
-  // Deep merge, but skip redacted values ("***")
+  // Deep merge, but skip redacted values (start with "***")
+  // Empty string or null = delete the key
   if (partial.apiKeys && typeof partial.apiKeys === "object") {
-    const keys = partial.apiKeys as Record<string, string>;
+    const keys = partial.apiKeys as Record<string, string | null>;
     for (const [k, v] of Object.entries(keys)) {
-      if (v && v !== "***") {
+      if (v === "" || v === null) {
+        delete (current.apiKeys as Record<string, string>)[k];
+      } else if (v && !v.startsWith("***")) {
         (current.apiKeys as Record<string, string>)[k] = v;
       }
     }
   }
 
   if (partial.database && typeof partial.database === "object") {
-    const dbs = partial.database as Record<string, Record<string, unknown>>;
+    const dbs = partial.database as Record<string, Record<string, unknown> | null>;
     for (const [dbName, dbConfig] of Object.entries(dbs)) {
+      if (dbConfig === null || dbConfig === "") {
+        // null = delete the entire database config
+        delete (current.database as Record<string, Record<string, unknown>>)[dbName];
+        continue;
+      }
       if (dbConfig && typeof dbConfig === "object") {
         const existing =
           (current.database as Record<string, Record<string, unknown>>)[
             dbName
           ] || {};
         for (const [field, value] of Object.entries(dbConfig)) {
-          if (value !== "***") {
+          if (value === "" || value === null) {
+            delete existing[field];
+          } else if (typeof value !== "string" || !value.startsWith("***")) {
             existing[field] = value;
           }
         }

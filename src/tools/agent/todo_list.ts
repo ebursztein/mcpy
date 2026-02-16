@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { join } from "path";
-import type { ToolDefinition } from "../base.ts";
+import type { ToolDefinition, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
+
+export const todoGroup: GroupDefinition = {
+  id: "todo",
+  category: "agent",
+  label: "Todo List",
+  description: "Persistent task tracking across conversations",
+  requiresConfig: false,
+  enabledByDefault: true,
+};
 
 interface TodoItem {
   id: string;

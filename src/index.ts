@@ -19,6 +19,7 @@ import { loadSettings } from "./settings.ts";
 import { discoverTools, registerTools } from "./tools/index.ts";
 import { VERSION } from "./version.ts";
 import { checkForUpdate, performUpdate } from "./update.ts";
+import { setHttpServer, shutdownHttpServer } from "./server.ts";
 
 // --- CLI commands (install / uninstall) ---
 
@@ -235,6 +236,7 @@ async function serveStatic(req: Request): Promise<Response> {
 try {
   const httpServer = Bun.serve({
     port: PORT,
+    reusePort: true,
     idleTimeout: 255,
     async fetch(req: Request): Promise<Response> {
       const url = new URL(req.url);
@@ -250,6 +252,8 @@ try {
       return serveStatic(req);
     },
   });
+
+  setHttpServer(httpServer);
 
   eventBus.emit({
     id: makeEventId(),

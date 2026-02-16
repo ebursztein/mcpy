@@ -1,0 +1,32 @@
+---
+---
+<header class="pt-20 pb-10 text-center">
+  <h1 class="text-5xl font-bold tracking-tight">
+    <span class="text-primary">mcpy</span>
+  </h1>
+  <p class="text-base-content/60 text-lg mt-3 max-w-lg mx-auto">
+    MCP tool server that compiles to a single binary. Web dashboard included. Zero runtime dependencies.
+  </p>
+  <div class="mt-4" id="versionBadge">
+    <span class="badge badge-ghost font-mono text-xs">loading...</span>
+  </div>
+</header>
+
+<script>
+(async function() {
+  try {
+    const res = await fetch('https://api.github.com/repos/ebursztein/mcpy/releases/latest');
+    if (!res.ok) throw new Error('no release');
+    const release = await res.json();
+    const tag = release.tag_name;
+    const version = tag.replace(/^v/, '');
+    const badge = document.getElementById('versionBadge');
+    if (badge) {
+      badge.innerHTML = `<a href="https://github.com/ebursztein/mcpy/releases/tag/${tag}" class="badge badge-ghost font-mono text-xs link-hover" target="_blank" rel="noopener">v${version}</a>`;
+    }
+  } catch {
+    const badge = document.getElementById('versionBadge');
+    if (badge) badge.innerHTML = '<span class="badge badge-ghost font-mono text-xs">v0.1.0</span>';
+  }
+})();
+</script>

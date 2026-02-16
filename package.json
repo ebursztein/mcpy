@@ -1,15 +1,20 @@
 {
   "name": "mcpy",
-  "version": "0.1.0-dev",
+  "version": "0.2.0-dev",
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "dev:ui": "cd ui && bun run dev",
     "dev:all": "concurrently \"bun run dev\" \"bun run dev:ui\"",
     "build:ui": "cd ui && bun run build",
+    "build:catalog": "bun run scripts/export-catalog.ts",
+    "build:site": "bun run build:catalog && cd site && npm run build",
+    "dev:site": "cd site && npm run dev",
     "build": "bun run build:ui",
     "start": "bun src/index.ts",
-    "compile": "bun build src/index.ts --compile --outfile mcpy"
+    "compile": "bun build src/index.ts --compile --outfile mcpy",
+    "test": "bun run test/integration.ts",
+    "test:integration": "bash test/run.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

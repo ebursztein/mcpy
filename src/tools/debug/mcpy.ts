@@ -2,10 +2,21 @@ import { z } from "zod";
 import { join } from "path";
 import { homedir } from "os";
 import { existsSync, statSync } from "fs";
-import type { ToolDefinition } from "../base.ts";
+import type { ToolDefinition, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
 import { VERSION } from "../../version.ts";
 import { checkForUpdate, performUpdate } from "../../update.ts";
+import { shutdownHttpServer } from "../../server.ts";
+
+export const mcpyGroup: GroupDefinition = {
+  id: "mcpy",
+  category: "agent",
+  label: "mcpy",
+  description: "Server management, logs, stats, and updates",
+  url: "https://github.com/ebursztein/mcpy",
+  requiresConfig: false,
+  enabledByDefault: true,
+};
 
 const DATA_DIR = join(homedir(), ".mcpy");
 const LOG_FILE = join(DATA_DIR, "mcpy.log");
@@ -88,7 +99,11 @@ const mcpyRestart: ToolDefinition = {
     if (!confirm) {
       return errorResult("Set confirm=true to restart the server.");
     }
-    setTimeout(() => process.exit(0), 100);
+    // Stop HTTP server first to release the port, then exit
+    setTimeout(async () => {
+      await shutdownHttpServer();
+      process.exit(0);
+    }, 100);
     return textResult("mcpy is restarting. The MCP client will reconnect automatically.");
   },
 };
@@ -190,8 +205,11 @@ const mcpyUpdate: ToolDefinition = {
 
       await performUpdate(update);
 
-      // Schedule restart so the response gets sent first
-      setTimeout(() => process.exit(0), 500);
+      // Stop HTTP server to release port, then exit so MCP client respawns us
+      setTimeout(async () => {
+        await shutdownHttpServer();
+        process.exit(0);
+      }, 500);
 
       return textResult(
         `Updated mcpy from ${update.current} to ${update.latest}. Restarting...`

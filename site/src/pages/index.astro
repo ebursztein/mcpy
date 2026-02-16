@@ -1,0 +1,19 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Install from '../components/Install.astro';
+import Features from '../components/Features.astro';
+import ToolExplorer from '../components/ToolExplorer.svelte';
+import Downloads from '../components/Downloads.svelte';
+import Footer from '../components/Footer.astro';
+import catalog from '../data/tools.json';
+---
+
+<Base title="mcpy - MCP tool server">
+  <Header />
+  <Install />
+  <Features />
+  <ToolExplorer client:load groups={catalog} />
+  <Downloads client:load />
+  <Footer />
+</Base>

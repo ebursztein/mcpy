@@ -1,6 +1,23 @@
 import { z } from "zod";
-import type { ToolDefinition, ToolContext } from "../base.ts";
+import type { ToolDefinition, ToolContext, GroupDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
+
+export const mysqlGroup: GroupDefinition = {
+  id: "mysql",
+  category: "database",
+  label: "MySQL",
+  description: "Query and explore MySQL databases on your network",
+  url: "https://dev.mysql.com/doc/",
+  requiresConfig: true,
+  enabledByDefault: false,
+  settingsFields: [
+    { key: "database.mysql.host", label: "Host", type: "text", placeholder: "localhost" },
+    { key: "database.mysql.port", label: "Port", type: "number", placeholder: "3306" },
+    { key: "database.mysql.user", label: "User", type: "text", placeholder: "root" },
+    { key: "database.mysql.password", label: "Password", type: "password", placeholder: "password" },
+    { key: "database.mysql.database", label: "Database", type: "text", placeholder: "mydb", gridSpan: 2 },
+  ],
+};
 
 async function getConnection(context: ToolContext) {
   const dbConfig = context.settings.database.mysql;

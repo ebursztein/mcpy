@@ -41,8 +41,45 @@ export interface Settings {
 	tools: Record<string, { enabled: boolean }>;
 }
 
+export interface SettingsFieldDef {
+	key: string;
+	label: string;
+	type: "text" | "password" | "number";
+	placeholder?: string;
+	gridSpan?: 1 | 2;
+}
+
+export interface GroupInfo {
+	id: string;
+	category: string;
+	label: string;
+	description: string;
+	url?: string;
+	remote?: boolean;
+	requiresConfig: boolean;
+	enabledByDefault: boolean;
+	settingsFields?: SettingsFieldDef[];
+}
+
+export interface TimeseriesPoint {
+	timestamp: string;
+	tool: string;
+	duration: number;
+	success: boolean;
+}
+
+export async function fetchTimeseries(): Promise<TimeseriesPoint[]> {
+	const res = await fetch(`${BASE}/api/stats/timeseries`);
+	return res.json();
+}
+
 export async function fetchTools(): Promise<ToolInfo[]> {
 	const res = await fetch(`${BASE}/api/tools`);
+	return res.json();
+}
+
+export async function fetchGroups(): Promise<GroupInfo[]> {
+	const res = await fetch(`${BASE}/api/groups`);
 	return res.json();
 }
 
@@ -88,6 +125,34 @@ export interface InstallStatus {
 
 export async function fetchInstallStatus(): Promise<InstallStatus> {
 	const res = await fetch(`${BASE}/api/install`);
+	return res.json();
+}
+
+export interface ClientInfo {
+	id: string;
+	name: string;
+	configPath: string;
+	configExists: boolean;
+	installed: boolean;
+}
+
+export interface ClientsStatus {
+	clients: ClientInfo[];
+	binaryPath: string;
+}
+
+export async function fetchClients(): Promise<ClientsStatus> {
+	const res = await fetch(`${BASE}/api/clients`);
+	return res.json();
+}
+
+export async function installToClient(clientId: string): Promise<{ ok: boolean; error?: string }> {
+	const res = await fetch(`${BASE}/api/clients/${clientId}/install`, { method: 'POST' });
+	return res.json();
+}
+
+export async function uninstallFromClient(clientId: string): Promise<{ ok: boolean; error?: string }> {
+	const res = await fetch(`${BASE}/api/clients/${clientId}/install`, { method: 'DELETE' });
 	return res.json();
 }
 

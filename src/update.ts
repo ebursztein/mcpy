@@ -2,14 +2,16 @@
  * Auto-update logic for mcpy.
  * Checks GitHub releases for newer versions, downloads, verifies SHA256, and replaces the binary.
  */
-import { platform, arch, homedir } from "os";
-import { join } from "path";
+import { platform, arch } from "os";
 import { existsSync, renameSync, unlinkSync, chmodSync } from "fs";
 import { VERSION } from "./version.ts";
 
 const REPO = "ebursztein/mcpy";
-const INSTALL_DIR = join(homedir(), ".mcpy", "bin");
-const BINARY_PATH = join(INSTALL_DIR, "mcpy");
+
+/** The binary to replace is always the currently running executable. */
+function getBinaryPath(): string {
+  return process.execPath;
+}
 
 export interface UpdateInfo {
   current: string;
@@ -107,10 +109,11 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
   };
 }
 
-/** Download, verify, and replace the binary. */
+/** Download, verify, and replace the running binary. */
 export async function performUpdate(info: UpdateInfo): Promise<void> {
-  const tmpPath = BINARY_PATH + ".tmp";
-  const backupPath = BINARY_PATH + ".bak";
+  const binaryPath = getBinaryPath();
+  const tmpPath = binaryPath + ".tmp";
+  const backupPath = binaryPath + ".bak";
 
   // 1. Download binary to temp file
   const res = await fetch(info.downloadUrl, {
@@ -167,9 +170,9 @@ export async function performUpdate(info: UpdateInfo): Promise<void> {
   // 3. Atomic replace: backup old -> move new -> remove backup
   chmodSync(tmpPath, 0o755);
 
-  if (existsSync(BINARY_PATH)) {
+  if (existsSync(binaryPath)) {
     try {
-      renameSync(BINARY_PATH, backupPath);
+      renameSync(binaryPath, backupPath);
     } catch {
       unlinkSync(tmpPath);
       throw new Error("Failed to backup current binary");
@@ -177,12 +180,12 @@ export async function performUpdate(info: UpdateInfo): Promise<void> {
   }
 
   try {
-    renameSync(tmpPath, BINARY_PATH);
+    renameSync(tmpPath, binaryPath);
   } catch (err) {
     // Restore from backup on failure
     if (existsSync(backupPath)) {
       try {
-        renameSync(backupPath, BINARY_PATH);
+        renameSync(backupPath, binaryPath);
       } catch {
         // Best effort restore
       }

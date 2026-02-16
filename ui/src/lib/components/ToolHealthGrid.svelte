@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { ToolInfo, ToolStats } from '$lib/api';
+	import type { ToolInfo, ToolStats, GroupInfo } from '$lib/api';
 
-	let { tools, toolStats }: { tools: ToolInfo[]; toolStats: Record<string, ToolStats> } = $props();
+	let { tools, toolStats, groups = [] }: { tools: ToolInfo[]; toolStats: Record<string, ToolStats>; groups: GroupInfo[] } = $props();
 
 	const categoryLabels: Record<string, string> = {
 		agent: 'Agent',
@@ -10,17 +10,7 @@
 		web: 'Web'
 	};
 
-	const groupLabels: Record<string, string> = {
-		mysql: 'MySQL',
-		postgres: 'PostgreSQL',
-		mcpy: 'mcpy',
-		todo: 'Todo List',
-		memory: 'Memory',
-		packages: 'Packages',
-		fetch: 'Fetch',
-		perplexity: 'Perplexity',
-		github: 'GitHub'
-	};
+	const groupMap = $derived(new Map(groups.map(g => [g.id, g])));
 
 	const categories = $derived(
 		[...new Set(tools.map(t => t.category))].sort()
@@ -66,7 +56,7 @@
 			{#each groupsInCategory(category) as group}
 				<div class="card bg-base-200 shadow">
 					<div class="card-body p-4 gap-2">
-						<h4 class="font-medium text-sm">{groupLabels[group] || group}</h4>
+						<h4 class="font-medium text-sm">{groupMap.get(group)?.label || group}</h4>
 						<div class="space-y-1">
 							{#each toolsForGroup(category, group) as tool}
 								{@const ts = toolStats[tool.name]}

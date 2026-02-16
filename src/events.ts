@@ -3,6 +3,7 @@ import type {
   SessionInfo,
   AggregateStats,
   ToolStats,
+  TimeseriesPoint,
 } from "./types.ts";
 
 type Subscriber = (event: McpEvent) => void;
@@ -11,6 +12,9 @@ class EventBus {
   private subscribers = new Set<Subscriber>();
   private recentEvents: McpEvent[] = [];
   private maxRecent = 200;
+
+  private timeseries: TimeseriesPoint[] = [];
+  private maxTimeseries = 1000;
 
   private stats: AggregateStats = {
     totalInvocations: 0,
@@ -32,10 +36,12 @@ class EventBus {
       this.stats.totalInvocations++;
       this.stats.successCount++;
       this.updateToolStats(event, true);
+      this.recordTimeseries(event, true);
     } else if (event.type === "tool_error" && event.tool) {
       this.stats.totalInvocations++;
       this.stats.errorCount++;
       this.updateToolStats(event, false);
+      this.recordTimeseries(event, false);
     }
 
     // Update sessions
@@ -106,6 +112,22 @@ class EventBus {
       stream,
       unsubscribe: () => unsub?.(),
     };
+  }
+
+  getTimeseries(): TimeseriesPoint[] {
+    return [...this.timeseries];
+  }
+
+  private recordTimeseries(event: McpEvent, success: boolean): void {
+    this.timeseries.push({
+      timestamp: event.timestamp,
+      tool: event.tool!,
+      duration: event.duration ?? 0,
+      success,
+    });
+    if (this.timeseries.length > this.maxTimeseries) {
+      this.timeseries.shift();
+    }
   }
 
   private updateToolStats(event: McpEvent, success: boolean): void {
