@@ -14,7 +14,16 @@
       <p class="text-base-content/60 text-lg mt-3 max-w-lg">
         MCP tool server that compiles to a single binary. Web dashboard included. Zero runtime dependencies.
       </p>
-      <div class="mt-4 flex items-center gap-3 justify-center lg:justify-start">
+
+      <div class="mt-6 relative max-w-lg">
+        <pre class="bg-base-300 rounded-lg px-5 py-3 font-mono text-sm text-success overflow-x-auto select-all" id="installCmd">curl -fsSL https://mcpy.app/install.sh | bash</pre>
+        <button
+          class="btn btn-sm btn-ghost absolute right-2 top-1/2 -translate-y-1/2"
+          id="copyBtn"
+        >copy</button>
+      </div>
+
+      <div class="mt-3 flex items-center gap-3 justify-center lg:justify-start">
         <div id="versionBadge">
           <span class="badge badge-ghost font-mono text-xs">loading...</span>
         </div>
@@ -23,11 +32,26 @@
           GitHub
         </a>
       </div>
+      <p class="text-xs text-base-content/40 mt-2 max-w-lg">
+        Downloads the binary, verifies SHA256 checksum, installs to <code class="bg-base-300 px-1 py-0.5 rounded text-xs">~/.mcpy/bin/mcpy</code>, and walks you through registering with your MCP clients.
+      </p>
     </div>
   </div>
 </div>
 
 <script>
+document.getElementById('copyBtn')?.addEventListener('click', function() {
+  const text = 'curl -fsSL https://mcpy.app/install.sh | bash';
+  navigator.clipboard.writeText(text);
+  const btn = this as HTMLButtonElement;
+  btn.textContent = 'copied';
+  btn.classList.add('text-success');
+  setTimeout(() => {
+    btn.textContent = 'copy';
+    btn.classList.remove('text-success');
+  }, 2000);
+});
+
 (async function() {
   try {
     const res = await fetch('https://api.github.com/repos/ebursztein/mcpy/releases/latest');
@@ -35,7 +59,6 @@
     const release = await res.json();
     const tag = release.tag_name;
     const version = tag.replace(/^v/, '');
-    // Skip legacy timestamp versions (patch > 1000)
     const patch = parseInt(version.split('.')[2] || '0');
     if (patch > 1000) throw new Error('legacy version');
     const badge = document.getElementById('versionBadge');
