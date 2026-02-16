@@ -172,9 +172,6 @@
 							<div class="flex items-center gap-2">
 								<span class="w-2.5 h-2.5 rounded-full shrink-0 {statusDot(group.id)}"></span>
 								<h4 class="font-medium text-sm flex-1">{group.label}</h4>
-								{#if group.remote}
-									<span class="badge badge-accent badge-xs">remote</span>
-								{/if}
 								<span class="text-xs text-base-content/40">{gs.enabled}/{gs.total}</span>
 							</div>
 							<p class="text-xs text-base-content/50 line-clamp-2">{group.description}</p>

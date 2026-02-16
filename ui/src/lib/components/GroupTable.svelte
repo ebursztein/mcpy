@@ -88,9 +88,6 @@
 					<td>
 						<div class="flex items-center gap-2">
 							<span class="font-medium text-sm">{row.group.label}</span>
-							{#if row.group.remote}
-								<span class="badge badge-accent badge-xs">remote</span>
-							{/if}
 						</div>
 					</td>
 					<td class="text-center">

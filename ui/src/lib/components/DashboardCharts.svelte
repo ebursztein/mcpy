@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import Chart from 'chart.js/auto';
 	import { fetchTimeseries, type TimeseriesPoint } from '$lib/api';
 
@@ -22,8 +22,9 @@
 
 	onMount(async () => {
 		timeseries = await fetchTimeseries();
-		activityChart = createActivityChart();
-		latencyChart = createLatencyChart();
+		await tick(); // wait for Svelte to render canvas elements
+		if (activityCanvas) activityChart = createActivityChart();
+		if (latencyCanvas) latencyChart = createLatencyChart();
 		updateCharts();
 		pollTimer = setInterval(async () => {
 			timeseries = await fetchTimeseries();

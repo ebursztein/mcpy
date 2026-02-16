@@ -10,13 +10,11 @@ const { title } = Astro.props;
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{title}</title>
-  <meta name="description" content="Self-contained MCP tool server with web dashboard. One command install for Claude Desktop and Claude Code." />
+  <meta name="description" content="Single command install MCP server with all the tools you need. Zero dependencies, zero hassle. Works with Claude Desktop, Claude Code, Cursor, VS Code, and Codex CLI." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>" />
 </head>
 <body class="bg-base-100 text-base-content min-h-screen">
-  <div class="max-w-3xl mx-auto px-6">
-    <slot />
-  </div>
+  <slot />
 </body>
 </html>
 

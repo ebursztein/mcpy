@@ -144,6 +144,9 @@ src/data/
 # UI build output
 ui/build/
 
+# Auto-generated UI embed (scripts/embed-ui.ts)
+src/ui-embed.ts
+
 # Compiled binaries
 mcpy
 mcpy-darwin-*
