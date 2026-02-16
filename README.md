@@ -1,8 +1,6 @@
 # mcpy
 
-A self-contained MCP tool server that compiles to a single binary. Ships with a web dashboard for managing tools, settings, and monitoring.
-
-Built with [Bun](https://bun.sh), [MCP SDK](https://modelcontextprotocol.io), and [SvelteKit](https://svelte.dev).
+A fully compiled MCP server distributed as a single binary. Ships with a web dashboard for managing tools, settings, and monitoring. Zero runtime dependencies.
 
 ## Install
 
@@ -17,8 +15,7 @@ This downloads the binary, verifies its SHA256 checksum, installs to `~/.mcpy/bi
 Download the binary for your platform from [releases](https://github.com/ebursztein/mcpy/releases), then:
 
 ```bash
-chmod +x mcpy
-./mcpy install
+chmod +x mcpy && ./mcpy install
 ```
 
 ### Update
