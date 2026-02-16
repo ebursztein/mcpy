@@ -11,11 +11,6 @@
 	<div class="card-body p-4 gap-2">
 		<div class="flex items-start justify-between gap-2">
 			<div class="flex items-center gap-2">
-				{#if tool.remote}
-					<span class="badge badge-accent badge-sm">remote</span>
-				{:else}
-					<span class="badge badge-success badge-sm">local</span>
-				{/if}
 				<h4 class="font-semibold text-sm">{tool.title}</h4>
 			</div>
 			<input

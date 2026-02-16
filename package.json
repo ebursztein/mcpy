@@ -12,7 +12,8 @@
     "dev:site": "cd site && npm run dev",
     "build": "bun run build:ui",
     "start": "bun src/index.ts",
-    "compile": "bun build src/index.ts --compile --outfile mcpy",
+    "embed-ui": "bun run scripts/embed-ui.ts",
+    "compile": "bun run embed-ui && bun build src/index.ts --compile --outfile mcpy && [ -d ~/.mcpy/bin ] && cp mcpy ~/.mcpy/bin/mcpy || true",
     "test": "PORT=${PORT:-3714} bun run test/integration.ts",
     "test:integration": "bash test/run.sh"
   },

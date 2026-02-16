@@ -323,9 +323,6 @@
 		<div class="flex items-center justify-between p-4 border-b border-base-300">
 			<div class="flex items-center gap-2">
 				<h3 class="text-lg font-bold">{group.label}</h3>
-				{#if group.remote}
-					<span class="badge badge-accent badge-sm">remote</span>
-				{/if}
 			</div>
 			<button class="btn btn-ghost btn-sm btn-square" onclick={onClose} aria-label="Close">
 				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -392,9 +389,6 @@
 							<div class="flex-1 min-w-0">
 								<div class="flex items-center gap-2">
 									<span class="text-sm" class:opacity-40={!tool.enabled}>{tool.title}</span>
-									{#if tool.remote}
-										<span class="badge badge-accent badge-xs">remote</span>
-									{/if}
 									{#if ts && ts.totalCalls > 0}
 										<span class="text-xs text-base-content/40 ml-auto">{ts.totalCalls} calls -- {Math.round(ts.avgDuration)}ms avg</span>
 									{/if}

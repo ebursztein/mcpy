@@ -103,14 +103,17 @@ if (cmd === "update") {
 
 const PORT = parseInt(process.env.PORT || "3713", 10);
 
-// Resolve UI build dir: works for both compiled binary and dev mode
-// Compiled: binary sits next to ui/build (or in the project root)
-// Dev: import.meta.dir is src/, go up one level
+// UI serving: embedded in binary when compiled, filesystem in dev mode
 const IS_COMPILED = import.meta.dir.startsWith("/$bunfs/");
-const PROJECT_ROOT = IS_COMPILED
-  ? dirname(process.execPath)
-  : join(import.meta.dir, "..");
-const UI_BUILD_DIR = join(PROJECT_ROOT, "ui", "build");
+const UI_BUILD_DIR = IS_COMPILED ? "" : join(import.meta.dir, "..", "ui", "build");
+
+// Embedded UI files (only populated in compiled binary)
+let EMBEDDED_UI: Map<string, string> | null = null;
+if (IS_COMPILED) {
+  try {
+    EMBEDDED_UI = (await import("./ui-embed.ts")).EMBEDDED_UI;
+  } catch {}
+}
 
 // Log to both stderr and ~/.mcpy/mcpy.log
 const LOG_DIR = process.env.MCPY_DATA_DIR || join(homedir(), ".mcpy");
@@ -146,25 +149,33 @@ log("stdio transport connected");
 // --- HTTP server (UI + API) ---
 async function serveStatic(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  let filePath = join(UI_BUILD_DIR, url.pathname);
+  const pathname = url.pathname;
 
-  let file = Bun.file(filePath);
-  if (await file.exists()) {
-    return new Response(file);
+  // Compiled binary: serve from embedded files
+  if (EMBEDDED_UI) {
+    const embedded = EMBEDDED_UI.get(pathname)
+      || EMBEDDED_UI.get(pathname + "/index.html")
+      || (pathname === "/" ? EMBEDDED_UI.get("/index.html") : null);
+    if (embedded) return new Response(Bun.file(embedded));
+
+    // SPA fallback
+    const fallback = EMBEDDED_UI.get("/index.html");
+    if (fallback) return new Response(Bun.file(fallback));
+
+    return new Response("Not Found", { status: 404 });
   }
 
-  // Try with index.html for directories
+  // Dev mode: serve from filesystem
+  let filePath = join(UI_BUILD_DIR, pathname);
+  let file = Bun.file(filePath);
+  if (await file.exists()) return new Response(file);
+
   filePath = join(filePath, "index.html");
   file = Bun.file(filePath);
-  if (await file.exists()) {
-    return new Response(file);
-  }
+  if (await file.exists()) return new Response(file);
 
-  // SPA fallback
   const fallback = Bun.file(join(UI_BUILD_DIR, "index.html"));
-  if (await fallback.exists()) {
-    return new Response(fallback);
-  }
+  if (await fallback.exists()) return new Response(fallback);
 
   return new Response("Not Found", { status: 404 });
 }
