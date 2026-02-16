@@ -100,3 +100,19 @@ export async function uninstallFromClaude(): Promise<{ ok: boolean; error?: stri
 	const res = await fetch(`${BASE}/api/install`, { method: 'DELETE' });
 	return res.json();
 }
+
+export interface VersionInfo {
+	current: string;
+	latest: string | null;
+	updateAvailable: boolean;
+}
+
+export async function fetchVersion(): Promise<VersionInfo> {
+	const res = await fetch(`${BASE}/api/version`);
+	return res.json();
+}
+
+export async function triggerUpdate(): Promise<{ ok: boolean; message?: string; error?: string }> {
+	const res = await fetch(`${BASE}/api/update`, { method: 'POST' });
+	return res.json();
+}

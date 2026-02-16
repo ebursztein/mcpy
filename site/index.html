@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mcpy - MCP tool server</title>
+  <meta name="description" content="Self-contained MCP tool server with web dashboard. One command install for Claude Desktop and Claude Code.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0a0b;
+      --surface: #141416;
+      --border: #262630;
+      --text: #e4e4e7;
+      --muted: #71717a;
+      --accent: #8b5cf6;
+      --accent-dim: #7c3aed;
+      --green: #22c55e;
+      --code-bg: #1a1a1f;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 80px 0 40px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 12px;
+    }
+
+    h1 span {
+      color: var(--accent);
+    }
+
+    .tagline {
+      color: var(--muted);
+      font-size: 1.15rem;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    .version-badge {
+      display: inline-block;
+      margin-top: 16px;
+      font-size: 0.75rem;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+
+    .version-badge a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .version-badge a:hover { text-decoration: underline; }
+
+    /* Install block */
+    .install {
+      margin: 48px 0;
+      padding: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .install-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .install-cmd {
+      position: relative;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 48px 16px 20px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9rem;
+      color: var(--green);
+      overflow-x: auto;
+      white-space: nowrap;
+      cursor: text;
+      user-select: all;
+    }
+
+    .copy-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      padding: 6px 8px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.15s;
+    }
+
+    .copy-btn:hover {
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .copy-btn.copied {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    .install-note {
+      margin-top: 16px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .install-note code {
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 48px 0;
+    }
+
+    @media (max-width: 540px) {
+      .features { grid-template-columns: 1fr; }
+    }
+
+    .feature {
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .feature h3 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .feature p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* Tools table */
+    .tools {
+      margin: 48px 0;
+    }
+
+    .tools h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .tool-grid {
+      display: grid;
+      gap: 2px;
+    }
+
+    .tool-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--surface);
+      font-size: 0.8rem;
+    }
+
+    .tool-row:first-child { border-radius: 8px 8px 0 0; }
+    .tool-row:last-child { border-radius: 0 0 8px 8px; }
+
+    .tool-name {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.78rem;
+      color: var(--accent);
+      min-width: 160px;
+    }
+
+    .tool-desc {
+      color: var(--muted);
+      flex: 1;
+    }
+
+    .tool-badge {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--border);
+      color: var(--muted);
+    }
+
+    .tool-badge.remote {
+      background: #7c3aed22;
+      color: var(--accent);
+    }
+
+    /* Downloads */
+    .downloads {
+      margin: 48px 0;
+    }
+
+    .downloads h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .download-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    @media (max-width: 540px) {
+      .download-grid { grid-template-columns: 1fr; }
+    }
+
+    .download-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.8rem;
+      transition: border-color 0.15s;
+    }
+
+    .download-link:hover {
+      border-color: var(--accent);
+    }
+
+    .download-link .dl-platform {
+      font-weight: 600;
+    }
+
+    .download-link .dl-arch {
+      color: var(--muted);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.75rem;
+    }
+
+    /* Footer */
+    footer {
+      padding: 48px 0;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      margin-top: 64px;
+    }
+
+    footer a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+
+    footer a:hover { color: var(--text); }
+    footer a + a { margin-left: 24px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1><span>mcpy</span></h1>
+    <p class="tagline">MCP tool server that compiles to a single binary. Web dashboard included. Zero runtime dependencies.</p>
+    <div class="version-badge" id="versionBadge">loading...</div>
+  </header>
+
+  <div class="install">
+    <div class="install-label">Install</div>
+    <div class="install-cmd" id="cmd">
+      curl -fsSL https://mcpy.app/install.sh | bash
+      <button class="copy-btn" onclick="copyCmd()" id="copyBtn">copy</button>
+    </div>
+    <p class="install-note">
+      Downloads the binary, verifies SHA256 checksum, installs to <code>~/.mcpy/bin/mcpy</code>, and registers with Claude Desktop and Claude Code automatically.
+    </p>
+  </div>
+
+  <div class="features">
+    <div class="feature">
+      <h3>Single Binary</h3>
+      <p>Compiles to ~60MB standalone executable. No Node.js, no Bun, no Python needed at runtime.</p>
+    </div>
+    <div class="feature">
+      <h3>Web Dashboard</h3>
+      <p>Built-in UI at localhost:3713. Enable/disable tools, configure API keys, monitor invocations live.</p>
+    </div>
+    <div class="feature">
+      <h3>Auto-registers</h3>
+      <p>One command sets up both Claude Desktop and Claude Code. No manual JSON editing.</p>
+    </div>
+    <div class="feature">
+      <h3>Auto-Update</h3>
+      <p>Run <code style="background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:0.78rem;">mcpy update</code> or use the mcpy_update tool to stay current.</p>
+    </div>
+  </div>
+
+  <div class="tools">
+    <h2>Tools</h2>
+    <div class="tool-grid">
+      <div class="tool-row"><span class="tool-name">todo_list</span><span class="tool-desc">Persistent task tracking</span><span class="tool-badge">agent</span></div>
+      <div class="tool-row"><span class="tool-name">memory</span><span class="tool-desc">Key-value store across sessions</span><span class="tool-badge">agent</span></div>
+      <div class="tool-row"><span class="tool-name">mcpy_log</span><span class="tool-desc">Read server logs</span><span class="tool-badge">agent</span></div>
+      <div class="tool-row"><span class="tool-name">mcpy_restart</span><span class="tool-desc">Restart server process</span><span class="tool-badge">agent</span></div>
+      <div class="tool-row"><span class="tool-name">mcpy_stats</span><span class="tool-desc">Runtime statistics</span><span class="tool-badge">agent</span></div>
+      <div class="tool-row"><span class="tool-name">mcpy_update</span><span class="tool-desc">Check and install updates</span><span class="tool-badge">agent</span></div>
+      <div class="tool-row"><span class="tool-name">mysql_query</span><span class="tool-desc">Execute SQL queries</span><span class="tool-badge">database</span></div>
+      <div class="tool-row"><span class="tool-name">mysql_list_tables</span><span class="tool-desc">List tables with row counts</span><span class="tool-badge">database</span></div>
+      <div class="tool-row"><span class="tool-name">mysql_describe_table</span><span class="tool-desc">Show columns, indexes, foreign keys</span><span class="tool-badge">database</span></div>
+      <div class="tool-row"><span class="tool-name">postgres_query</span><span class="tool-desc">Execute SQL queries</span><span class="tool-badge">database</span></div>
+      <div class="tool-row"><span class="tool-name">postgres_list_tables</span><span class="tool-desc">List tables with row estimates</span><span class="tool-badge">database</span></div>
+      <div class="tool-row"><span class="tool-name">postgres_describe_table</span><span class="tool-desc">Show columns, indexes, foreign keys</span><span class="tool-badge">database</span></div>
+      <div class="tool-row"><span class="tool-name">npm_info</span><span class="tool-desc">Look up npm packages</span><span class="tool-badge">developer</span></div>
+      <div class="tool-row"><span class="tool-name">pypi_info</span><span class="tool-desc">Look up PyPI packages</span><span class="tool-badge">developer</span></div>
+      <div class="tool-row"><span class="tool-name">web_fetch</span><span class="tool-desc">Fetch and extract web page content</span><span class="tool-badge">web</span></div>
+      <div class="tool-row"><span class="tool-name">http_headers</span><span class="tool-desc">Inspect HTTP response headers</span><span class="tool-badge">web</span></div>
+      <div class="tool-row"><span class="tool-name">web_search</span><span class="tool-desc">Search via Perplexity AI</span><span class="tool-badge remote">remote</span></div>
+    </div>
+  </div>
+
+  <div class="downloads" id="downloads">
+    <h2>Manual Download</h2>
+    <div class="download-grid" id="downloadGrid">
+      <a class="download-link" id="dl-darwin-arm64" href="#"><span class="dl-platform">macOS</span><span class="dl-arch">Apple Silicon (arm64)</span></a>
+      <a class="download-link" id="dl-darwin-x64" href="#"><span class="dl-platform">macOS</span><span class="dl-arch">Intel (x64)</span></a>
+      <a class="download-link" id="dl-linux-x64" href="#"><span class="dl-platform">Linux</span><span class="dl-arch">x64</span></a>
+      <a class="download-link" id="dl-linux-arm64" href="#"><span class="dl-platform">Linux</span><span class="dl-arch">arm64</span></a>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <a href="https://github.com/ebursztein/mcpy">GitHub</a>
+  <a href="https://github.com/ebursztein/mcpy/releases">Releases</a>
+  <a href="https://modelcontextprotocol.io">MCP Spec</a>
+</footer>
+
+<script>
+function copyCmd() {
+  const text = 'curl -fsSL https://mcpy.app/install.sh | bash';
+  navigator.clipboard.writeText(text);
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = 'copied';
+  btn.classList.add('copied');
+  setTimeout(() => {
+    btn.textContent = 'copy';
+    btn.classList.remove('copied');
+  }, 2000);
+}
+
+// Fetch latest release info for version badge and download links
+(async function() {
+  try {
+    const res = await fetch('https://api.github.com/repos/ebursztein/mcpy/releases/latest');
+    if (!res.ok) throw new Error('no release');
+    const release = await res.json();
+    const tag = release.tag_name;
+    const version = tag.replace(/^v/, '');
+
+    document.getElementById('versionBadge').innerHTML =
+      '<a href="https://github.com/ebursztein/mcpy/releases/tag/' + tag + '">v' + version + '</a>';
+
+    const assets = release.assets || [];
+    const targets = [
+      { id: 'dl-darwin-arm64', name: 'mcpy-darwin-arm64' },
+      { id: 'dl-darwin-x64', name: 'mcpy-darwin-x64' },
+      { id: 'dl-linux-x64', name: 'mcpy-linux-x64' },
+      { id: 'dl-linux-arm64', name: 'mcpy-linux-arm64' },
+    ];
+
+    for (const t of targets) {
+      const asset = assets.find(a => a.name === t.name);
+      const el = document.getElementById(t.id);
+      if (asset && el) {
+        el.href = asset.browser_download_url;
+      } else if (el) {
+        el.style.opacity = '0.3';
+        el.style.pointerEvents = 'none';
+      }
+    }
+  } catch {
+    document.getElementById('versionBadge').textContent = 'v0.1.0';
+    // Hide download section if no release available
+    const dl = document.getElementById('downloads');
+    if (dl) dl.style.display = 'none';
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -6,8 +6,11 @@
 		fetchInstallStatus,
 		installToClaude,
 		uninstallFromClaude,
+		fetchVersion,
+		triggerUpdate,
 		type Settings,
-		type InstallStatus
+		type InstallStatus,
+		type VersionInfo
 	} from '$lib/api';
 	import SettingsField from '$lib/components/SettingsField.svelte';
 
@@ -17,10 +20,14 @@
 	let installStatus: InstallStatus | null = $state(null);
 	let installing = $state(false);
 	let installError: string | null = $state(null);
+	let versionInfo: VersionInfo | null = $state(null);
+	let updating = $state(false);
+	let updateError: string | null = $state(null);
 
 	onMount(async () => {
 		settings = await fetchSettings();
 		installStatus = await fetchInstallStatus();
+		versionInfo = await fetchVersion();
 	});
 
 	async function handleInstall() {
@@ -73,6 +80,21 @@
 		const val = numFields.includes(field) ? parseInt(value, 10) || 0 : value;
 		await save(`database.${db}.${field}`, val as unknown as string);
 	}
+
+	async function handleUpdate() {
+		updating = true;
+		updateError = null;
+		try {
+			const result = await triggerUpdate();
+			if (!result.ok) {
+				updateError = result.error || 'Update failed';
+			}
+			// Server will restart, so we just show the message
+		} catch (err) {
+			updateError = 'Update request failed';
+		}
+		updating = false;
+	}
 </script>
 
 <div class="flex flex-col gap-6 max-w-4xl">
@@ -85,6 +107,48 @@
 			<span class="badge badge-success badge-sm">saved</span>
 		{/if}
 	</div>
+
+	<!-- Version & Update -->
+	{#if versionInfo}
+		<div class="card bg-base-200 shadow">
+			<div class="card-body p-4 gap-3">
+				<div class="flex items-center justify-between">
+					<div class="flex flex-col gap-1">
+						<div class="flex items-center gap-2">
+							<h3 class="font-semibold">mcpy</h3>
+							<span class="badge badge-ghost badge-sm font-mono">v{versionInfo.current}</span>
+							{#if versionInfo.updateAvailable}
+								<span class="badge badge-warning badge-sm">update available</span>
+							{:else}
+								<span class="badge badge-success badge-sm">up to date</span>
+							{/if}
+						</div>
+						{#if versionInfo.updateAvailable && versionInfo.latest}
+							<p class="text-xs text-base-content/50">
+								Version {versionInfo.latest} is available.
+							</p>
+						{/if}
+					</div>
+					{#if versionInfo.updateAvailable}
+						<button
+							class="btn btn-sm btn-primary"
+							onclick={handleUpdate}
+							disabled={updating}
+						>
+							{#if updating}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								Update
+							{/if}
+						</button>
+					{/if}
+				</div>
+				{#if updateError}
+					<div class="text-xs text-error">{updateError}</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Claude Desktop Integration -->
 	{#if installStatus}

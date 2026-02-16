@@ -4,6 +4,8 @@ import { homedir } from "os";
 import { existsSync, statSync } from "fs";
 import type { ToolDefinition } from "../base.ts";
 import { textResult, errorResult } from "../base.ts";
+import { VERSION } from "../../version.ts";
+import { checkForUpdate, performUpdate } from "../../update.ts";
 
 const DATA_DIR = join(homedir(), ".mcpy");
 const LOG_FILE = join(DATA_DIR, "mcpy.log");
@@ -116,6 +118,7 @@ const mcpyStats: ToolDefinition = {
     const lines: string[] = [
       `mcpy server stats`,
       `---`,
+      `version: ${VERSION}`,
       `pid: ${process.pid}`,
       `uptime: ${formatDuration(uptime)}`,
       `compiled: ${import.meta.dir.startsWith("/$bunfs/")}`,
@@ -151,4 +154,54 @@ const mcpyStats: ToolDefinition = {
   },
 };
 
-export { mcpyLog, mcpyRestart, mcpyStats };
+// --- mcpy_update ---
+
+const mcpyUpdate: ToolDefinition = {
+  name: "mcpy_update",
+  category: "agent",
+  group: "mcpy",
+  title: "Update mcpy",
+  description:
+    "Check for mcpy updates and optionally install them. With apply=false (default), only checks for updates. With apply=true, downloads and installs the update -- the server will restart automatically after a successful update.",
+  inputSchema: {
+    apply: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("If true, download and install the update. If false (default), only check."),
+  },
+  async handler(params) {
+    const { apply = false } = params as { apply?: boolean };
+
+    try {
+      const update = await checkForUpdate();
+
+      if (!update) {
+        return textResult(`mcpy ${VERSION} is up to date.`);
+      }
+
+      if (!apply) {
+        return textResult(
+          `Update available: ${update.current} -> ${update.latest}\n` +
+            `Asset: ${update.asset}\n` +
+            `Call mcpy_update with apply=true to install.`
+        );
+      }
+
+      await performUpdate(update);
+
+      // Schedule restart so the response gets sent first
+      setTimeout(() => process.exit(0), 500);
+
+      return textResult(
+        `Updated mcpy from ${update.current} to ${update.latest}. Restarting...`
+      );
+    } catch (err) {
+      return errorResult(
+        `Update failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  },
+};
+
+export { mcpyLog, mcpyRestart, mcpyStats, mcpyUpdate };

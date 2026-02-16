@@ -1,6 +1,6 @@
 {
   "name": "mcpy",
-  "version": "0.1.0",
+  "version": "0.1.1771206698",
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",

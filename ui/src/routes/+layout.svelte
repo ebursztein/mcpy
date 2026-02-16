@@ -1,8 +1,19 @@
 <script>
 	import '../app.css';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
+	import { fetchVersion } from '$lib/api';
 
 	let { children } = $props();
+	let versionInfo = $state(null);
+
+	onMount(async () => {
+		try {
+			versionInfo = await fetchVersion();
+		} catch {
+			// API may not be available yet
+		}
+	});
 
 	const navItems = [
 		{ href: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1' },
@@ -60,8 +71,15 @@
 				{/each}
 			</ul>
 
-			<div class="p-4 border-t border-base-300 text-xs text-base-content/40">
-				v0.1.0
+			<div class="p-4 border-t border-base-300 text-xs text-base-content/40 flex items-center gap-2">
+				{#if versionInfo}
+					v{versionInfo.current}
+					{#if versionInfo.updateAvailable}
+						<a href="/settings" class="badge badge-warning badge-xs">update</a>
+					{/if}
+				{:else}
+					mcpy
+				{/if}
 			</div>
 		</aside>
 	</div>

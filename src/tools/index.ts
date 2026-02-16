@@ -9,7 +9,7 @@ import todoList from "./agent/todo_list.ts";
 import memory from "./agent/memory.ts";
 import npmInfo from "./developer/npm_info.ts";
 import pypiInfo from "./developer/pypi_info.ts";
-import { mcpyLog, mcpyRestart, mcpyStats } from "./debug/mcpy.ts";
+import { mcpyLog, mcpyRestart, mcpyStats, mcpyUpdate } from "./debug/mcpy.ts";
 import webFetch from "./web/web_fetch.ts";
 import httpHeaders from "./web/http_headers.ts";
 import webSearch from "./web/web_search.ts";
@@ -24,6 +24,7 @@ const ALL_TOOLS: ToolDefinition[] = [
   mcpyLog,
   mcpyRestart,
   mcpyStats,
+  mcpyUpdate,
   webFetch,
   httpHeaders,
   webSearch,

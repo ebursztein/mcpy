@@ -143,3 +143,8 @@ src/data/
 
 # UI build output
 ui/build/
+
+# Compiled binaries
+mcpy
+mcpy-darwin-*
+mcpy-linux-*

@@ -32,7 +32,7 @@ Every tool MUST have both `category` and `group` set.
 
 | Category | Group | Tools |
 |----------|-------|-------|
-| agent | mcpy | mcpy_log, mcpy_restart, mcpy_stats |
+| agent | mcpy | mcpy_log, mcpy_restart, mcpy_stats, mcpy_update |
 | agent | todo | todo_list |
 | agent | memory | memory |
 | database | mysql | mysql_query, mysql_list_tables, mysql_describe_table |
@@ -58,14 +58,18 @@ Every tool MUST have both `category` and `group` set.
 ## Key files
 
 ```
-src/index.ts          Main entry -- MCP server + HTTP server boot
-src/api.ts            REST API handler (/api/tools, /api/settings, /api/install, /api/events SSE)
+src/index.ts          Main entry -- MCP server + HTTP server boot + CLI (install/uninstall/update/version)
+src/version.ts        VERSION constant from package.json (single source of truth)
+src/update.ts         Auto-update logic (check GitHub releases, download, verify SHA256, replace)
+src/api.ts            REST API handler (/api/tools, /api/settings, /api/install, /api/version, /api/update, /api/events SSE)
 src/settings.ts       Settings persistence (~/.mcpy/settings.json), secret redaction
 src/events.ts         Event bus, stats aggregation, SSE streaming
 src/types.ts          Shared TypeScript types
 src/tools/base.ts     ToolDefinition interface, ToolCategory type, result helpers
 src/tools/index.ts    Tool registry, discovery, MCP registration
 ui/                   SvelteKit 5 + TailwindCSS v4 + DaisyUI v5
+site/                 Landing page (mcpy.app) + install.sh
+.github/workflows/    Release CI (builds 4 platform binaries + SHA256SUMS)
 ```
 
 ## Data directory
@@ -94,6 +98,14 @@ SvelteKit 5 with Svelte 5 runes, static adapter. Built output goes to `ui/build/
 - Settings (`/settings`) -- Claude Desktop install, API keys, database connections
 
 Group labels are defined in both `ui/src/routes/tools/+page.svelte` and `ui/src/lib/components/ToolHealthGrid.svelte`. Update both when adding new groups.
+
+## Version and release
+
+- Version is defined in `package.json` and imported via `src/version.ts`
+- `src/update.ts` handles checking GitHub releases and performing binary updates with SHA256 verification
+- CLI commands: `mcpy version`, `mcpy update`, `mcpy install`, `mcpy uninstall`
+- Release workflow: `npm version patch && git push --tags` triggers GitHub Actions to build 4 platform binaries + SHA256SUMS
+- Website is mcpy.app, deployed from `site/` to Cloudflare Pages
 
 ## Port
 

@@ -6,60 +6,41 @@ Built with [Bun](https://bun.sh), [MCP SDK](https://modelcontextprotocol.io), an
 
 ## Install
 
-### Prerequisites
+```bash
+curl -fsSL https://mcpy.app/install.sh | bash
+```
 
-- [Bun](https://bun.sh) v1.1+ (build time only -- the compiled binary has no runtime dependencies)
+This downloads the binary, verifies its SHA256 checksum, installs to `~/.mcpy/bin/mcpy`, and registers with Claude Desktop and Claude Code automatically. No runtime dependencies needed.
 
-### Setup
+### Manual install
+
+Download the binary for your platform from [releases](https://github.com/ebursztein/mcpy/releases), then:
 
 ```bash
-git clone https://github.com/user/mcpy.git
-cd mcpy
-bun install
-cd ui && bun install && cd ..
+chmod +x mcpy
+./mcpy install
 ```
 
-### Build
+### Update
 
 ```bash
-bun run build      # build the web UI
-bun run compile    # compile standalone binary
+~/.mcpy/bin/mcpy update
 ```
 
-This produces a `./mcpy` binary (~60MB) that includes everything -- server, tools, and UI assets. No Bun or Node.js needed at runtime.
+Or use the `mcpy_update` tool from within Claude.
 
-### Register with Claude Desktop
-
-Open the web UI at `http://localhost:3713/settings` and click **Install to Claude Desktop**, or manually add to your Claude Desktop config:
-
-```json
-{
-  "mcpServers": {
-    "mcpy": {
-      "command": "/absolute/path/to/mcpy"
-    }
-  }
-}
-```
-
-### Register with Claude Code
+### Uninstall
 
 ```bash
-claude mcp add mcpy /absolute/path/to/mcpy
+~/.mcpy/bin/mcpy uninstall
+rm -rf ~/.mcpy
 ```
 
-## Development
+## What it does
 
-```bash
-bun run dev:all    # runs server (watch mode) + UI (vite dev) concurrently
-```
-
-- Server: `http://localhost:3713` (API + static UI)
-- UI dev: `http://localhost:5173` (vite, proxies API to 3713)
+mcpy runs as an MCP server that Claude Desktop and Claude Code connect to via stdio. It exposes 17 tools across 4 categories, and serves a web dashboard at `http://localhost:3713` for managing everything.
 
 ## Tools
-
-mcpy ships with built-in tools organized by category:
 
 ### Agent
 
@@ -70,6 +51,7 @@ mcpy ships with built-in tools organized by category:
 | `mcpy_log` | Read the server log for debugging |
 | `mcpy_restart` | Restart the server process (auto-reconnects) |
 | `mcpy_stats` | Runtime statistics: uptime, memory, invocation counts |
+| `mcpy_update` | Check for updates and install them |
 
 ### Database
 
@@ -99,55 +81,79 @@ mcpy ships with built-in tools organized by category:
 
 ## Configuration
 
-All configuration is managed through the web UI at `/settings` or stored in `~/.mcpy/settings.json`.
+All configuration is managed through the web UI at `http://localhost:3713/settings` or stored in `~/.mcpy/settings.json`.
 
-### API Keys
-
-| Key | Used by |
-|-----|---------|
-| Perplexity | `web_search` tool |
-
-Set via the UI or environment variable `PERPLEXITY_API_KEY`.
-
-### Database Connections
-
-Configure MySQL and PostgreSQL connections (host, port, user, password, database) through the settings UI. Database tools auto-disable when no connection is configured.
-
-### Tool Toggles
-
-Each tool can be individually enabled or disabled from the tools page. Disabled tools are not registered with the MCP server.
+- **API keys** -- Perplexity (for web_search). Set via UI or `PERPLEXITY_API_KEY` env var.
+- **Database connections** -- MySQL and PostgreSQL (host, port, user, password, database). Tools auto-disable when not configured.
+- **Tool toggles** -- Enable/disable individual tools from the tools page.
 
 ## Web Dashboard
 
-The built-in dashboard at `http://localhost:3713` provides:
+The built-in dashboard at `http://localhost:3713`:
 
-- **Dashboard** -- live event stream, tool health indicators, active sessions, aggregate stats
-- **Tools** -- enable/disable individual tools, see status and missing config
-- **Settings** -- API keys, database connections, Claude Desktop install management
+- **Dashboard** -- live event stream, tool health, active sessions, stats
+- **Tools** -- enable/disable individual tools, see missing config
+- **Settings** -- version/update status, API keys, database connections, Claude Desktop install
+
+## CLI Commands
+
+```
+mcpy              Start MCP server (stdio + HTTP)
+mcpy install      Register with Claude Desktop and Claude Code
+mcpy uninstall    Remove from Claude Desktop and Claude Code
+mcpy update       Check for and install updates
+mcpy version      Print version
+```
+
+## Development
+
+Requires [Bun](https://bun.sh) v1.1+.
+
+```bash
+git clone https://github.com/ebursztein/mcpy.git
+cd mcpy
+bun install && cd ui && bun install && cd ..
+bun run dev:all    # server (watch) + UI (vite) concurrently
+```
+
+Build and compile:
+
+```bash
+bun run build      # build web UI
+bun run compile    # compile standalone binary
+```
+
+### Releasing
+
+```bash
+npm version patch    # bumps package.json, creates git tag
+git push && git push --tags   # triggers GitHub Actions release
+```
+
+GitHub Actions builds binaries for macOS (x64, arm64) and Linux (x64, arm64), generates SHA256SUMS, and creates a GitHub release.
 
 ## Project Structure
 
 ```
 src/
-  index.ts              Entry point (MCP stdio + HTTP server)
+  index.ts              Entry point (MCP stdio + HTTP server + CLI)
+  version.ts            Version from package.json
+  update.ts             Auto-update logic (GitHub releases + SHA256)
   api.ts                REST API endpoints
-  settings.ts           Settings persistence
-  events.ts             Event bus and stats
-  types.ts              Shared types
+  settings.ts           Settings persistence (~/.mcpy/settings.json)
+  events.ts             Event bus, stats, SSE streaming
+  types.ts              Shared TypeScript types
   tools/
-    base.ts             Tool interface and helpers
-    index.ts            Tool registry
+    base.ts             ToolDefinition interface, helpers
+    index.ts            Tool registry and MCP registration
     agent/              todo_list, memory
-    database/           mysql, postgres (3 tools each)
-    debug/              mcpy log, restart, stats
+    debug/              mcpy log, restart, stats, update
+    database/           mysql (3 tools), postgres (3 tools)
     developer/          npm_info, pypi_info
     web/                web_fetch, http_headers, web_search
-ui/
-  src/
-    routes/             SvelteKit pages (dashboard, tools, settings)
-    lib/
-      api.ts            Frontend API client
-      components/       Svelte 5 components
+site/                   Landing page (mcpy.app) + install script
+ui/                     SvelteKit 5 + TailwindCSS v4 + DaisyUI v5
+.github/workflows/      Release CI (4-platform cross-compile)
 ```
 
 ## License

@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: bun-darwin-x64
+            asset: mcpy-darwin-x64
+            os: macos-13
+          - target: bun-darwin-arm64
+            asset: mcpy-darwin-arm64
+            os: macos-14
+          - target: bun-linux-x64
+            asset: mcpy-linux-x64
+            os: ubuntu-latest
+          - target: bun-linux-arm64
+            asset: mcpy-linux-arm64
+            os: ubuntu-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: |
+          bun install
+          cd ui && bun install && cd ..
+
+      - name: Build UI
+        run: bun run build
+
+      - name: Validate version matches tag
+        run: |
+          PKG_VERSION=$(bun -e "console.log(require('./package.json').version)")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            TAG="${TAG#v}"
+          fi
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "Version mismatch: package.json has $PKG_VERSION but tag is $TAG"
+            exit 1
+          fi
+          echo "Version: $PKG_VERSION"
+
+      - name: Compile binary
+        run: bun build src/index.ts --compile --target=${{ matrix.target }} --outfile ${{ matrix.asset }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          for dir in artifacts/*/; do
+            cp "$dir"* release/
+          done
+          cd release
+          sha256sum mcpy-* > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: mcpy ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            release/mcpy-darwin-x64
+            release/mcpy-darwin-arm64
+            release/mcpy-linux-x64
+            release/mcpy-linux-arm64
+            release/SHA256SUMS

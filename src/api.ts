@@ -9,6 +9,7 @@ import {
   saveSettings,
 } from "./settings.ts";
 import { getToolInfoList } from "./tools/index.ts";
+import { getVersionInfo, checkForUpdate, performUpdate } from "./update.ts";
 
 // Claude Desktop config path varies by platform
 function getClaudeConfigPath(): string {
@@ -263,6 +264,29 @@ export async function handleApiRequest(req: Request): Promise<Response | null> {
   if (path === "/api/install" && req.method === "DELETE") {
     const result = await uninstallFromClaude();
     return json(result, result.ok ? 200 : 500);
+  }
+
+  // Version and update management
+  if (path === "/api/version" && req.method === "GET") {
+    return json(await getVersionInfo());
+  }
+
+  if (path === "/api/update" && req.method === "POST") {
+    try {
+      const update = await checkForUpdate();
+      if (!update) {
+        return json({ ok: true, message: "Already up to date" });
+      }
+      await performUpdate(update);
+      // Schedule restart so the response gets sent
+      setTimeout(() => process.exit(0), 500);
+      return json({ ok: true, message: `Updated to ${update.latest}. Restarting...` });
+    } catch (err) {
+      return json(
+        { ok: false, error: err instanceof Error ? err.message : String(err) },
+        500
+      );
+    }
   }
 
   return null;
