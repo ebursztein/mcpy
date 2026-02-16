@@ -28,7 +28,7 @@ jobs:
         include:
           - target: bun-darwin-x64
             asset: mcpy-darwin-x64
-            os: macos-13
+            os: macos-14
           - target: bun-darwin-arm64
             asset: mcpy-darwin-arm64
             os: macos-14
