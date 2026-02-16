@@ -11,45 +11,60 @@ import {
 import { getToolInfoList, getGroupInfoList } from "./tools/index.ts";
 import { getVersionInfo, checkForUpdate, performUpdate } from "./update.ts";
 import { shutdownHttpServer } from "./server.ts";
+import { getClaudeDesktopConfigDir, commandExists } from "./platform.ts";
 
 // --- MCP client config paths (from official docs) ---
 
-interface McpClientDef {
+export interface McpClientDef {
   id: string;
   name: string;
+  configFormat: "json" | "toml";
   getConfigPath: () => string;
+  detect: () => boolean;
 }
 
-const MCP_CLIENTS: McpClientDef[] = [
+export const MCP_CLIENTS: McpClientDef[] = [
   {
     id: "claude-desktop",
     name: "Claude Desktop",
-    getConfigPath: () => {
-      const home = homedir();
-      switch (platform()) {
-        case "darwin":
-          return join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
-        case "win32":
-          return join(process.env.APPDATA || join(home, "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
-        default:
-          return join(home, ".config", "claude", "claude_desktop_config.json");
-      }
-    },
+    configFormat: "json",
+    getConfigPath: () => join(getClaudeDesktopConfigDir(), "claude_desktop_config.json"),
+    detect: () => existsSync(getClaudeDesktopConfigDir()),
   },
   {
     id: "claude-code",
     name: "Claude Code",
+    configFormat: "json",
     getConfigPath: () => join(homedir(), ".claude.json"),
+    detect: () => commandExists("claude") || existsSync(join(homedir(), ".claude.json")),
   },
   {
     id: "cursor",
     name: "Cursor",
+    configFormat: "json",
     getConfigPath: () => join(homedir(), ".cursor", "mcp.json"),
+    detect: () => existsSync(join(homedir(), ".cursor")),
+  },
+  {
+    id: "vscode",
+    name: "VS Code",
+    configFormat: "json",
+    getConfigPath: () => join(homedir(), ".vscode", "mcp.json"),
+    detect: () =>
+      commandExists("code") ||
+      (platform() === "darwin" && existsSync("/Applications/Visual Studio Code.app")),
+  },
+  {
+    id: "codex",
+    name: "Codex CLI",
+    configFormat: "toml",
+    getConfigPath: () => join(homedir(), ".codex", "config.toml"),
+    detect: () => commandExists("codex") || existsSync(join(homedir(), ".codex")),
   },
 ];
 
 function getClaudeConfigPath(): string {
-  return MCP_CLIENTS[0].getConfigPath();
+  return MCP_CLIENTS.find(c => c.id === "claude-desktop")!.getConfigPath();
 }
 
 function getMcpyBinaryPath(): string {
@@ -74,9 +89,14 @@ interface ClientInfo {
   installed: boolean;
 }
 
-async function checkClientInstalled(configPath: string): Promise<boolean> {
+async function checkClientInstalled(client: McpClientDef): Promise<boolean> {
+  const configPath = client.getConfigPath();
   if (!existsSync(configPath)) return false;
   try {
+    if (client.configFormat === "toml") {
+      const content = await Bun.file(configPath).text();
+      return content.includes("[mcp_servers.mcpy]");
+    }
     const config: McpConfig = await Bun.file(configPath).json();
     return !!config.mcpServers?.mcpy;
   } catch {
@@ -90,7 +110,7 @@ async function getClientsStatus(): Promise<{ clients: ClientInfo[]; binaryPath: 
     MCP_CLIENTS.map(async (client) => {
       const configPath = client.getConfigPath();
       const configExists = existsSync(configPath);
-      const installed = await checkClientInstalled(configPath);
+      const installed = await checkClientInstalled(client);
       return { id: client.id, name: client.name, configPath, configExists, installed };
     })
   );
@@ -164,20 +184,43 @@ async function installToClient(clientId: string): Promise<{ ok: boolean; error?:
   const configPath = client.getConfigPath();
   const binaryPath = getMcpyBinaryPath();
 
-  let config: McpConfig = {};
-  if (existsSync(configPath)) {
-    try {
-      config = await Bun.file(configPath).json();
-    } catch {
-      config = {};
-    }
-  }
-
-  if (!config.mcpServers) config.mcpServers = {};
-  config.mcpServers.mcpy = { command: binaryPath };
-
   try {
     mkdirSync(dirname(configPath), { recursive: true });
+
+    if (client.configFormat === "toml") {
+      // Codex CLI uses TOML config
+      const tomlBlock = `\n[mcp_servers.mcpy]\ntype = "stdio"\ncommand = "${binaryPath}"\n`;
+      let content = "";
+      if (existsSync(configPath)) {
+        content = await Bun.file(configPath).text();
+        if (content.includes("[mcp_servers.mcpy]")) {
+          // Already registered, update command path
+          content = content.replace(
+            /\[mcp_servers\.mcpy\][^[]*?(?=\[|$)/s,
+            tomlBlock.trimStart()
+          );
+        } else {
+          content += tomlBlock;
+        }
+      } else {
+        content = tomlBlock.trimStart();
+      }
+      await Bun.write(configPath, content);
+      return { ok: true };
+    }
+
+    // JSON config (Claude Desktop, Claude Code, Cursor, VS Code)
+    let config: McpConfig = {};
+    if (existsSync(configPath)) {
+      try {
+        config = await Bun.file(configPath).json();
+      } catch {
+        config = {};
+      }
+    }
+
+    if (!config.mcpServers) config.mcpServers = {};
+    config.mcpServers.mcpy = { command: binaryPath };
     await Bun.write(configPath, JSON.stringify(config, null, 2));
     return { ok: true };
   } catch (err) {
@@ -193,6 +236,13 @@ async function uninstallFromClient(clientId: string): Promise<{ ok: boolean; err
   if (!existsSync(configPath)) return { ok: true };
 
   try {
+    if (client.configFormat === "toml") {
+      let content = await Bun.file(configPath).text();
+      content = content.replace(/\n?\[mcp_servers\.mcpy\][^[]*?(?=\[|$)/s, "");
+      await Bun.write(configPath, content);
+      return { ok: true };
+    }
+
     const config: McpConfig = await Bun.file(configPath).json();
     if (config.mcpServers?.mcpy) {
       delete config.mcpServers.mcpy;

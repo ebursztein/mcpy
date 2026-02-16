@@ -30,30 +30,51 @@
     ]
   },
   {
-    "id": "todo",
+    "id": "notes",
     "category": "agent",
-    "label": "Todo List",
-    "description": "Persistent task tracking across conversations",
+    "label": "Notes",
+    "description": "Persistent markdown notes with tags, search, and grep",
     "requiresConfig": false,
     "tools": [
       {
-        "name": "todo_list",
-        "title": "Todo List",
-        "description": "Persistent todo list with add, update, remove, and clear actions"
-      }
-    ]
-  },
-  {
-    "id": "memory",
-    "category": "agent",
-    "label": "Memory",
-    "description": "Key-value store for facts and preferences across sessions",
-    "requiresConfig": false,
-    "tools": [
+        "name": "notes_add",
+        "title": "Add Note",
+        "description": "Create a new note with title, tags, description, and content"
+      },
       {
-        "name": "memory",
-        "title": "Memory Store",
-        "description": "Persistent key-value memory with get, set, delete, list, and search"
+        "name": "notes_read",
+        "title": "Read Note",
+        "description": "Read a note by id with offset/max_length pagination"
+      },
+      {
+        "name": "notes_delete",
+        "title": "Delete Note",
+        "description": "Delete a note by id"
+      },
+      {
+        "name": "notes_search",
+        "title": "Search Notes",
+        "description": "Search notes by title, tags, or description"
+      },
+      {
+        "name": "notes_grep",
+        "title": "Grep Notes",
+        "description": "Search note contents by regex pattern"
+      },
+      {
+        "name": "notes_list",
+        "title": "List Notes",
+        "description": "List all notes with metadata summary"
+      },
+      {
+        "name": "notes_update_metadata",
+        "title": "Update Note Metadata",
+        "description": "Update title, tags, description, or pinned status"
+      },
+      {
+        "name": "notes_update_content",
+        "title": "Update Note Content",
+        "description": "Update content at specific offset or append/prepend"
       }
     ]
   },
@@ -108,21 +129,82 @@
     ]
   },
   {
-    "id": "packages",
+    "id": "npm",
     "category": "developer",
-    "label": "Packages",
-    "description": "Look up npm and PyPI package information",
+    "label": "npm",
+    "description": "Search, inspect, and read npm packages from the registry",
+    "url": "https://www.npmjs.com/",
     "requiresConfig": false,
     "tools": [
       {
         "name": "npm_info",
         "title": "npm Package Info",
-        "description": "Look up version, description, dependencies, license, and downloads"
+        "description": "Look up version, description, dependencies, license, downloads, and publish info"
       },
+      {
+        "name": "npm_search",
+        "title": "npm Search",
+        "description": "Search the npm registry for packages by query with qualifiers"
+      },
+      {
+        "name": "npm_versions",
+        "title": "npm Versions",
+        "description": "List all published versions with dates and dist-tags"
+      },
+      {
+        "name": "npm_readme",
+        "title": "npm README",
+        "description": "Fetch the README of an npm package with pagination"
+      }
+    ]
+  },
+  {
+    "id": "pypi",
+    "category": "developer",
+    "label": "PyPI",
+    "description": "Inspect, list versions, and read Python packages from PyPI",
+    "url": "https://pypi.org/",
+    "requiresConfig": false,
+    "tools": [
       {
         "name": "pypi_info",
         "title": "PyPI Package Info",
-        "description": "Look up version, description, dependencies, license, and author"
+        "description": "Look up version, description, dependencies, license, author, and distribution info"
+      },
+      {
+        "name": "pypi_versions",
+        "title": "PyPI Versions",
+        "description": "List all published versions with dates, dist types, and yanked status"
+      },
+      {
+        "name": "pypi_readme",
+        "title": "PyPI README",
+        "description": "Fetch the long description/README with pagination"
+      }
+    ]
+  },
+  {
+    "id": "github",
+    "category": "developer",
+    "label": "GitHub",
+    "description": "Search code, read files, and grep patterns across GitHub repositories",
+    "url": "https://github.com/",
+    "requiresConfig": true,
+    "tools": [
+      {
+        "name": "github_search",
+        "title": "GitHub Code Search",
+        "description": "Search GitHub code with qualifiers like language, repo, path, and extension"
+      },
+      {
+        "name": "github_file",
+        "title": "GitHub File",
+        "description": "Fetch a file from a GitHub repository with pagination and caching"
+      },
+      {
+        "name": "github_grep",
+        "title": "GitHub Grep",
+        "description": "Grep a GitHub file for a regex pattern with context lines"
       }
     ]
   },
@@ -130,18 +212,33 @@
     "id": "fetch",
     "category": "web",
     "label": "Fetch",
-    "description": "Fetch web pages and inspect HTTP headers",
+    "description": "Fetch web pages, inspect headers, grep content, and download files",
     "requiresConfig": false,
     "tools": [
       {
-        "name": "web_fetch",
+        "name": "web_fetch_text",
         "title": "Web Fetch",
-        "description": "Fetch a webpage and extract clean readable text or raw HTML"
+        "description": "Fetch a webpage and extract clean readable text using Mozilla Readability"
       },
       {
-        "name": "http_headers",
+        "name": "web_fetch_raw",
+        "title": "Web Fetch Raw",
+        "description": "Fetch a webpage and return the raw HTML"
+      },
+      {
+        "name": "web_http_headers",
         "title": "HTTP Headers",
         "description": "Inspect HTTP response headers, redirects, and server info"
+      },
+      {
+        "name": "web_grep",
+        "title": "Web Grep",
+        "description": "Fetch a webpage and search for a regex pattern with context"
+      },
+      {
+        "name": "web_fetch_binary",
+        "title": "Web Fetch Binary",
+        "description": "Download a file from a URL to local storage"
       }
     ]
   },
@@ -155,8 +252,8 @@
     "requiresConfig": true,
     "tools": [
       {
-        "name": "web_search",
-        "title": "Web Search",
+        "name": "perplexity_search",
+        "title": "Perplexity Search",
         "description": "Search the web using Perplexity AI with citations",
         "remote": true
       }

@@ -3,8 +3,8 @@ import { homedir } from "os";
 import { mkdirSync } from "fs";
 import type { Settings } from "./types.ts";
 
-// Use ~/.mcpy/ for data -- works in both dev and compiled binary
-const DATA_DIR = join(homedir(), ".mcpy");
+// Use MCPY_DATA_DIR env var if set, otherwise ~/.mcpy/
+const DATA_DIR = process.env.MCPY_DATA_DIR || join(homedir(), ".mcpy");
 const SETTINGS_FILE = join(DATA_DIR, "settings.json");
 
 export { DATA_DIR };
@@ -103,6 +103,18 @@ export async function updateSettings(
         (current.database as Record<string, Record<string, unknown>>)[
           dbName
         ] = existing;
+      }
+    }
+  }
+
+  if (partial.notes && typeof partial.notes === "object") {
+    if (!current.notes) current.notes = {};
+    const notesPartial = partial.notes as Record<string, string | null>;
+    for (const [k, v] of Object.entries(notesPartial)) {
+      if (v === "" || v === null) {
+        delete (current.notes as Record<string, string>)[k];
+      } else if (typeof v === "string" && !v.startsWith("***")) {
+        (current.notes as Record<string, string>)[k] = v;
       }
     }
   }

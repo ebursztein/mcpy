@@ -5,12 +5,14 @@
  *
  * CLI:
  *   mcpy              Start MCP server (stdio + HTTP)
- *   mcpy install      Install binary to ~/.mcpy/bin/ and register with Claude Desktop
- *   mcpy uninstall    Remove from Claude Desktop config
+ *   mcpy install      Interactive install wizard (scan clients, pick tools, tray)
+ *   mcpy install -y   Non-interactive install (all defaults)
+ *   mcpy uninstall    Remove from all AI client configs
+ *   mcpy tray         Start system tray icon
  */
 import { join, dirname } from "path";
-import { appendFileSync, mkdirSync, existsSync, copyFileSync, chmodSync } from "fs";
-import { homedir, platform } from "os";
+import { appendFileSync, mkdirSync } from "fs";
+import { homedir } from "os";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { handleApiRequest } from "./api.ts";
@@ -21,127 +23,61 @@ import { VERSION } from "./version.ts";
 import { checkForUpdate, performUpdate } from "./update.ts";
 import { setHttpServer, shutdownHttpServer } from "./server.ts";
 
-// --- CLI commands (install / uninstall) ---
-
-const INSTALL_DIR = join(homedir(), ".mcpy", "bin");
-const INSTALL_PATH = join(INSTALL_DIR, "mcpy");
-
-function getClaudeConfigPath(): string {
-  const home = homedir();
-  switch (platform()) {
-    case "darwin":
-      return join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
-    case "win32":
-      return join(process.env.APPDATA || join(home, "AppData", "Roaming"), "Claude", "claude_desktop_config.json");
-    default:
-      return join(home, ".config", "claude", "claude_desktop_config.json");
-  }
-}
-
-function getClaudeCodeConfigPath(): string {
-  const home = homedir();
-  switch (platform()) {
-    case "darwin":
-      return join(home, ".claude.json");
-    default:
-      return join(home, ".claude.json");
-  }
-}
-
-async function cliInstall(): Promise<void> {
-  const src = process.execPath;
-
-  // 1. Copy binary to ~/.mcpy/bin/mcpy
-  mkdirSync(INSTALL_DIR, { recursive: true });
-  if (src !== INSTALL_PATH) {
-    copyFileSync(src, INSTALL_PATH);
-    chmodSync(INSTALL_PATH, 0o755);
-    console.log(`binary installed to ${INSTALL_PATH}`);
-  } else {
-    console.log(`binary already at ${INSTALL_PATH}`);
-  }
-
-  // 2. Register with Claude Desktop
-  const configPath = getClaudeConfigPath();
-  let config: Record<string, unknown> = {};
-
-  if (existsSync(configPath)) {
-    try {
-      config = await Bun.file(configPath).json();
-    } catch {
-      config = {};
-    }
-  }
-
-  if (!config.mcpServers) {
-    config.mcpServers = {};
-  }
-  (config.mcpServers as Record<string, unknown>).mcpy = { command: INSTALL_PATH };
-
-  const configDir = dirname(configPath);
-  mkdirSync(configDir, { recursive: true });
-  await Bun.write(configPath, JSON.stringify(config, null, 2));
-  console.log(`registered in Claude Desktop config: ${configPath}`);
-
-  // 3. Register with Claude Code
-  try {
-    const proc = Bun.spawn(["claude", "mcp", "add", "mcpy", "--", INSTALL_PATH], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const exitCode = await proc.exited;
-    if (exitCode === 0) {
-      console.log("registered with Claude Code");
-    }
-  } catch {
-    // Claude Code CLI not available, skip silently
-  }
-
-  console.log("\nrestart Claude Desktop to connect. for Claude Code, start a new session.");
-}
-
-async function cliUninstall(): Promise<void> {
-  // Remove from Claude Desktop config
-  const configPath = getClaudeConfigPath();
-  if (existsSync(configPath)) {
-    try {
-      const config = await Bun.file(configPath).json() as Record<string, unknown>;
-      const servers = config.mcpServers as Record<string, unknown> | undefined;
-      if (servers?.mcpy) {
-        delete servers.mcpy;
-        await Bun.write(configPath, JSON.stringify(config, null, 2));
-        console.log(`removed from Claude Desktop config: ${configPath}`);
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Remove from Claude Code
-  try {
-    const proc = Bun.spawn(["claude", "mcp", "remove", "mcpy"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    await proc.exited;
-    console.log("removed from Claude Code");
-  } catch {
-    // Claude Code CLI not available, skip silently
-  }
-
-  console.log("uninstalled. binary remains at ~/.mcpy/bin/mcpy -- delete manually if needed.");
-}
-
 // Handle CLI commands before starting the server
 const cmd = process.argv[2];
 if (cmd === "install") {
-  await cliInstall();
+  const silent =
+    process.argv.includes("-y") ||
+    process.argv.includes("--yes") ||
+    process.argv.includes("--non-interactive") ||
+    !process.stdin.isTTY;
+  const { interactiveInstall, nonInteractiveInstall } = await import("./install.ts");
+  if (silent) await nonInteractiveInstall();
+  else await interactiveInstall();
   process.exit(0);
 }
 if (cmd === "uninstall") {
-  await cliUninstall();
+  const silent = !process.stdin.isTTY;
+  if (silent) {
+    // Minimal uninstall for non-interactive contexts
+    const { MCP_CLIENTS } = await import("./api.ts");
+    const { existsSync } = await import("fs");
+    for (const client of MCP_CLIENTS) {
+      const configPath = client.getConfigPath();
+      if (!existsSync(configPath)) continue;
+      try {
+        if (client.configFormat === "toml") {
+          let content = await Bun.file(configPath).text();
+          content = content.replace(/\n?\[mcp_servers\.mcpy\][^[]*?(?=\[|$)/s, "");
+          await Bun.write(configPath, content);
+        } else {
+          const config = (await Bun.file(configPath).json()) as Record<string, unknown>;
+          const servers = config.mcpServers as Record<string, unknown> | undefined;
+          if (servers?.mcpy) {
+            delete servers.mcpy;
+            await Bun.write(configPath, JSON.stringify(config, null, 2));
+          }
+        }
+      } catch {}
+    }
+    const { removeTrayAutoLaunch } = await import("./install.ts");
+    removeTrayAutoLaunch();
+    console.log("uninstalled. binary remains at ~/.mcpy/bin/mcpy -- delete manually if needed.");
+  } else {
+    const { interactiveUninstall } = await import("./install.ts");
+    await interactiveUninstall();
+  }
   process.exit(0);
 }
+if (cmd === "tray") {
+  const { startTray } = await import("./tray.ts");
+  await startTray();
+  // startTray returns but the systray child process + setInterval keep the event loop alive.
+  // We must not fall through to the MCP server setup below.
+  // Using an empty await to suspend top-level execution indefinitely.
+  await new Promise(() => {});
+}
+
 if (cmd === "version" || cmd === "--version" || cmd === "-v") {
   console.log(`mcpy ${VERSION}`);
   process.exit(0);
@@ -177,7 +113,7 @@ const PROJECT_ROOT = IS_COMPILED
 const UI_BUILD_DIR = join(PROJECT_ROOT, "ui", "build");
 
 // Log to both stderr and ~/.mcpy/mcpy.log
-const LOG_DIR = join(homedir(), ".mcpy");
+const LOG_DIR = process.env.MCPY_DATA_DIR || join(homedir(), ".mcpy");
 const LOG_FILE = join(LOG_DIR, "mcpy.log");
 mkdirSync(LOG_DIR, { recursive: true });
 

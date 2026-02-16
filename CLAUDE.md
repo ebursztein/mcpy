@@ -24,7 +24,7 @@ bun run compile                # compile standalone binary ./mcpy
 Tools follow a 3-level hierarchy: **category** > **group** > **tool**.
 
 - Category = section heading in the UI (agent, database, developer, web)
-- Group = card in the UI (mcpy, todo, memory, mysql, postgres, packages, fetch, perplexity)
+- Group = card in the UI (mcpy, notes, mysql, postgres, npm, pypi, github, fetch, perplexity)
 - Tool = individual toggle inside a card
 
 Every tool MUST have both `category` and `group` set.
@@ -34,11 +34,11 @@ Every tool MUST have both `category` and `group` set.
 | Category | Group | Tools |
 |----------|-------|-------|
 | agent | mcpy | mcpy_log, mcpy_restart, mcpy_stats, mcpy_update |
-| agent | todo | todo_list |
-| agent | memory | memory |
+| agent | notes | notes_add, notes_read, notes_delete, notes_search, notes_grep, notes_list, notes_update_metadata, notes_update_content |
 | database | mysql | mysql_query, mysql_list_tables, mysql_describe_table |
 | database | postgres | postgres_query, postgres_list_tables, postgres_describe_table |
-| developer | packages | npm_info, pypi_info |
+| developer | npm | npm_info, npm_search, npm_versions, npm_readme |
+| developer | pypi | pypi_info, pypi_versions, pypi_readme |
 | developer | github | github_search, github_file, github_grep |
 | web | fetch | web_fetch_text, web_fetch_raw, web_http_headers, web_grep, web_fetch_binary |
 | web | perplexity | perplexity_search (remote) |
@@ -83,8 +83,7 @@ site/                 Landing page (mcpy.app) + install.sh
 All runtime data lives in `~/.mcpy/`:
 - `settings.json` -- API keys, DB configs, tool toggles
 - `mcpy.log` -- server log (readable via mcpy_log tool)
-- `todos.json` -- todo list data
-- `memory.json` -- memory store data
+- `notes/` -- markdown notes (one `.md` file per note, YAML frontmatter + content)
 
 ## Build & deploy cycle
 
@@ -93,7 +92,7 @@ After code changes:
 bun run build         # rebuild UI
 bun run compile       # recompile binary
 ```
-Then call `mcpy_restart` tool to reload -- do NOT ask the user to restart Claude.
+Then call `mcpy_restart` tool, followed by `mcpy_stats` to force the MCP client to reconnect to the new process. Do NOT ask the user to restart Claude.
 
 ## UI
 
@@ -158,10 +157,10 @@ bun run test:integration    # podman container -- builds from source end-to-end
 test/
   lib/harness.ts      Shared assert/suite/summary + HTTP_BASE (reads PORT env var)
   lib/mcp.ts          Shared MCP client: connect, disconnect, call, text helpers
-  tools/todo.ts       todo_list tool tests
-  tools/memory.ts     memory tool tests
+  tools/notes.ts      notes tools tests (all 8 operations)
   tools/mcpy.ts       mcpy_stats, mcpy_log, mcpy_update, mcpy_restart tests
-  tools/packages.ts   npm_info, pypi_info tests
+  tools/npm.ts        npm_info, npm_search, npm_versions, npm_readme tests
+  tools/pypi.ts       pypi_info, pypi_versions, pypi_readme tests
   tools/fetch.ts      web_fetch, http_headers tests
   suites/install.ts   mcpy install command tests (binary copy + config registration)
   suites/http.ts      HTTP REST API tests (/api/tools, /api/version, /api/stats, /api/settings, /api/sessions)
@@ -178,7 +177,7 @@ test/
 3. **Every new UI page MUST have tests.** Add route assertions to `test/suites/ui.ts`.
 4. **Tests must be modular.** Each tool group has its own file. Each file exports a single async function. Shared logic lives in `test/lib/`.
 5. **No hardcoding.** Use `HTTP_BASE` from `test/lib/harness.ts` for URLs. Use `process.env.PORT` for port config. Use platform-aware paths (see `getClaudeConfigPath()` in install.ts).
-6. **Tests must be deterministic.** Clean up state before testing (e.g. `todo_list clear`). Do not depend on external services being in a specific state.
+6. **Tests must be deterministic.** Clean up state before testing (e.g. delete test notes). Do not depend on external services being in a specific state. Tests use `MCPY_DATA_DIR` to write to an isolated temp directory.
 7. **Run tests before compiling a release binary.** The CI workflow enforces this -- tests run before the release job proceeds.
 
 ### Adding tests for a new tool group

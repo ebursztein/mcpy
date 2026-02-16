@@ -62,4 +62,31 @@ export async function testInstall(builtBinary: string) {
   const versionOut = await new Response(versionProc.stdout).text();
   await versionProc.exited;
   assert("installed binary outputs version", /\d+\.\d+\.\d+/.test(versionOut), versionOut.trim());
+
+  // Test explicit -y flag (non-interactive)
+  const yProc = Bun.spawn([builtBinary, "install", "-y"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const yStdout = await new Response(yProc.stdout).text();
+  const yExit = await yProc.exited;
+  assert("install -y exits 0", yExit === 0, `exit: ${yExit}`);
+  assert("install -y produces output", yStdout.length > 0);
+
+  // Test tray command on headless (should exit gracefully, not hang)
+  const trayProc = Bun.spawn([builtBinary, "tray"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, MCPY_HEADLESS: "1" },
+  });
+  const trayExit = await Promise.race([
+    trayProc.exited,
+    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 5000)),
+  ]);
+  if (trayExit === "timeout") {
+    trayProc.kill();
+    await trayProc.exited;
+  }
+  assert("tray headless exits within 5s", trayExit !== "timeout", "timed out -- tray hung");
+  assert("tray headless does not crash", trayExit === 0 || trayExit === 1, `exit: ${trayExit}`);
 }

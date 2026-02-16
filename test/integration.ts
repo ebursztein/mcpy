@@ -4,7 +4,7 @@
  * Builds from source, then tests everything end-to-end:
  *   - Install command (binary copy + config registration)
  *   - MCP stdio protocol (connect, list tools)
- *   - All tool groups (todo, memory, mcpy, packages, github, fetch)
+ *   - All tool groups (notes, mcpy, npm, pypi, github, fetch)
  *   - HTTP REST API
  *   - Web UI serving
  */
@@ -14,10 +14,10 @@ import { suite, assert, summary } from "./lib/harness.ts";
 import { connect, disconnect, getClient } from "./lib/mcp.ts";
 
 // Tool tests
-import { testTodo } from "./tools/todo.ts";
-import { testMemory } from "./tools/memory.ts";
+import { testNotes } from "./tools/notes.ts";
 import { testMcpy } from "./tools/mcpy.ts";
-import { testPackages } from "./tools/packages.ts";
+import { testNpm } from "./tools/npm.ts";
+import { testPypi } from "./tools/pypi.ts";
 import { testFetch } from "./tools/fetch.ts";
 import { testGithub } from "./tools/github.ts";
 import { testLib } from "./tools/lib.ts";
@@ -55,7 +55,7 @@ async function main() {
   const tools = await client.listTools();
   const names = tools.tools.map((t) => t.name);
   assert("listTools returns tools", names.length > 0, `count: ${names.length}`);
-  for (const name of ["todo_list", "memory", "mcpy_stats", "mcpy_log", "npm_info", "pypi_info", "web_fetch_text", "web_fetch_raw", "web_http_headers", "web_grep", "web_fetch_binary"]) {
+  for (const name of ["notes_add", "notes_read", "notes_delete", "notes_search", "notes_grep", "notes_list", "notes_update_metadata", "notes_update_content", "mcpy_stats", "mcpy_log", "npm_info", "npm_search", "npm_versions", "npm_readme", "pypi_info", "pypi_versions", "pypi_readme", "web_fetch_text", "web_fetch_raw", "web_http_headers", "web_grep", "web_fetch_binary"]) {
     assert(`tool registered: ${name}`, names.includes(name));
   }
   console.log("");
@@ -65,16 +65,16 @@ async function main() {
   console.log("");
 
   // --- Tool tests (MCP only) ---
-  await testTodo();
-  console.log("");
-
-  await testMemory();
+  await testNotes();
   console.log("");
 
   await testMcpy();
   console.log("");
 
-  await testPackages();
+  await testNpm();
+  console.log("");
+
+  await testPypi();
   console.log("");
 
   await testGithub();

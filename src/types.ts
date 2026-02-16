@@ -86,6 +86,9 @@ export interface Settings {
     mysql?: DatabaseConfig;
     postgres?: DatabaseConfig;
   };
+  notes?: {
+    directory?: string;
+  };
   tools: Record<string, { enabled: boolean }>;
 }
 

@@ -64,7 +64,7 @@
 </script>
 
 <div class="flex flex-col gap-6 max-w-4xl">
-	<h2 class="text-2xl font-bold">Settings</h2>
+	<h2 class="text-2xl font-bold">AI Clients</h2>
 
 	<!-- Version & Update -->
 	{#if versionInfo}
@@ -175,5 +175,5 @@
 		</div>
 	{/if}
 
-	<p class="text-xs text-base-content/40">Tool-specific settings (API keys, database connections) are configured on the <a href="/tools" class="link link-primary">Tools</a> page.</p>
+	<p class="text-xs text-base-content/40">Tool-specific settings (API keys, database connections) are configured on the <a href="/tools" class="link link-primary">Tool Config</a> page.</p>
 </div>
