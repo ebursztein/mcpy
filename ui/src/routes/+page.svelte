@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { createEventSource, type McpEvent } from '$lib/events';
-	import { fetchStats, fetchSessions, fetchTools, fetchGroups, type AggregateStats, type SessionInfo, type ToolInfo, type GroupInfo } from '$lib/api';
-	import SessionList from '$lib/components/SessionList.svelte';
+	import { fetchStats, fetchTools, fetchGroups, type AggregateStats, type ToolInfo, type GroupInfo } from '$lib/api';
 	import GroupTable from '$lib/components/GroupTable.svelte';
 	import GroupDetailModal from '$lib/components/GroupDetailModal.svelte';
 	import EventLog from '$lib/components/EventLog.svelte';
@@ -10,7 +9,6 @@
 
 	let events: McpEvent[] = $state([]);
 	let stats: AggregateStats = $state({ totalInvocations: 0, successCount: 0, errorCount: 0, tools: {} });
-	let sessions: SessionInfo[] = $state([]);
 	let tools: ToolInfo[] = $state([]);
 	let groups: GroupInfo[] = $state([]);
 	let paused = $state(false);
@@ -18,8 +16,16 @@
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let selectedGroup: GroupInfo | null = $state(null);
 
+	// Only show groups that have at least one enabled tool
+	const activeGroups = $derived(
+		groups.filter(g => {
+			const gTools = tools.filter(t => (t.group || t.name) === g.id);
+			return gTools.some(t => t.enabled);
+		})
+	);
+
 	onMount(async () => {
-		[stats, sessions, tools, groups] = await Promise.all([fetchStats(), fetchSessions(), fetchTools(), fetchGroups()]);
+		[stats, tools, groups] = await Promise.all([fetchStats(), fetchTools(), fetchGroups()]);
 
 		es = createEventSource((event) => {
 			if (!paused) {
@@ -29,14 +35,11 @@
 					if (event.type === 'tool_result') stats.successCount++;
 					else stats.errorCount++;
 				}
-				if (event.type === 'session_connect' || event.type === 'session_disconnect') {
-					fetchSessions().then(s => sessions = s);
-				}
 			}
 		});
 
 		pollInterval = setInterval(async () => {
-			[stats, sessions] = await Promise.all([fetchStats(), fetchSessions()]);
+			stats = await fetchStats();
 		}, 10000);
 	});
 
@@ -52,7 +55,6 @@
 	function handleToolToggle(name: string, enabled: boolean) {
 		tools = tools.map(t => t.name === name ? { ...t, enabled } : t);
 	}
-
 </script>
 
 <div class="flex flex-col gap-4">
@@ -60,9 +62,7 @@
 
 	<DashboardCharts />
 
-	<GroupTable {tools} toolStats={stats.tools} {groups} onGroupClick={(g) => selectedGroup = g} />
-
-	<SessionList {sessions} />
+	<GroupTable {tools} toolStats={stats.tools} groups={activeGroups} onGroupClick={(g) => selectedGroup = g} />
 
 	<EventLog {events} {paused} onTogglePause={() => paused = !paused} onClear={clearEvents} />
 </div>

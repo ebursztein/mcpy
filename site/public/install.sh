@@ -82,7 +82,11 @@ if [ -f "$BINARY" ]; then
   if [ "$CURRENT" = "$VERSION" ]; then
     ok "mcpy ${VERSION} is already installed and up to date"
     # Still run install to ensure registration is current
-    "$BINARY" install
+    if [ -e /dev/tty ]; then
+      "$BINARY" install < /dev/tty
+    else
+      "$BINARY" install -y
+    fi
     exit 0
   fi
   if [ -n "$CURRENT" ]; then
@@ -130,11 +134,10 @@ chmod +x "$TMP_FILE"
 mv -f "$TMP_FILE" "$BINARY"
 ok "binary installed to ${BINARY}"
 
-# --- Register with Claude Desktop and Claude Code ---
+# --- Interactive install (re-attach stdin from terminal even in pipe) ---
 
-"$BINARY" install
-
-echo ""
-ok "mcpy ${VERSION} is ready"
-echo ""
-info "restart Claude Desktop to connect. for Claude Code, start a new session."
+if [ -e /dev/tty ]; then
+  "$BINARY" install < /dev/tty
+else
+  "$BINARY" install -y
+fi

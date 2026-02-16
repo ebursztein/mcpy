@@ -2,6 +2,8 @@
 
 A fully compiled MCP server distributed as a single binary. Ships with a web dashboard for managing tools, settings, and monitoring. Zero runtime dependencies.
 
+**Website:** [mcpy.app](https://mcpy.app) | **Source:** [GitHub](https://github.com/ebursztein/mcpy)
+
 ## Install
 
 ```bash
@@ -35,69 +37,62 @@ rm -rf ~/.mcpy
 
 ## What it does
 
-mcpy runs as an MCP server that Claude Desktop and Claude Code connect to via stdio. It exposes 17 tools across 4 categories, and serves a web dashboard at `http://localhost:3713` for managing everything.
+mcpy runs as an MCP server that Claude Desktop, Claude Code, and Cursor connect to via stdio. It exposes 34 tools across 4 categories, and serves a web dashboard at `http://localhost:3713` for managing everything.
 
 ## Tools
 
 ### Agent
 
-| Tool | Description |
-|------|-------------|
-| `todo_list` | Persistent task tracking (add, update, remove, list) |
-| `memory` | Key-value store for facts and preferences across sessions |
-| `mcpy_log` | Read the server log for debugging |
-| `mcpy_restart` | Restart the server process (auto-reconnects) |
-| `mcpy_stats` | Runtime statistics: uptime, memory, invocation counts |
-| `mcpy_update` | Check for updates and install them |
+| Group | Tools | Description |
+|-------|-------|-------------|
+| mcpy | `mcpy_log`, `mcpy_restart`, `mcpy_stats`, `mcpy_update` | Server management, logs, stats, and updates |
+| notes | `notes_add`, `notes_read`, `notes_delete`, `notes_search`, `notes_grep`, `notes_list`, `notes_update_metadata`, `notes_update_content` | Persistent markdown notes with tags, search, and grep |
 
 ### Database
 
-| Tool | Description |
-|------|-------------|
-| `mysql_query` | Execute SQL queries (parameterized, read-only mode) |
-| `mysql_list_tables` | List tables with row counts and engine info |
-| `mysql_describe_table` | Show columns, indexes, and foreign keys |
-| `postgres_query` | Execute SQL queries (parameterized, read-only mode) |
-| `postgres_list_tables` | List tables with row count estimates |
-| `postgres_describe_table` | Show columns, indexes, and foreign keys |
+| Group | Tools | Description |
+|-------|-------|-------------|
+| mysql | `mysql_query`, `mysql_list_tables`, `mysql_describe_table` | Query and explore MySQL databases |
+| postgres | `postgres_query`, `postgres_list_tables`, `postgres_describe_table` | Query and explore PostgreSQL databases |
 
 ### Developer
 
-| Tool | Description |
-|------|-------------|
-| `npm_info` | Look up npm package details (version, deps, downloads) |
-| `pypi_info` | Look up PyPI package details (version, deps, license) |
+| Group | Tools | Description |
+|-------|-------|-------------|
+| npm | `npm_info`, `npm_search`, `npm_versions`, `npm_readme` | Search, inspect, and read npm packages |
+| pypi | `pypi_info`, `pypi_versions`, `pypi_readme` | Inspect and read Python packages from PyPI |
+| github | `github_search`, `github_file`, `github_grep` | Search code, read files, and grep across GitHub repos |
 
 ### Web
 
-| Tool | Description |
-|------|-------------|
-| `web_fetch` | Fetch and extract clean text from web pages |
-| `http_headers` | Inspect HTTP response headers from any URL |
-| `web_search` | Search the web via Perplexity AI (requires API key) |
+| Group | Tools | Description |
+|-------|-------|-------------|
+| fetch | `web_fetch_text`, `web_fetch_raw`, `web_http_headers`, `web_grep`, `web_fetch_binary` | Fetch pages, inspect headers, grep content, download files |
+| perplexity | `perplexity_search` | AI-powered web search with citations (requires API key) |
 
 ## Configuration
 
-All configuration is managed through the web UI at `http://localhost:3713/settings` or stored in `~/.mcpy/settings.json`.
+All configuration is managed through the web dashboard at `http://localhost:3713` or stored in `~/.mcpy/settings.json`.
 
-- **API keys** -- Perplexity (for web_search). Set via UI or `PERPLEXITY_API_KEY` env var.
+- **API keys** -- Perplexity (for `perplexity_search`), GitHub (for `github_*`). Set via UI or env vars.
 - **Database connections** -- MySQL and PostgreSQL (host, port, user, password, database). Tools auto-disable when not configured.
-- **Tool toggles** -- Enable/disable individual tools from the tools page.
+- **Tool toggles** -- Enable/disable individual tools or entire groups from the Tool Config page.
 
 ## Web Dashboard
 
 The built-in dashboard at `http://localhost:3713`:
 
 - **Dashboard** -- live event stream, tool health, active sessions, stats
-- **Tools** -- enable/disable individual tools, see missing config
-- **Settings** -- version/update status, API keys, database connections, Claude Desktop install
+- **Tool Config** -- enable/disable tools and groups, configure API keys and database connections
+- **AI Clients** -- version/update status, install/uninstall to Claude Desktop, Claude Code, Cursor, VS Code, Codex
 
 ## CLI Commands
 
 ```
 mcpy              Start MCP server (stdio + HTTP)
-mcpy install      Register with Claude Desktop and Claude Code
-mcpy uninstall    Remove from Claude Desktop and Claude Code
+mcpy install      Register with AI clients (Claude Desktop, Claude Code, Cursor, etc.)
+mcpy uninstall    Remove from all AI client configs
+mcpy tray         Start system tray icon
 mcpy update       Check for and install updates
 mcpy version      Print version
 ```
@@ -163,14 +158,14 @@ src/
   tools/
     base.ts             ToolDefinition interface, helpers
     index.ts            Tool registry and MCP registration
-    agent/              todo_list, memory
-    debug/              mcpy log, restart, stats, update
+    agent/              notes (8 tools), mcpy (4 tools)
     database/           mysql (3 tools), postgres (3 tools)
-    developer/          npm_info, pypi_info
-    web/                web_fetch, http_headers, web_search
+    developer/          npm (4 tools), pypi (3 tools), github (3 tools)
+    web/                fetch (5 tools), perplexity (1 tool)
+    debug/              mcpy log, restart, stats, update
 test/
   lib/                  Shared test harness + MCP client helpers
-  tools/                Per-tool-group tests (todo, memory, mcpy, packages, fetch)
+  tools/                Per-tool-group tests (notes, mcpy, npm, pypi, github, fetch)
   suites/               Integration suites (install, http, ui)
   integration.ts        Test orchestrator
   Containerfile         Podman build-from-source container

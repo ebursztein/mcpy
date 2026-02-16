@@ -43,16 +43,16 @@ export async function testInstall(builtBinary: string) {
   } catch {}
   assert("installed binary is executable", executable);
 
-  // Verify config registration
+  // Verify config registration (only if Claude Desktop is detected on this system)
   const configPath = getClaudeConfigPath();
-  let registered = false;
   if (existsSync(configPath)) {
+    let registered = false;
     try {
       const config = JSON.parse(await Bun.file(configPath).text());
       registered = config?.mcpServers?.mcpy?.command === INSTALLED_BINARY;
     } catch {}
+    assert("registered in Claude Desktop config", registered);
   }
-  assert("registered in Claude Desktop config", registered);
 
   // Verify the installed copy runs
   const versionProc = Bun.spawn([INSTALLED_BINARY, "version"], {
@@ -62,4 +62,31 @@ export async function testInstall(builtBinary: string) {
   const versionOut = await new Response(versionProc.stdout).text();
   await versionProc.exited;
   assert("installed binary outputs version", /\d+\.\d+\.\d+/.test(versionOut), versionOut.trim());
+
+  // Test explicit -y flag (non-interactive)
+  const yProc = Bun.spawn([builtBinary, "install", "-y"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const yStdout = await new Response(yProc.stdout).text();
+  const yExit = await yProc.exited;
+  assert("install -y exits 0", yExit === 0, `exit: ${yExit}`);
+  assert("install -y produces output", yStdout.length > 0);
+
+  // Test tray command on headless (should exit gracefully, not hang)
+  const trayProc = Bun.spawn([builtBinary, "tray"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, MCPY_HEADLESS: "1" },
+  });
+  const trayExit = await Promise.race([
+    trayProc.exited,
+    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 5000)),
+  ]);
+  if (trayExit === "timeout") {
+    trayProc.kill();
+    await trayProc.exited;
+  }
+  assert("tray headless exits within 5s", trayExit !== "timeout", "timed out -- tray hung");
+  assert("tray headless does not crash", trayExit === 0 || trayExit === 1, `exit: ${trayExit}`);
 }

@@ -1,7 +1,12 @@
 <script lang="ts">
 	import type { ToolInfo, ToolStats, GroupInfo } from '$lib/api';
 
-	let { tools, toolStats, groups = [] }: { tools: ToolInfo[]; toolStats: Record<string, ToolStats>; groups: GroupInfo[] } = $props();
+	let { tools, toolStats, groups = [], onGroupClick }: {
+		tools: ToolInfo[];
+		toolStats: Record<string, ToolStats>;
+		groups: GroupInfo[];
+		onGroupClick?: (group: GroupInfo) => void;
+	} = $props();
 
 	const categoryLabels: Record<string, string> = {
 		agent: 'Agent',
@@ -47,6 +52,12 @@
 		if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
 		return `${Math.floor(diff / 86400000)}d ago`;
 	}
+
+	function handleCardClick(group: string) {
+		if (!onGroupClick) return;
+		const g = groupMap.get(group);
+		if (g) onGroupClick(g);
+	}
 </script>
 
 {#each categories as category}
@@ -54,7 +65,12 @@
 		<h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">{categoryLabels[category] || category}</h3>
 		<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
 			{#each groupsInCategory(category) as group}
-				<div class="card bg-base-200 shadow">
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="card bg-base-200 shadow {onGroupClick ? 'cursor-pointer hover:bg-base-300/50 transition-colors' : ''}"
+					onclick={() => handleCardClick(group)}
+				>
 					<div class="card-body p-4 gap-2">
 						<h4 class="font-medium text-sm">{groupMap.get(group)?.label || group}</h4>
 						<div class="space-y-1">

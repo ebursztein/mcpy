@@ -103,10 +103,10 @@ export async function testGithub() {
   assert("search has results count", searchRes.includes("Found") && searchRes.includes("results"));
   assert("search has repo paths", searchRes.includes("modelcontextprotocol/"));
 
-  // Search with no results
+  // Search scoped to a known small repo for something that doesn't exist
   const searchNone = await call("github_search", {
-    query: "xyzzy_unique_gibberish_no_results_12345",
+    query: "xyzzy_impossible_string_99999 repo:ebursztein/mcpy",
     per_page: 1,
   });
-  assert("search 0 results", searchNone.includes("Found 0") || searchNone.includes("0 results"));
+  assert("search no results returns Found 0", searchNone.includes("Found 0"));
 }

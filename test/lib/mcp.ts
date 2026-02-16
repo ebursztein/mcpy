@@ -3,13 +3,21 @@
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { mkdtempSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 
 let client: Client | null = null;
 
+// Isolated temp data dir so tests don't pollute ~/.mcpy/
+export const TEST_DATA_DIR = mkdtempSync(join(tmpdir(), "mcpy-test-"));
+
 export async function connect(binary: string): Promise<Client> {
+  const port = process.env.PORT || "3713";
   const transport = new StdioClientTransport({
     command: binary,
     stderr: "pipe",
+    env: { ...process.env, PORT: port, MCPY_DATA_DIR: TEST_DATA_DIR },
   });
 
   client = new Client(
@@ -26,6 +34,11 @@ export async function disconnect(): Promise<void> {
     await client.close();
     client = null;
   }
+  // Clean up temp data dir
+  try {
+    const { rmSync } = await import("fs");
+    rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  } catch {}
 }
 
 export function getClient(): Client {

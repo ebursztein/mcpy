@@ -5,10 +5,12 @@ import { getSettingValue, DATA_DIR } from "../settings.ts";
 import type { Settings, ToolInfo, GroupInfo } from "../types.ts";
 
 // Explicit imports -- works in both dev and compiled binary
-import todoList from "./agent/todo_list.ts";
-import memory from "./agent/memory.ts";
-import npmInfo from "./developer/npm_info.ts";
-import pypiInfo from "./developer/pypi_info.ts";
+import {
+  notesAdd, notesRead, notesDelete, notesSearch, notesGrep,
+  notesList, notesUpdateMetadata, notesUpdateContent,
+} from "./agent/notes.ts";
+import { npmInfo, npmSearch, npmVersions, npmReadme } from "./developer/npm.ts";
+import { pypiInfo, pypiVersions, pypiReadme } from "./developer/pypi.ts";
 import { mcpyLog, mcpyRestart, mcpyStats, mcpyUpdate } from "./debug/mcpy.ts";
 import { webFetchText, webFetchRaw, webHttpHeaders, webGrep, webFetchBinary } from "./web/fetch.ts";
 import perplexitySearch from "./web/perplexity.ts";
@@ -17,9 +19,9 @@ import { postgresQuery, postgresListTables, postgresDescribeTable } from "./data
 import { githubSearch, githubFile, githubGrep } from "./developer/github.ts";
 
 // Group definitions
-import { todoGroup } from "./agent/todo_list.ts";
-import { memoryGroup } from "./agent/memory.ts";
-import { packagesGroup } from "./developer/npm_info.ts";
+import { notesGroup } from "./agent/notes.ts";
+import { npmGroup } from "./developer/npm.ts";
+import { pypiGroup } from "./developer/pypi.ts";
 import { mcpyGroup } from "./debug/mcpy.ts";
 import { fetchGroup } from "./web/fetch.ts";
 import { perplexityGroup } from "./web/perplexity.ts";
@@ -28,10 +30,21 @@ import { postgresGroup } from "./database/postgres.ts";
 import { githubGroup } from "./developer/github.ts";
 
 const ALL_TOOLS: ToolDefinition[] = [
-  todoList,
-  memory,
+  notesAdd,
+  notesRead,
+  notesDelete,
+  notesSearch,
+  notesGrep,
+  notesList,
+  notesUpdateMetadata,
+  notesUpdateContent,
   npmInfo,
+  npmSearch,
+  npmVersions,
+  npmReadme,
   pypiInfo,
+  pypiVersions,
+  pypiReadme,
   mcpyLog,
   mcpyRestart,
   mcpyStats,
@@ -53,10 +66,10 @@ const ALL_TOOLS: ToolDefinition[] = [
   githubGrep,
 ];
 
-const ALL_GROUPS: GroupDefinition[] = [
-  todoGroup,
-  memoryGroup,
-  packagesGroup,
+export const ALL_GROUPS: GroupDefinition[] = [
+  notesGroup,
+  npmGroup,
+  pypiGroup,
   mcpyGroup,
   fetchGroup,
   perplexityGroup,

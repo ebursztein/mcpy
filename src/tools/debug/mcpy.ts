@@ -18,7 +18,7 @@ export const mcpyGroup: GroupDefinition = {
   enabledByDefault: true,
 };
 
-const DATA_DIR = join(homedir(), ".mcpy");
+const DATA_DIR = process.env.MCPY_DATA_DIR || join(homedir(), ".mcpy");
 const LOG_FILE = join(DATA_DIR, "mcpy.log");
 const startTime = Date.now();
 
@@ -104,7 +104,7 @@ const mcpyRestart: ToolDefinition = {
       await shutdownHttpServer();
       process.exit(0);
     }, 100);
-    return textResult("mcpy is restarting. The MCP client will reconnect automatically.");
+    return textResult("mcpy is shutting down. Call mcpy_stats to force the MCP client to reconnect to the new process.");
   },
 };
 
