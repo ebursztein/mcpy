@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Understanding Circuit Breakers | Example Engineering Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>body { font-family: sans-serif; }</style>
+  <script>window.analytics = { track: function () {} };</script>
+</head>
+<body>
+  <header>
+    <nav><a href="/">Home</a> <a href="/blog">Blog</a> <a href="/about">About</a></nav>
+  </header>
+  <main>
+    <article>
+      <h1>Understanding Circuit Breakers</h1>
+      <p class="byline">By Ada Example, March 3, 2026</p>
+      <p>A circuit breaker stops a client from hammering a dependency that is already failing. After a run of
+        consecutive failures the breaker opens, and calls fail fast for a cooldown period instead of piling up
+        behind slow timeouts. When the cooldown ends, a single trial call decides whether the breaker closes again.</p>
+      <h2>Why fail fast</h2>
+      <p>Timeouts are expensive. A request that waits thirty seconds for a dead upstream holds a connection, a
+        worker slot and the caller's patience. Failing fast frees those resources and lets a fallback path take over,
+        which is usually what the user wanted in the first place.</p>
+      <p>Read more in the <a href="/blog/retries">guide to retries with jitter</a> and the
+        <a href="https://example.org/patterns">pattern catalog</a>.</p>
+      <h2>Choosing thresholds</h2>
+      <p>Pick the failure threshold from the error rate you can tolerate, not from a round number. Five consecutive
+        failures is a common default because it filters out isolated blips while still reacting within seconds when
+        a dependency goes down hard. Cooldowns between thirty seconds and a few minutes work for most services.</p>
+      <ul>
+        <li>Count only failures that a retry would not fix.</li>
+        <li>Never open the breaker for the last remaining option.</li>
+        <li>Emit a metric every time the state changes.</li>
+      </ul>
+      <pre><code>if (breaker.isOpen(provider)) skip(provider);</code></pre>
+    </article>
+  </main>
+  <footer><p>&copy; 2026 Example Engineering. All rights reserved.</p></footer>
+</body>
+</html>

@@ -1,0 +1,45 @@
+// mcpy server. Generic config: anyone can deploy it as is. The "lytl"
+// environment at the bottom is the maintainers' own deployment
+// (tools.ly.tl) and doubles as an example of a custom-domain setup.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "mcpy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
+
+  // Cache. Wrangler provisions the namespace on first deploy when no id is set.
+  "kv_namespaces": [{ "binding": "CACHE" }],
+  // One data point per operation and provider attempt (SQL-queryable metrics).
+  "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "mcpy" }],
+  // Per-client rate limit (keyed by client name).
+  "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+
+  // Non-secret settings; secrets (MCPY_CLIENTS, provider keys, OTLP headers)
+  // go through `wrangler secret put`. See README for every option.
+  "vars": {
+    "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",
+    "SEARCH_PROVIDERS": "firecrawl,brightdata",
+    "LOG_LEVEL": "info",
+    "DEPLOYMENT_ENV": "production"
+  },
+
+  "env": {
+    // npm run deploy -- --env lytl
+    "lytl": {
+      "name": "mcpy-lytl",
+      "routes": [{ "pattern": "tools.ly.tl", "custom_domain": true }],
+      "kv_namespaces": [{ "binding": "CACHE" }],
+      "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "mcpy_lytl" }],
+      "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } }],
+      "vars": {
+        "ALLOWED_HOSTNAMES": "tools.ly.tl",
+        "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",
+        "SEARCH_PROVIDERS": "firecrawl,brightdata",
+        "LOG_LEVEL": "info",
+        "DEPLOYMENT_ENV": "lytl"
+      }
+    }
+  }
+}

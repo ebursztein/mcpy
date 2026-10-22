@@ -1,0 +1,71 @@
+{
+  "name": "mcpy",
+  "version": "0.1.0",
+  "description": "Web tools for AI agents (fetch, grep, search) behind one typed SDK, with provider fallback, caching, retries and OpenTelemetry-shaped telemetry",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ebursztein/mcpy.git",
+    "directory": "packages/mcpy"
+  },
+  "homepage": "https://mcpy.app",
+  "keywords": [
+    "mcp",
+    "agents",
+    "web",
+    "scraping",
+    "search",
+    "firecrawl",
+    "cloudflare",
+    "llm"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "import": "./dist/providers/index.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry/index.d.ts",
+      "import": "./dist/telemetry/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "mdream": "^2.0.3",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "^2.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/server": {
+      "optional": true
+    }
+  }
+}

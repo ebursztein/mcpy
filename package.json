@@ -1,34 +1,24 @@
 {
-  "name": "mcpy",
-  "version": "0.1.0",
-  "description": "Self-hostable MCP tools server for Cloudflare Workers: web fetch/search with provider fallback, caching and telemetry",
-  "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "cf-typegen": "wrangler types"
-  },
-  "license": "Apache-2.0",
+  "name": "mcpy-monorepo",
+  "private": true,
   "type": "module",
-  "dependencies": {
-    "@modelcontextprotocol/server": "^2.3.1",
-    "@mozilla/readability": "^0.6.0",
-    "agents": "^0.30.0",
-    "linkedom": "^0.18.14",
-    "turndown": "^7.2.4",
-    "zod": "^4.6.7"
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w mcpy",
+    "typecheck": "npm run build && npm run typecheck -w mcpy && npm run typecheck -w @mcpy/server && tsc -p tsconfig.test.json",
+    "test": "vitest run --project unit",
+    "test:e2e": "npm run build && vitest run --project e2e",
+    "test:live": "vitest run --project live",
+    "dev": "npm run build && npm run dev -w @mcpy/server",
+    "deploy": "npm run build && npm run deploy -w @mcpy/server"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261022.1",
-    "@types/turndown": "^5.0.6",
+    "@types/node": "^24.19.2",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5",
-    "wrangler": "^4.152.0"
-  },
-  "private": true,
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/ebursztein/mcpy"
+    "vitest": "^5.0.5"
   }
 }

@@ -1,0 +1,102 @@
+# mcpy
+
+Web tools for AI agents (fetch, grep, search) behind one typed SDK.
+Callers never deal with backends: mcpy picks the source, retries, falls
+back, caches, and keeps responses small enough for an LLM's context.
+
+```bash
+npm install mcpy
+```
+
+## Use it
+
+```ts
+import { createMcpy, PageFormat } from "mcpy";
+import { direct, firecrawl, firecrawlSearch } from "mcpy/providers";
+
+const mcpy = createMcpy({
+  pages: [direct(), firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })],
+  search: [firecrawlSearch({ apiKey: process.env.FIRECRAWL_API_KEY! })],
+});
+
+const page = await mcpy.fetch({ url: "https://elie.net", max_length: 5_000 });
+page.content;     // markdown
+page.next_index;  // pass as start_index for the next chunk
+page.meta.cache;  // "hit" | "miss" | "bypass"
+
+const hits = await mcpy.grep({ url: "https://elie.net", pattern: "security" });
+const results = await mcpy.search({ query: "cloudflare workers", limit: 5 });
+```
+
+Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
+...), exported for your own validation. Errors are always `McpyError` with a
+`code` from the `ErrorCode` enum.
+
+## Entry points
+
+| Import | What |
+| --- | --- |
+| `mcpy` | `createMcpy`, schemas, enums, errors, caches |
+| `mcpy/providers` | Backends: `direct`, `cloudflareBrowser`, `firecrawl`, `firecrawlSearch`, `brightData`, `brightDataSearch` |
+| `mcpy/telemetry` | OpenTelemetry-shaped spans and logs; sinks for console, OTLP, Analytics Engine, and an `@opentelemetry/api` bridge |
+| `mcpy/client` | `McpyClient`: typed client for a hosted mcpy server, same API as the SDK |
+| `mcpy/mcp` | `registerMcpyTools(server, api)`: mounts the tools on any MCP server |
+
+## What happens on a call
+
+1. Input validated (zod); URLs must be public http(s).
+2. Cache lookup (in memory by default, Cloudflare KV with `KvCache`).
+3. Providers tried in order. Each attempt has a timeout; the whole call has a
+   deadline. Transient errors (network, 408, 429, 5xx) are retried with
+   jittered backoff that honors `Retry-After`. A provider that keeps failing
+   is skipped for a cooldown (circuit breaker).
+4. Each result is judged: blocked pages, bot challenges and empty JS shells
+   move on to the next provider; 404/410 are final.
+5. HTML becomes markdown (mdream, main content isolated), output is
+   paginated and capped, and the result is cached.
+
+## Configure
+
+```ts
+createMcpy({
+  pages, search,
+  cache: new KvCache(env.CACHE),            // or MemoryCache, NoCache, your own Cache
+  telemetry,                                 // see below
+  limits: { attemptTimeoutMs: 20_000, deadlineMs: 45_000, maxResponseBytes: 5_000_000,
+            pageTtlSeconds: 3_600, searchTtlSeconds: 900 },
+  retry: { retries: 2, baseDelayMs: 250, maxDelayMs: 4_000 },
+  breaker: { failureThreshold: 5, cooldownMs: 30_000 },
+  userAgent: { default: UserAgentProfile.Mcpy, mcpyString: "mybot/1.0 (+https://example.com)" },
+});
+```
+
+Every option is validated with zod and has a default.
+
+## Telemetry
+
+```ts
+import { Telemetry, ConsoleSink, OtlpSink, OpenTelemetryBridgeSink } from "mcpy/telemetry";
+
+const telemetry = new Telemetry([
+  new ConsoleSink(),                                              // JSON log lines
+  new OtlpSink({ endpoint: "https://otlp.example.com", resource: { "service.name": "my-agent" } }),
+]);
+const mcpy = createMcpy({ pages, telemetry }).with({ client: "billing-agent" });
+// ... after the request:
+await telemetry.flush();
+```
+
+Spans: `mcpy.operation` > `mcpy.attempt` (one per provider) > `http.client`
+(one per try). Every span and log carries `client.name` and
+`mcpy.request.id` when set with `.with()`.
+
+## Write a provider
+
+Implement `PageProvider` or `SearchProvider` from `mcpy/providers`. Make HTTP
+calls through `call.http` (never `fetch`) so you get retries, timeouts,
+size caps and spans for free, and parse JSON with a zod schema via
+`call.http.json(request, schema, call.context)`.
+
+## License
+
+Apache-2.0

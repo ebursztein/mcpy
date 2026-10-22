@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "data": {
+    "markdown": "# Understanding Circuit Breakers\n\nBy Ada Example, March 3, 2026\n\nA circuit breaker stops a client from hammering a dependency that is already failing. After a run of consecutive failures the breaker opens, and calls fail fast for a cooldown period.\n\n## Why fail fast\n\nTimeouts are expensive. Failing fast frees resources and lets a fallback path take over.\n\n## Choosing thresholds\n\n- Count only failures that a retry would not fix.\n- Never open the breaker for the last remaining option.\n",
+    "metadata": {
+      "title": "Understanding Circuit Breakers | Example Engineering Blog",
+      "description": "How circuit breakers keep failing dependencies from taking you down.",
+      "language": "en",
+      "ogTitle": "Understanding Circuit Breakers",
+      "sourceURL": "https://example.com/blog/circuit-breakers",
+      "url": "https://www.example.com/blog/circuit-breakers",
+      "scrapeId": "8f5a3c1e-2b7d-4e9a-9c41-6d2f0b1a7e33",
+      "statusCode": 200,
+      "contentType": "text/html; charset=utf-8",
+      "proxyUsed": "basic",
+      "cacheState": "miss",
+      "creditsUsed": 1
+    }
+  }
+}

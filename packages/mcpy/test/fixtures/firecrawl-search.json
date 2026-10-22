@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "data": {
+    "web": [
+      {
+        "url": "https://example.com/blog/circuit-breakers",
+        "title": "Understanding Circuit Breakers",
+        "description": "A circuit breaker stops a client from hammering a dependency that is already failing.",
+        "position": 1
+      },
+      {
+        "url": "https://martinfowler.com/bliki/CircuitBreaker.html",
+        "title": "CircuitBreaker",
+        "description": "It is common for software systems to make remote calls to software running in different processes.",
+        "position": 2
+      },
+      {
+        "url": "https://example.org/patterns/no-title",
+        "description": "A catalog of resilience patterns.",
+        "position": 3
+      }
+    ]
+  },
+  "creditsUsed": 1,
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
+}

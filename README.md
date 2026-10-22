@@ -1,150 +1,115 @@
 # mcpy
 
-> mcpy is now a hosted tools server. The previous local, single-binary
-> version is archived at [ebursztein/mcpy-legacy](https://github.com/ebursztein/mcpy-legacy).
+Web tools for AI agents (fetch, grep, search), as:
 
-A self-hostable tools server for AI agents, running on Cloudflare Workers.
-It exposes the same tools two ways:
+- **an SDK** on npm: [`mcpy`](packages/mcpy), usable from any TypeScript project
+- **a hosted server** on Cloudflare Workers: [`apps/server`](apps/server), exposing the
+  same tools over MCP (`/mcp`) and REST (`/v1/*`), built only on the SDK
 
-- **MCP** at `/mcp` (streamable HTTP) for MCP clients
-- **REST** at `/v1/*` (JSON) for other agents and services
+Callers never see which backend served a request. Under the hood: a fallback
+chain of providers (direct fetch, Cloudflare Browser Run, Firecrawl, Bright
+Data), retries with backoff, per-attempt timeouts and an overall deadline, a
+circuit breaker, caching, context-size limits, and OpenTelemetry-shaped
+traces and structured logs tagged with the calling client's name.
 
-Web tools fetch through a **fallback chain of providers**: a cheap direct
-fetch first, a headless browser for JS-rendered pages, then paid scraping
-services for blocked sites. Every call is **cached** in KV and **measured**
-(provider, latency, cost, outcome) in Workers Analytics Engine.
+> mcpy used to be a local single-binary MCP server. That version is archived
+> at [ebursztein/mcpy-legacy](https://github.com/ebursztein/mcpy-legacy).
 
-Everything deployment-specific is configuration, so anyone can deploy their own copy.
+Design and rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tools
 
-| MCP tool        | REST                       | What it does |
-| --------------- | -------------------------- | ------------ |
-| `web_fetch`     | `GET\|POST /v1/fetch`      | Page as clean markdown (or HTML), paginated |
-| `web_grep`      | `GET\|POST /v1/grep`       | Regex search in a page, with context lines |
-| `web_search`    | `GET\|POST /v1/search`     | Web search: titles, URLs, snippets |
-| `web_providers` | `GET /v1/providers`        | Enabled providers in fallback order |
+| MCP tool | REST | Does |
+| --- | --- | --- |
+| `web_fetch` | `GET\|POST /v1/fetch` | Page as markdown (or HTML), paginated |
+| `web_grep` | `GET\|POST /v1/grep` | Regex search in a page, with context lines |
+| `web_search` | `GET\|POST /v1/search` | Web search: titles, URLs, snippets |
 
-All fetch/search calls accept `provider` (force one provider instead of the
-chain) and `fresh` (skip the cache).
+Operators also get `GET /v1/admin/providers` (admin clients only).
 
 ```bash
-# REST, POST with a JSON body
 curl -s https://tools.example.com/v1/fetch \
-  -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
-  -d '{"url":"https://example.com","max_length":5000}'
+  -H "Authorization: Bearer $KEY" -H "content-type: application/json" \
+  -d '{"url":"https://elie.net","max_length":5000}'
 
-# REST, GET with query parameters (for agents that can only be given a URL)
-curl -s "https://tools.example.com/v1/search?query=cloudflare+workers&limit=5&key=$TOKEN"
+# URL-only agents can pass everything as query parameters:
+curl -s "https://tools.example.com/v1/search?query=cloudflare&limit=5&key=$KEY"
 ```
 
-Responses report which provider served the page, whether it came from the
-cache, and every provider attempt (`attempts`).
-
-## Providers
-
-| id           | Kind          | Needs | Notes |
-| ------------ | ------------- | ----- | ----- |
-| `cf_fetch`   | fetch         | nothing | `fetch()` from the Worker + Readability + Turndown. Asks for `text/markdown` first, which some sites serve to agents directly |
-| `cf_browser` | fetch         | `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | Cloudflare Browser Run (headless Chrome) for JS-rendered pages |
-| `firecrawl`  | fetch, search | `FIRECRAWL_API_KEY` | Firecrawl v2 scrape and search. `FIRECRAWL_API_URL` for self-hosted |
-| `brightdata` | fetch, search | `BRIGHTDATA_API_KEY` + `BRIGHTDATA_UNLOCKER_ZONE` / `BRIGHTDATA_SERP_ZONE` | Web Unlocker for heavily protected sites; SERP API (Google) for search |
-
-A provider is enabled only when its credentials are set; `web_providers`
-shows what is active and what was skipped.
-
-**How the chain decides.** A provider's result is used when it is a real page.
-The chain moves to the next provider on network errors, timeouts, HTTP
-401/403/429/5xx, bot-challenge pages, or near-empty content (a JS app shell).
-A 404/410 is final: the chain does not pay a fallback to confirm it. Only
-usable or final pages are cached; blocked pages never are.
-
-**Adding a provider.** Implement `FetchProvider` or `SearchProvider`
-(`src/providers/types.ts`), register its factory in
-`src/providers/registry.ts`, and add its id to `FETCH_PROVIDERS` /
-`SEARCH_PROVIDERS`. Tools never reference providers directly.
-
-## Authentication
-
-Requests to `/mcp` and `/v1/*` need a token from `AUTH_TOKENS`. A client may send it as:
-
-1. `Authorization: Bearer <token>` (preferred)
-2. `X-API-Key: <token>`
-3. `?key=<token>` in the URL, for web agents that can only take a URL
-
-URL keys end up in logs and browser history. Give URL-based clients their own
-token so you can rotate it without touching the others. `AUTH_TOKENS` holds
-several comma-separated tokens for exactly this.
-
-With no tokens configured the server rejects everything (it fails closed).
-`ALLOW_ANONYMOUS=true` disables auth, for local development only.
-
-## Configuration
-
-Non-secret settings are `vars` in `wrangler.jsonc`. Secrets are set with
-`wrangler secret put NAME`.
-
-| Name | Default | Purpose |
-| ---- | ------- | ------- |
-| `AUTH_TOKENS` (secret) | - | Comma-separated client tokens |
-| `FETCH_PROVIDERS` | `cf_fetch,cf_browser,firecrawl,brightdata` | Fetch chain order |
-| `SEARCH_PROVIDERS` | `firecrawl,brightdata` | Search chain order |
-| `CACHE_TTL_SECONDS` | `3600` | Page cache TTL (min 60) |
-| `SEARCH_CACHE_TTL_SECONDS` | `900` | Search cache TTL (min 60) |
-| `FETCH_TIMEOUT_MS` | `20000` | Per-provider timeout |
-| `MAX_RESPONSE_BYTES` | `5000000` | Largest body read from a provider |
-| `USER_AGENT` | `mcpy/0.1` | UA for direct and browser fetches |
-| `ALLOWED_HOSTNAMES` | - | Restrict accepted `Host` headers (set it on custom domains) |
-| `CF_BROWSER_API_BASE` | Browser Run endpoint | Override the Browser Run API base (`{account}` is substituted) |
-| `COST_*` | see `src/config.ts` | Per-call USD estimates used in telemetry |
-
-Provider credentials are listed under [Providers](#providers).
-
-## Deploy your own
+## Run your own server
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars   # local secrets, never committed
-npm run dev                      # http://localhost:8787/mcp
+cp apps/server/.dev.vars.example apps/server/.dev.vars   # local secrets, never committed
+npm run dev                                              # http://localhost:8787
 
-npx wrangler secret put AUTH_TOKENS
-npx wrangler secret put FIRECRAWL_API_KEY   # ...and any other provider secrets
+npx wrangler secret put MCPY_CLIENTS -c apps/server/wrangler.jsonc   # name:key[:admin],...
+npx wrangler secret put FIRECRAWL_API_KEY -c apps/server/wrangler.jsonc
 npm run deploy
 ```
 
-On first deploy, Wrangler creates the KV namespace and the Analytics Engine
-dataset. To serve a custom domain, add a route and `ALLOWED_HOSTNAMES`. The
-`lytl` environment in `wrangler.jsonc` is a complete example: it is the
-maintainers' own deployment at `tools.ly.tl`, deployed with:
+Wrangler creates the KV namespace (cache), Analytics Engine dataset
+(metrics) and rate limiter on first deploy. The `lytl` environment in
+`apps/server/wrangler.jsonc` is the maintainers' deployment at
+`tools.ly.tl`, a complete custom-domain example
+(`npm run deploy -- --env lytl`).
 
-```bash
-npx wrangler secret put AUTH_TOKENS --env lytl
-npm run deploy -- --env lytl
-```
+### Clients and keys
 
-## Telemetry
+`MCPY_CLIENTS` lists `name:key[:admin]` entries (keys 24+ characters). A key
+is accepted as `Authorization: Bearer`, `X-API-Key`, or `?key=` for web
+agents that can only be given a URL (give those their own key: URLs end up
+in logs). Each client is rate-limited separately and named in every log
+line, span and metric. With no clients configured, everything is rejected.
 
-The server writes one data point per provider attempt (`blob1 = 'attempt'`)
-and one per tool call (`blob1 = 'call'`). The column layout is documented in
-`src/core/telemetry.ts`. Example, with the
-[SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/):
+### Configuration
+
+| Var | Default | Purpose |
+| --- | --- | --- |
+| `MCPY_CLIENTS` (secret) | - | API clients |
+| `PAGE_PROVIDERS` | `direct,cloudflare_browser,firecrawl,brightdata` | Page fallback order |
+| `SEARCH_PROVIDERS` | `firecrawl,brightdata` | Search fallback order |
+| `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `45000` | Per attempt / per call |
+| `RETRIES` | `2` | Retries per upstream request |
+| `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
+| `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` | `3600` / `900` | Cache TTLs |
+| `DEFAULT_USER_AGENT` | `mcpy` | `mcpy`, `chrome_desktop`, `chrome_mobile`, `safari_desktop`, `firefox_desktop`, `googlebot` |
+| `USER_AGENT_STRING` | - | Replace the `mcpy` UA string |
+| `ALLOWED_HOSTNAMES` | - | Accepted Host headers (set on custom domains) |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | - | Export traces + logs (OTLP/HTTP JSON) |
+| `OTEL_SERVICE_NAME` / `DEPLOYMENT_ENV` | `mcpy` / `production` | Resource attributes |
+| `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run |
+| `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` | - | Firecrawl (URL for self-hosted) |
+| `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
+
+Everything is validated with zod at startup; a bad value fails closed with a
+clear log line. A provider without credentials is skipped.
+
+### Observability
+
+- **Logs**: one structured JSON line per operation in Workers Logs, with
+  `client.name`, `mcpy.request.id`, trace ids, cache status, cost.
+- **Traces**: set `OTEL_EXPORTER_OTLP_ENDPOINT` to send spans and logs to
+  any OTLP collector (Cloudflare Traces, Grafana, Honeycomb, ...). Incoming
+  `traceparent` headers are honored.
+- **Metrics**: Analytics Engine, one row per operation and provider attempt.
+  Column layout in `packages/mcpy/src/telemetry/sinks/analytics.ts`.
 
 ```sql
-SELECT blob3 AS provider, blob4 AS outcome, count() AS n,
+SELECT blob7 AS client, blob3 AS provider, blob4 AS outcome, count() AS n,
        avg(double1) AS avg_ms, sum(double3) AS usd
-FROM mcpy
-WHERE blob1 = 'attempt' AND timestamp > NOW() - INTERVAL '7' DAY
-GROUP BY provider, outcome ORDER BY n DESC
+FROM mcpy WHERE blob1 = 'mcpy.attempt' AND timestamp > NOW() - INTERVAL '7' DAY
+GROUP BY client, provider, outcome ORDER BY n DESC
 ```
 
-The same events also go to Workers Logs as structured JSON.
-
-## Development
+## Develop
 
 ```bash
-npm test          # vitest
+npm test            # unit, contract, regression, structure, perf
+npm run test:e2e    # real Worker in workerd, MCP + REST against elie.net
+npm run test:live   # real provider APIs (keys from apps/server/.dev.vars)
 npm run typecheck
-npx wrangler deploy --dry-run   # bundle check
 ```
 
 ## License

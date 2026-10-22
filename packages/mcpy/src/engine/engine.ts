@@ -1,0 +1,140 @@
+import { z } from "zod";
+import { AttemptOutcome, CacheStatus, LogLevel, type UserAgentProfile } from "../enums.js";
+import type { HttpClient } from "../http/client.js";
+import { normalizeUrl, sha256Hex } from "../http/url.js";
+import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
+import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
+import { Attr } from "../telemetry/attributes.js";
+import type { Telemetry } from "../telemetry/telemetry.js";
+import type { SpanContext } from "../telemetry/types.js";
+import type { CircuitBreaker } from "./breaker.js";
+import type { Cache } from "./cache.js";
+import { runChain, type ChainResult } from "./chain.js";
+import { assessPage } from "./quality.js";
+
+export const EngineLimitsSchema = z.object({
+  /** Upper bound for a single provider attempt. */
+  attemptTimeoutMs: z.number().int().min(1_000).max(300_000).default(20_000),
+  /** Upper bound for a whole operation, fallbacks and retries included. */
+  deadlineMs: z.number().int().min(1_000).max(600_000).default(45_000),
+  /** Largest upstream body read. */
+  maxResponseBytes: z.number().int().min(10_000).max(50_000_000).default(5_000_000),
+  pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
+  searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
+});
+export type EngineLimits = z.infer<typeof EngineLimitsSchema>;
+
+const CACHE_VERSION = "v2";
+
+export interface EngineDeps {
+  pageProviders: PageProvider[];
+  searchProviders: SearchProvider[];
+  cache: Cache;
+  http: HttpClient;
+  breaker: CircuitBreaker;
+  limits: EngineLimits;
+  userAgents: UserAgentConfig;
+}
+
+/** Telemetry scope and parent span of the operation being served. */
+export interface CallScope {
+  telemetry: Telemetry;
+  parent: SpanContext;
+}
+
+/** Engine result. `provider` and `costUsd` are for telemetry only. */
+export interface Served<T> {
+  value: T;
+  cache: CacheStatus;
+  attempts: number;
+  provider: string;
+  costUsd: number;
+}
+
+interface Cached<T> {
+  value: T;
+  provider: string;
+}
+
+/** Cache, fallback chain and provider plumbing behind every operation. */
+export class Engine {
+  constructor(private readonly deps: EngineDeps) {}
+
+  get providerIds() {
+    return { pages: this.deps.pageProviders.map((p) => p.id), search: this.deps.searchProviders.map((p) => p.id) };
+  }
+
+  async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
+    const key = `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
+    return this.cached(key, this.deps.limits.pageTtlSeconds, fresh, scope, (deadlineAt) =>
+      runChain({
+        providers: this.deps.pageProviders,
+        attempt: (p, signal, timeoutMs, parent) => p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
+        judge: assessPage,
+        describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
+        ...this.chainCommon(deadlineAt, scope),
+      }),
+    );
+  }
+
+  async search(req: SearchRequest, fresh: boolean, scope: CallScope): Promise<Served<FoundPage[]>> {
+    const key = `${CACHE_VERSION}:search:${await sha256Hex(`${req.query.toLowerCase()}\n${req.limit}`)}`;
+    return this.cached(key, this.deps.limits.searchTtlSeconds, fresh, scope, (deadlineAt) =>
+      runChain({
+        providers: this.deps.searchProviders,
+        attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
+        // Any answer from a search provider is final, even zero hits.
+        judge: () => ({ outcome: AttemptOutcome.Ok }),
+        describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
+        ...this.chainCommon(deadlineAt, scope),
+      }),
+    );
+  }
+
+  private chainCommon(deadlineAt: number, scope: CallScope) {
+    return {
+      attemptTimeoutMs: this.deps.limits.attemptTimeoutMs,
+      deadlineAt,
+      breaker: this.deps.breaker,
+      telemetry: scope.telemetry,
+      parent: scope.parent,
+    };
+  }
+
+  private call(signal: AbortSignal, timeoutMs: number, deadlineAt: number, scope: CallScope, parent: SpanContext): ProviderCall {
+    return {
+      http: this.deps.http,
+      context: { signal, deadlineAt, maxBytes: this.deps.limits.maxResponseBytes, telemetry: scope.telemetry, parent },
+      userAgent: (profile: UserAgentProfile) => resolveUserAgent(profile, this.deps.userAgents),
+      timeoutMs,
+    };
+  }
+
+  /**
+   * Serve from cache when possible; otherwise run the chain and cache the
+   * result. The chain only returns usable or definitive results, so blocked
+   * and challenge pages are never cached.
+   */
+  private async cached<T>(
+    key: string,
+    ttl: number,
+    fresh: boolean,
+    scope: CallScope,
+    run: (deadlineAt: number) => Promise<ChainResult<T>>,
+  ): Promise<Served<T>> {
+    if (!fresh) {
+      const hit = await this.deps.cache.get<Cached<T>>(key);
+      if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider, costUsd: 0 };
+    }
+    const result = await run(Date.now() + this.deps.limits.deadlineMs);
+    await this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, ttl);
+    scope.telemetry.log(LogLevel.Debug, "cached result", { [Attr.Provider]: result.provider }, scope.parent);
+    return {
+      value: result.value,
+      cache: fresh ? CacheStatus.Bypass : CacheStatus.Miss,
+      attempts: result.attempts.length,
+      provider: result.provider,
+      costUsd: result.costUsd,
+    };
+  }
+}

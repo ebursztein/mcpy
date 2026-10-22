@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": [
+      "es2023",
+      "dom",
+      "dom.iterable"
+    ],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": [
+      "node",
+      "@cloudflare/workers-types"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "mcpy": [
+        "./packages/mcpy/src/index.ts"
+      ],
+      "mcpy/providers": [
+        "./packages/mcpy/src/providers/index.ts"
+      ],
+      "mcpy/telemetry": [
+        "./packages/mcpy/src/telemetry/index.ts"
+      ],
+      "mcpy/client": [
+        "./packages/mcpy/src/client.ts"
+      ],
+      "mcpy/mcp": [
+        "./packages/mcpy/src/mcp.ts"
+      ]
+    }
+  },
+  "include": [
+    "packages/mcpy/test",
+    "apps/server/test",
+    "vitest.config.ts"
+  ]
+}

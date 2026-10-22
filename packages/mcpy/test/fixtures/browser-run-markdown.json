@@ -1,0 +1,5 @@
+{
+  "success": true,
+  "result": "---\ntitle: \"Understanding Circuit Breakers\"\nurl: https://example.com/blog/circuit-breakers\n---\n\n# Understanding Circuit Breakers\n\nA circuit breaker stops a client from hammering a dependency that is already failing.\n\n## Why fail fast\n\nTimeouts are expensive.\n",
+  "errors": []
+}

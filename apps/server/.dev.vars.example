@@ -1,0 +1,21 @@
+# Copy to .dev.vars for local runs. Never commit .dev.vars.
+
+# Clients: name:key[:admin], comma separated. Keys need 24+ characters.
+MCPY_CLIENTS=dev:replace-with-a-long-random-key-000000:admin
+# ALLOW_ANONYMOUS=true
+
+# Cloudflare Browser Run
+# CF_ACCOUNT_ID=
+# CF_BROWSER_API_TOKEN=
+
+# Firecrawl
+# FIRECRAWL_API_KEY=
+
+# Bright Data
+# BRIGHTDATA_API_KEY=
+# BRIGHTDATA_UNLOCKER_ZONE=
+# BRIGHTDATA_SERP_ZONE=
+
+# OpenTelemetry export (optional)
+# OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.example.com
+# OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20xxx
