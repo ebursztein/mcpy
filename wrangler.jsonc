@@ -1,0 +1,44 @@
+// Generic deployment config. Fork-friendly: nothing here is specific to one
+// owner except the optional "lytl" environment at the bottom, which is the
+// maintainers' own deployment (tools.ly.tl) and doubles as an example.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tools-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Cache. Wrangler provisions the namespace on first deploy when no id is set.
+  "kv_namespaces": [{ "binding": "CACHE" }],
+  // Per-call telemetry, queryable with the Analytics Engine SQL API.
+  "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "tools_mcp" }],
+
+  // Non-secret settings. Secrets (AUTH_TOKENS, provider keys) go through
+  // `wrangler secret put`; see README.
+  "vars": {
+    "FETCH_PROVIDERS": "cf_fetch,cf_browser,firecrawl,brightdata",
+    "SEARCH_PROVIDERS": "firecrawl,brightdata",
+    "CACHE_TTL_SECONDS": "3600",
+    "SEARCH_CACHE_TTL_SECONDS": "900",
+    "FETCH_TIMEOUT_MS": "20000"
+  },
+
+  "env": {
+    // Our deployment: `npm run deploy -- --env lytl`
+    "lytl": {
+      "name": "tools-mcp-lytl",
+      "routes": [{ "pattern": "tools.ly.tl", "custom_domain": true }],
+      "kv_namespaces": [{ "binding": "CACHE" }],
+      "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "tools_mcp_lytl" }],
+      "vars": {
+        "ALLOWED_HOSTNAMES": "tools.ly.tl",
+        "FETCH_PROVIDERS": "cf_fetch,cf_browser,firecrawl,brightdata",
+        "SEARCH_PROVIDERS": "firecrawl,brightdata",
+        "CACHE_TTL_SECONDS": "3600",
+        "SEARCH_CACHE_TTL_SECONDS": "900",
+        "FETCH_TIMEOUT_MS": "20000"
+      }
+    }
+  }
+}
