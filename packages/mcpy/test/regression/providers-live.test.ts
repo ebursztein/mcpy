@@ -5,8 +5,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { ErrorCode, SearchType } from "mcpy";
-import { brightData, brightDataSearch, type SearchRequest } from "mcpy/providers";
+import { ContentKind, ErrorCode, PageFormat, SearchType, UserAgentProfile } from "mcpy";
+import { brightData, brightDataSearch, cloudflareBrowser, firecrawl, type SearchRequest } from "mcpy/providers";
+import { isChallenge } from "../../src/engine/quality.js";
 import { BRIGHTDATA_SEARCH_CAPABILITIES } from "../../src/providers/brightdata/serp.js";
 import { fixture, stubFetch } from "../helpers.js";
 import { failureOf, providerCall } from "../contract/call.js";
@@ -80,6 +81,43 @@ describe("mapping real responses", () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].url).toMatch(/^https:\/\/maps\.google\.com\/\?cid=/);
     expect(typeof hits[0].rating).toBe("number");
+  });
+});
+
+describe("web unlocker envelope seen live", () => {
+  it("accepts multi-value headers (set-cookie as a list), which used to reject the whole page", async () => {
+    const html = `<html><head><title>Kettles</title></head><body><main>${"Electric kettle 1.7L, stainless steel. ".repeat(40)}</main></body></html>`;
+    const envelope = { status_code: 200, headers: { "content-type": "text/html; charset=utf-8", "set-cookie": ["a=1; Path=/", "b=2; Path=/"] }, body: html };
+    const { fetch } = stubFetch(() => new Response(JSON.stringify(envelope), { headers: { "content-type": "application/json" } }));
+    const page = await brightData({ apiKey: "k", zone: "z" }).fetchPage({ url: "https://shop.example/", format: PageFormat.Markdown, userAgent: UserAgentProfile.Default }, providerCall(fetch));
+    expect(page).toMatchObject({ status: 200, title: "Kettles" });
+    expect(page.content).toContain("Electric kettle");
+  });
+});
+
+describe("hosted browsers keep their own user agent", () => {
+  // Verified live 2026-10-22: Firecrawl failed on wemine.io (Vercel checkpoint)
+  // with our mcpy agent forwarded, and succeeded in 4 s without it.
+  const page = (userAgent: UserAgentProfile) => ({ url: "https://wemine.io/", format: PageFormat.Markdown, userAgent });
+  const okScrape = () => new Response(JSON.stringify({ success: true, data: { markdown: "# hi", metadata: { statusCode: 200 } } }));
+  const okRender = () => new Response(JSON.stringify({ success: true, result: "# hi" }));
+
+  it("does not forward the default agent, but forwards an explicitly chosen browser", async () => {
+    for (const [provider, reply, field] of [
+      [firecrawl({ apiKey: "k" }), okScrape, "headers"],
+      [cloudflareBrowser({ accountId: "a", apiToken: "t" }), okRender, "userAgent"],
+    ] as const) {
+      const quiet = stubFetch(reply);
+      await provider.fetchPage(page(UserAgentProfile.Default), providerCall(quiet.fetch));
+      expect(quiet.calls[0].body, provider.id).not.toHaveProperty(field);
+      const chosen = stubFetch(reply);
+      await provider.fetchPage(page(UserAgentProfile.Chrome), providerCall(chosen.fetch));
+      expect(JSON.stringify(chosen.calls[0].body), provider.id).toContain("Chrome/");
+    }
+  });
+
+  it("knows the Vercel Security Checkpoint as a challenge page", () => {
+    expect(isChallenge({ url: "u", finalUrl: "u", status: 429, contentType: "text/html", kind: ContentKind.Html, title: "Vercel Security Checkpoint", content: "x", format: PageFormat.Markdown })).toBe(true);
   });
 });
 

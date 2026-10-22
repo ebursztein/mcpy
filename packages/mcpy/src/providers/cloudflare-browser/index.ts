@@ -2,7 +2,7 @@ import { htmlTitle, splitFrontmatter } from "../../content/extract.js";
 import { ContentKind, ErrorCode, PageFormat } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod } from "../../http/client.js";
-import { ProviderId, type PageProvider } from "../types.js";
+import { forwardedUserAgent, ProviderId, type PageProvider } from "../types.js";
 import { BrowserRunResponseSchema } from "./schemas.js";
 
 export interface CloudflareBrowserOptions {
@@ -33,7 +33,7 @@ export function cloudflareBrowser(options: CloudflareBrowserOptions): PageProvid
           headers: { Authorization: `Bearer ${options.apiToken}` },
           json: {
             url: req.url,
-            userAgent: call.userAgent(req.userAgent),
+            ...(forwardedUserAgent(req, call) ? { userAgent: forwardedUserAgent(req, call) } : {}),
             gotoOptions: { waitUntil: "networkidle2", timeout: Math.min(call.timeoutMs, MAX_GOTO_TIMEOUT_MS) },
           },
         },

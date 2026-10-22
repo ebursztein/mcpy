@@ -1,9 +1,12 @@
 import { z } from "zod";
 
-/** Web Unlocker `format: "json"` envelope. */
+/**
+ * Web Unlocker `format: "json"` envelope. Header values can be lists
+ * (seen live: `set-cookie` arrives as an array), so both shapes are accepted.
+ */
 export const UnlockerEnvelopeSchema = z.object({
   status_code: z.number().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
+  headers: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
   body: z.string().optional(),
 });
 

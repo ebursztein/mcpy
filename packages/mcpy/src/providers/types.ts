@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { ContentKind, Device, PageFormat, Recency, SearchType, UserAgentProfile } from "../enums.js";
+import { UserAgentProfile, type ContentKind, type Device, type PageFormat, type Recency, type SearchType } from "../enums.js";
 import type { HttpClient, HttpContext } from "../http/client.js";
 
 /** Ids of the built-in providers (custom providers may use their own). */
@@ -122,4 +122,14 @@ export interface PageProvider extends ProviderBase {
 export interface SearchProvider extends ProviderBase {
   readonly capabilities: SearchCapabilities;
   search(req: SearchRequest, call: ProviderCall): Promise<FoundPage[]>;
+}
+
+/**
+ * User agent to forward to a hosted browser (Firecrawl, Browser Run), or
+ * undefined to let it use its own. Forwarding our honest `default` agent
+ * defeats their stealth browsers: verified live, Firecrawl failed on a
+ * Vercel-protected site with it and succeeded in 4 s without it.
+ */
+export function forwardedUserAgent(req: PageRequest, call: ProviderCall): string | undefined {
+  return req.userAgent === UserAgentProfile.Default ? undefined : call.userAgent(req.userAgent);
 }

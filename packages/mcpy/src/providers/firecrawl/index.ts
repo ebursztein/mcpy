@@ -2,7 +2,7 @@ import { contentKindOf } from "../../content/kind.js";
 import { ErrorCode, PageFormat, Recency, SearchType } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod, type HttpResponse } from "../../http/client.js";
-import { ProviderId, type PageProvider, type SearchCapabilities, type SearchProvider } from "../types.js";
+import { forwardedUserAgent, ProviderId, type PageProvider, type SearchCapabilities, type SearchProvider } from "../types.js";
 import { ScrapeResponseSchema, SearchResponseSchema } from "./schemas.js";
 
 export interface FirecrawlOptions {
@@ -16,6 +16,8 @@ const DEFAULT_API = "https://api.firecrawl.dev";
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 300_000;
 const MAX_QUERY_CHARS = 500;
+
+const withUserAgent = (ua: string | undefined) => (ua ? { headers: { "User-Agent": ua } } : {});
 
 function endpoint(options: FirecrawlOptions, path: string): string {
   return `${(options.apiUrl || DEFAULT_API).replace(/\/$/, "")}${path}`;
@@ -44,7 +46,7 @@ export function firecrawl(options: FirecrawlOptions): PageProvider {
             formats: [html ? "rawHtml" : "markdown"],
             onlyMainContent: !html,
             timeout: Math.min(Math.max(call.timeoutMs, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS),
-            headers: { "User-Agent": call.userAgent(req.userAgent) },
+            ...withUserAgent(forwardedUserAgent(req, call)),
             // The engine's cache owns freshness; never serve Firecrawl's stale copy.
             maxAge: 0,
           },

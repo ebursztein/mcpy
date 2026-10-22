@@ -24,7 +24,9 @@ describe("firecrawl scrape contract", () => {
     expect(calls[0].headers.get("authorization")).toBe(`Bearer ${KEY}`);
     expect(calls[0].headers.get("content-type")).toBe("application/json");
     expect(calls[0].body).toMatchObject({ url: TARGET, formats: ["markdown"], onlyMainContent: true, timeout: TIMEOUT_MS, maxAge: 0 });
-    expect(calls[0].body).toMatchObject({ headers: { "User-Agent": USER_AGENTS[UserAgentProfile.Default] } });
+    // Regression: forwarding our honest default agent made Firecrawl's stealth
+    // engines fail on protected sites (verified live); it must use its own.
+    expect(calls[0].body).not.toHaveProperty("headers");
   });
 
   it("asks for rawHtml of the whole page in HTML mode", async () => {

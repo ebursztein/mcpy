@@ -26,6 +26,7 @@ const CHALLENGE_TITLES = [
   /^are you a (robot|human)\??$/i,
   /^ddos-guard$/i,
   /^security check(point)?$/i,
+  /^vercel security checkpoint$/i,
 ];
 
 /**

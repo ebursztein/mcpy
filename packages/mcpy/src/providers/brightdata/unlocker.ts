@@ -36,7 +36,7 @@ export function brightData(options: BrightDataOptions): PageProvider {
 
       const envelope = parsed.data;
       const body = envelope.body ?? "";
-      const headers = new Headers(envelope.headers ?? {});
+      const headers = new Headers(Object.entries(envelope.headers ?? {}).map(([k, v]): [string, string] => [k, Array.isArray(v) ? v.join(", ") : v]));
       const contentType = headers.get("content-type") ?? "text/html";
       const base = { url: req.url, finalUrl: req.url, status: envelope.status_code ?? 0, contentType, kind: contentKindOf(contentType) };
       if (req.format === PageFormat.Html || !/html/i.test(contentType)) {
