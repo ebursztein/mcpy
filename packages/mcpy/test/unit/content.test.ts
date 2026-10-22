@@ -169,9 +169,13 @@ describe("grepLines", () => {
     expect(() => grepLines(lines, "a".repeat(500), 0, 10)).not.toThrow();
   });
 
-  it("only tests the head of very long lines", () => {
-    const long = `${"x".repeat(6_000)}NEEDLE`;
-    expect(grepLines([long], "needle", 0, 10).matches).toBe(0);
+  // Regression (Fable #9): matches past column 5000 used to be silently missed.
+  it("finds matches anywhere in very long lines and prints a window around them", () => {
+    const long = `${"x".repeat(6_000)}NEEDLE${"y".repeat(6_000)}`;
+    const r = grepLines([long], "needle", 0, 10);
+    expect(r.matches).toBe(1);
+    expect(r.output).toContain("NEEDLE");
+    expect(r.output.length).toBeLessThan(1_100);
   });
 });
 

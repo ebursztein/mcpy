@@ -110,7 +110,7 @@ describe("registerMcpyTools handlers", () => {
   it("maps unknown errors to internal and keeps codes like rate_limited", async () => {
     const tools = capture(failing);
     const grep = await tools.get(ToolName.Grep)!.handler({ url: "https://example.com/a", pattern: "x" });
-    expect(JSON.parse(grep.content[0].text)).toEqual({ error: { code: ErrorCode.Internal, message: "unexpected crash" } });
+    expect(JSON.parse(grep.content[0].text)).toEqual({ error: { code: ErrorCode.Internal, message: "internal error" } });
     const search = await tools.get(ToolName.Search)!.handler({ query: "x" });
     expect(JSON.parse(search.content[0].text).error.code).toBe(ErrorCode.RateLimited);
   });

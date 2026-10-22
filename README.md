@@ -22,7 +22,7 @@ Design and rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | MCP tool | REST | Does |
 | --- | --- | --- |
 | `web_fetch` | `GET\|POST /v1/fetch` | Page as markdown (or HTML), paginated |
-| `web_grep` | `GET\|POST /v1/grep` | Regex search in a page, with context lines |
+| `web_grep` | `GET\|POST /v1/grep` | RE2 regex or literal search in a page, with context lines |
 | `web_search` | `GET\|POST /v1/search` | Web search: titles, URLs, snippets |
 
 Operators also get `GET /v1/admin/providers` (admin clients only).
@@ -56,11 +56,14 @@ Wrangler creates the KV namespace (cache), Analytics Engine dataset
 
 ### Clients and keys
 
-`MCPY_CLIENTS` lists `name:key[:admin]` entries (keys 24+ characters). A key
-is accepted as `Authorization: Bearer`, `X-API-Key`, or `?key=` for web
-agents that can only be given a URL (give those their own key: URLs end up
-in logs). Each client is rate-limited separately and named in every log
-line, span and metric. With no clients configured, everything is rejected.
+`MCPY_CLIENTS` lists `name:key[:admin]` entries (keys 24+ characters, may
+contain ":"). A key is accepted as `Authorization: Bearer`, `X-API-Key`, or
+`?key=` for web agents that can only be given a URL. Give those their own
+key: URLs can end up in browser history and proxy logs. (Cloudflare
+invocation logs, which record full URLs, are disabled in `wrangler.jsonc`.)
+Each client is rate-limited separately and named in every log line, span and
+metric; failed authentications are rate-limited per IP. With no clients
+configured, everything is rejected. Non-admin calls to admin routes get 403.
 
 ### Configuration
 
@@ -76,6 +79,7 @@ line, span and metric. With no clients configured, everything is rejected.
 | `DEFAULT_USER_AGENT` | `mcpy` | `mcpy`, `chrome_desktop`, `chrome_mobile`, `safari_desktop`, `firefox_desktop`, `googlebot` |
 | `USER_AGENT_STRING` | - | Replace the `mcpy` UA string |
 | `ALLOWED_HOSTNAMES` | - | Accepted Host headers (set on custom domains) |
+| `ALLOWED_ORIGIN_HOSTNAMES` | - | Extra browser origins allowed to call `/mcp` |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | - | Export traces + logs (OTLP/HTTP JSON) |
 | `OTEL_SERVICE_NAME` / `DEPLOYMENT_ENV` | `mcpy` / `production` | Resource attributes |

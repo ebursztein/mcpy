@@ -8,11 +8,17 @@ import { ProviderId, ProviderIdSchema } from "mcpy/providers";
 import type { AnalyticsDatasetLike } from "mcpy/telemetry";
 import { z } from "zod";
 
+export interface RateLimiterLike {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 /** Bindings and raw string vars, exactly as Workers provides them. */
 export interface Env {
   CACHE?: KvLike;
   TELEMETRY?: AnalyticsDatasetLike;
-  RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  RATE_LIMITER?: RateLimiterLike;
+  /** Counts failed authentications per client IP, to slow down key guessing. */
+  AUTH_LIMITER?: RateLimiterLike;
   [key: string]: unknown;
 }
 

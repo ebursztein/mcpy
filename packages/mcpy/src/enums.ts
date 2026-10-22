@@ -98,3 +98,15 @@ const transport = enumOf({ Sdk: "sdk", Rest: "rest", Mcp: "mcp" } as const);
 export const Transport = transport.values;
 export const TransportSchema = transport.schema;
 export type Transport = z.infer<typeof TransportSchema>;
+
+/** How web_grep interprets its pattern. */
+const grepMode = enumOf({ Regex: "regex", Literal: "literal" } as const);
+export const GrepMode = grepMode.values;
+export const GrepModeSchema = grepMode.schema;
+export type GrepMode = z.infer<typeof GrepModeSchema>;
+
+/** What a page's content was produced from; drives quality judgement. */
+const contentKind = enumOf({ Html: "html", Markdown: "markdown", Text: "text", Json: "json" } as const);
+export const ContentKind = contentKind.values;
+export const ContentKindSchema = contentKind.schema;
+export type ContentKind = z.infer<typeof ContentKindSchema>;

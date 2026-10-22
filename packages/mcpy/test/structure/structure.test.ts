@@ -51,8 +51,8 @@ describe("layering", () => {
 
   it("providers reach the network only through HttpClient", () => {
     for (const file of sdkFiles.filter((f) => f.includes("/providers/"))) {
-      // `fetch(` not preceded by `.` or a word char: a direct global fetch call.
-      expect(read(file), rel(file)).not.toMatch(/(^|[^.\w])fetch\s*\(/m);
+      // Bare `fetch(` and global aliases (globalThis.fetch, self.fetch, window.fetch).
+      expect(read(file), rel(file)).not.toMatch(/(^|[^.\w])fetch\s*\(|\b(globalThis|self|window)\s*\.\s*fetch\b|\[\s*["']fetch["']\s*\]/m);
     }
   });
 

@@ -11,7 +11,7 @@ npm install mcpy
 ## Use it
 
 ```ts
-import { createMcpy, PageFormat } from "mcpy";
+import { createMcpy, GrepMode, PageFormat } from "mcpy";
 import { direct, firecrawl, firecrawlSearch } from "mcpy/providers";
 
 const mcpy = createMcpy({
@@ -24,7 +24,8 @@ page.content;     // markdown
 page.next_index;  // pass as start_index for the next chunk
 page.meta.cache;  // "hit" | "miss" | "bypass"
 
-const hits = await mcpy.grep({ url: "https://elie.net", pattern: "security" });
+const hits = await mcpy.grep({ url: "https://elie.net", pattern: "secur(e|ity)" });         // RE2 syntax
+const exact = await mcpy.grep({ url: "https://elie.net", pattern: "$5.00", mode: GrepMode.Literal });
 const results = await mcpy.search({ query: "cloudflare workers", limit: 5 });
 ```
 
@@ -44,14 +45,16 @@ Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
 
 ## What happens on a call
 
-1. Input validated (zod); URLs must be public http(s).
+1. Input validated (zod); URLs must be public http(s), and so must every
+   redirect hop (hosted providers follow redirects on their side).
 2. Cache lookup (in memory by default, Cloudflare KV with `KvCache`).
 3. Providers tried in order. Each attempt has a timeout; the whole call has a
    deadline. Transient errors (network, 408, 429, 5xx) are retried with
    jittered backoff that honors `Retry-After`. A provider that keeps failing
    is skipped for a cooldown (circuit breaker).
-4. Each result is judged: blocked pages, bot challenges and empty JS shells
-   move on to the next provider; 404/410 are final.
+4. Each result is judged: blocked pages, bot challenges and empty HTML
+   shells move on to the next provider; 404/410, unsafe redirects and
+   unsupported content types are final. Short text or JSON is fine as is.
 5. HTML becomes markdown (mdream, main content isolated), output is
    paginated and capped, and the result is cached.
 
@@ -94,8 +97,15 @@ Spans: `mcpy.operation` > `mcpy.attempt` (one per provider) > `http.client`
 
 Implement `PageProvider` or `SearchProvider` from `mcpy/providers`. Make HTTP
 calls through `call.http` (never `fetch`) so you get retries, timeouts,
-size caps and spans for free, and parse JSON with a zod schema via
-`call.http.json(request, schema, call.context)`.
+redirect checks, size caps and spans for free, and parse JSON with a zod
+schema via `call.http.json(request, schema, call.context)`. Throw
+`ProviderFailure` with an `ErrorCode`; set `kind` on pages with
+`contentKindOf(contentType)`; set `circuitBreaker: false` if your failures
+describe the target rather than your own health. `mcpy/providers` also
+exports `htmlToMarkdown`, `HttpMethod` and the HTTP types.
+
+On a server, pass `defer` (e.g. `ctx.waitUntil`) via `mcpy.with({ defer })`
+so cache writes happen after the response.
 
 ## License
 

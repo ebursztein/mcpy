@@ -1,5 +1,5 @@
 import { htmlTitle, splitFrontmatter } from "../../content/extract.js";
-import { ErrorCode, PageFormat } from "../../enums.js";
+import { ContentKind, ErrorCode, PageFormat } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod } from "../../http/client.js";
 import { ProviderId, type PageProvider } from "../types.js";
@@ -46,7 +46,8 @@ export function cloudflareBrowser(options: CloudflareBrowserOptions): PageProvid
       }
 
       const meta = data.meta ?? {};
-      const common = { url: req.url, finalUrl: meta.finalUrl ?? req.url, status: meta.status ?? 200 };
+      // Rendered from HTML by a real browser; status 0 when Browser Run does not report it.
+      const common = { url: req.url, finalUrl: meta.finalUrl ?? req.url, status: meta.status ?? 0, kind: ContentKind.Html };
       if (req.format === PageFormat.Html) {
         return { ...common, contentType: "text/html", title: meta.title ?? htmlTitle(data.result), content: data.result, format: PageFormat.Html };
       }

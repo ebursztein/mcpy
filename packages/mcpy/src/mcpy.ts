@@ -2,7 +2,7 @@ import { z } from "zod";
 import { fetchOp, grepOp, searchOp } from "./api/operations.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
-import { Engine, EngineLimitsSchema, type Served } from "./engine/engine.js";
+import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
 import { HttpClient } from "./http/client.js";
@@ -58,6 +58,8 @@ export interface CallContext {
   requestId?: string;
   transport?: Transport;
   parent?: SpanContext;
+  /** Background work after the response, e.g. a Worker's ctx.waitUntil (keeps cache writes off the request path). */
+  defer?: (work: Promise<unknown>) => void;
 }
 
 /** The SDK. Implements the same McpyApi as the REST client. */
@@ -99,7 +101,7 @@ export class Mcpy implements McpyApi {
     operation: Operation,
     schema: S,
     raw: unknown,
-    fn: (input: z.infer<S>, scope: { telemetry: Telemetry; parent: SpanContext }) => Promise<{ result: R; served: Served<unknown> }>,
+    fn: (input: z.infer<S>, scope: CallScope) => Promise<{ result: R; served: Served<unknown>; outputChars: number }>,
   ): Promise<R> {
     const telemetry = this.telemetry.with({
       [Attr.Operation]: operation,
@@ -114,13 +116,16 @@ export class Mcpy implements McpyApi {
         const details = parsed.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`);
         throw new McpyError(ErrorCode.InvalidInput, "invalid input", details);
       }
-      const { result, served } = await fn(parsed.data, { telemetry, parent: span.context });
+      const target = targetAttributes(parsed.data);
+      span.setAttributes(target);
+      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer });
       const facts = {
         [Attr.Cache]: served.cache,
         [Attr.Attempts]: served.attempts,
         [Attr.Provider]: served.provider,
         [Attr.CostUsd]: served.costUsd,
-        [Attr.OutputChars]: JSON.stringify(result).length,
+        [Attr.OutputChars]: outputChars,
+        ...target,
       };
       span.setAttributes(facts);
       span.end(SpanStatus.Ok);
@@ -128,13 +133,31 @@ export class Mcpy implements McpyApi {
       return result;
     } catch (err) {
       const error = toMcpyError(err);
-      span.recordError(error);
-      span.end(SpanStatus.Error, error.message);
+      // Telemetry keeps the original detail; callers get the sanitized error.
+      const detail = err instanceof Error ? err.message : String(err);
+      span.recordError(err);
+      span.setAttributes({ [Attr.ErrorType]: error.code });
+      span.end(SpanStatus.Error, detail);
       const level = error.httpStatus >= 500 ? LogLevel.Error : LogLevel.Warn;
-      telemetry.log(level, `${operation} failed`, { [Attr.ErrorType]: error.code, [Attr.Reason]: error.message }, span.context);
+      telemetry.log(level, `${operation} failed`, { [Attr.ErrorType]: error.code, [Attr.Reason]: detail.slice(0, 500) }, span.context);
       throw error;
     }
   }
+}
+
+/** Host and user-agent profile of a validated input, for spans and metrics. */
+function targetAttributes(input: unknown): Record<string, string> {
+  const { url, user_agent } = input as { url?: string; user_agent?: string };
+  const out: Record<string, string> = {};
+  if (url) {
+    try {
+      out[Attr.TargetHost] = new URL(url).host;
+    } catch {
+      // invalid URLs are rejected later with invalid_target
+    }
+  }
+  if (user_agent) out[Attr.UserAgentProfile] = user_agent;
+  return out;
 }
 
 /** Build the SDK from providers and (validated) settings. */

@@ -19,3 +19,9 @@ export {
   type SearchProvider,
   type SearchRequest,
 } from "./types.js";
+
+// Building blocks for custom providers.
+export { ProviderFailure } from "../errors.js";
+export { HttpClient, HttpMethod, type HttpContext, type HttpRequest, type HttpResponse } from "../http/client.js";
+export { contentKindOf } from "../content/kind.js";
+export { htmlToMarkdown, htmlTitle, splitFrontmatter } from "../content/extract.js";

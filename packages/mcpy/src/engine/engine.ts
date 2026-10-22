@@ -40,7 +40,12 @@ export interface EngineDeps {
 export interface CallScope {
   telemetry: Telemetry;
   parent: SpanContext;
+  /** Runs background work after the response (e.g. a Worker's ctx.waitUntil). */
+  defer?: (work: Promise<unknown>) => void;
 }
+
+/** Empty search results may be a transient upstream hiccup: keep them briefly. */
+export const EMPTY_SEARCH_TTL_SECONDS = 60;
 
 /** Engine result. `provider` and `costUsd` are for telemetry only. */
 export interface Served<T> {
@@ -66,7 +71,7 @@ export class Engine {
 
   async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
     const key = `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
-    return this.cached(key, this.deps.limits.pageTtlSeconds, fresh, scope, (deadlineAt) =>
+    return this.cached(key, () => this.deps.limits.pageTtlSeconds, fresh, scope, (deadlineAt) =>
       runChain({
         providers: this.deps.pageProviders,
         attempt: (p, signal, timeoutMs, parent) => p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
@@ -79,7 +84,8 @@ export class Engine {
 
   async search(req: SearchRequest, fresh: boolean, scope: CallScope): Promise<Served<FoundPage[]>> {
     const key = `${CACHE_VERSION}:search:${await sha256Hex(`${req.query.toLowerCase()}\n${req.limit}`)}`;
-    return this.cached(key, this.deps.limits.searchTtlSeconds, fresh, scope, (deadlineAt) =>
+    const ttl = (hits: FoundPage[]) => (hits.length ? this.deps.limits.searchTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
+    return this.cached(key, ttl, fresh, scope, (deadlineAt) =>
       runChain({
         providers: this.deps.searchProviders,
         attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
@@ -112,12 +118,13 @@ export class Engine {
 
   /**
    * Serve from cache when possible; otherwise run the chain and cache the
-   * result. The chain only returns usable or definitive results, so blocked
-   * and challenge pages are never cached.
+   * result. The chain only returns usable or definitive results (blocked and
+   * challenge pages never reach the cache); salvaged thin pages are returned
+   * but not cached. The write is deferred off the request path when possible.
    */
   private async cached<T>(
     key: string,
-    ttl: number,
+    ttl: (value: T) => number,
     fresh: boolean,
     scope: CallScope,
     run: (deadlineAt: number) => Promise<ChainResult<T>>,
@@ -127,8 +134,12 @@ export class Engine {
       if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider, costUsd: 0 };
     }
     const result = await run(Date.now() + this.deps.limits.deadlineMs);
-    await this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, ttl);
-    scope.telemetry.log(LogLevel.Debug, "cached result", { [Attr.Provider]: result.provider }, scope.parent);
+    if (!result.salvaged) {
+      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, ttl(result.value)).catch(() => undefined);
+      if (scope.defer) scope.defer(write);
+      else await write;
+    }
+    scope.telemetry.log(LogLevel.Debug, result.salvaged ? "served salvaged result (not cached)" : "cached result", { [Attr.Provider]: result.provider }, scope.parent);
     return {
       value: result.value,
       cache: fresh ? CacheStatus.Bypass : CacheStatus.Miss,

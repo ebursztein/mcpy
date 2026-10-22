@@ -58,5 +58,7 @@ export function toMcpyError(err: unknown): McpyError {
   if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
     return new McpyError(ErrorCode.Timeout, "operation timed out");
   }
-  return new McpyError(ErrorCode.Internal, err instanceof Error ? err.message : String(err));
+  // Never echo internal error text (stack details, schema dumps) to callers;
+  // the original stays in telemetry.
+  return new McpyError(ErrorCode.Internal, "internal error");
 }

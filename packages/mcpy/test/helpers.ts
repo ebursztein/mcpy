@@ -1,7 +1,7 @@
 /** Shared test doubles. Tests import the SDK through the `mcpy` aliases. */
 
 import { readFileSync } from "node:fs";
-import { createMcpy, MemoryCache, PageFormat, type McpyOptions } from "mcpy";
+import { ContentKind, createMcpy, MemoryCache, PageFormat, type McpyOptions } from "mcpy";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, SearchProvider } from "mcpy/providers";
 import { MemorySink, Telemetry } from "mcpy/telemetry";
 
@@ -13,6 +13,7 @@ export function page(overrides: Partial<FetchedPage> = {}): FetchedPage {
     finalUrl: "https://example.com/a",
     status: 200,
     contentType: "text/markdown",
+    kind: ContentKind.Html,
     content: LONG_TEXT,
     format: PageFormat.Markdown,
     ...overrides,

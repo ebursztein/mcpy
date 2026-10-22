@@ -19,3 +19,5 @@ export { EngineLimitsSchema, type EngineLimits } from "./engine/engine.js";
 export { BreakerPolicySchema, type BreakerPolicy } from "./engine/breaker.js";
 export { RetryPolicySchema, type RetryPolicy } from "./http/retry.js";
 export { USER_AGENTS } from "./http/user-agents.js";
+export type { Telemetry } from "./telemetry/telemetry.js";
+export { EMPTY_SEARCH_TTL_SECONDS } from "./engine/engine.js";

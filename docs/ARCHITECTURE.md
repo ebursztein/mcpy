@@ -39,14 +39,17 @@ Rules, each enforced by tests where possible:
 
 | Concern | Mechanism |
 | --- | --- |
-| Provider down or blocked | Fallback chain: next provider on error, 401/403/429/5xx, bot challenge, or near-empty page |
-| Definitive answers | 404/410 stop the chain (no paid fallback to confirm a missing page) |
-| Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After` |
-| Slow providers | Per-attempt timeout, capped by an overall deadline for the whole chain |
-| Flapping providers | Circuit breaker: after N consecutive failures a provider is skipped for a cooldown (never when it is the last option) |
-| Huge pages | Byte cap on every upstream body |
-| LLM context | Hard caps on returned characters, pagination, grep with bounded context, short search snippets, `truncated` flags |
-| Repeat requests | Cache keyed by normalized URL / query; only usable or definitive results are cached |
+| Provider down or blocked | Fallback chain: next provider on error, HTTP 401/403/429/5xx from the target, bot challenge (judged on page title, challenge markup on small pages, challenge wording on tiny pages), or an empty HTML shell |
+| Definitive answers | 404/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
+| Thin but real pages | Short text, JSON or markdown is served as is. A short HTML page escalates; if no provider does better, the best one is returned and not cached |
+| Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After`; programming errors are never retried |
+| Slow providers | Per-attempt timeout enforced by the engine (even if a provider ignores its abort signal), capped by an overall deadline |
+| Flapping providers | Circuit breaker counting only thrown provider failures, never verdicts about the target page. Providers whose failures reflect the target (direct fetch) opt out. Skipped for a cooldown; never when every provider is open |
+| Unsafe targets (SSRF) | Only public http(s) URLs. Redirects are followed by hand and every hop is checked. Hosted providers (Firecrawl, Bright Data, Browser Run) follow redirects on their side, outside this guard |
+| Huge or binary pages | Content type checked before download; byte cap on every upstream body |
+| Grep patterns | RE2 (re2js): linear time, so no pattern can stall the server; `literal` mode for plain text |
+| LLM context | Hard caps on returned characters, pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
+| Repeat requests | Cache keyed by normalized URL / query; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
 
 ## Observability
 
@@ -66,11 +69,14 @@ key that made the call).
 
 ## Clients and auth
 
-`MCPY_CLIENTS` maps names to keys (`name:key,...`). A key is accepted as
-`Authorization: Bearer`, `X-API-Key`, or `?key=` (for URL-only web agents).
-Each client has its own rate limit (Workers Rate Limiting binding) and shows
-up by name in logs, traces and metrics. No keys configured means every
-request is rejected.
+`MCPY_CLIENTS` maps names to keys (`name:key[:admin]`; keys may contain ":").
+A key is accepted as `Authorization: Bearer`, `X-API-Key`, or `?key=` (for
+URL-only web agents). Each client has its own rate limit (Workers Rate
+Limiting binding) and shows up by name in logs, traces and metrics. Failed
+authentications are rate-limited per client IP. No keys configured means
+every request is rejected. Cloudflare invocation logs are off because they
+record full URLs, `?key=` included; mcpy's own logs never contain queries.
+Request ids are always generated server-side.
 
 ## User agents
 

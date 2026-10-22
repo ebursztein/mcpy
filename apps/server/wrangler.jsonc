@@ -7,14 +7,20 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
+  // Invocation logs record full request URLs, which would capture `?key=`
+  // API keys; our own structured logs never include query strings.
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
 
   // Cache. Wrangler provisions the namespace on first deploy when no id is set.
   "kv_namespaces": [{ "binding": "CACHE" }],
   // One data point per operation and provider attempt (SQL-queryable metrics).
   "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "mcpy" }],
   // Per-client rate limit (keyed by client name).
-  "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } },
+    // Failed authentications per client IP.
+    { "name": "AUTH_LIMITER", "namespace_id": "1003", "simple": { "limit": 20, "period": 60 } }
+  ],
 
   // Non-secret settings; secrets (MCPY_CLIENTS, provider keys, OTLP headers)
   // go through `wrangler secret put`. See README for every option.
@@ -32,7 +38,10 @@
       "routes": [{ "pattern": "tools.ly.tl", "custom_domain": true }],
       "kv_namespaces": [{ "binding": "CACHE" }],
       "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "mcpy_lytl" }],
-      "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } }],
+      "ratelimits": [
+        { "name": "RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } },
+        { "name": "AUTH_LIMITER", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } }
+      ],
       "vars": {
         "ALLOWED_HOSTNAMES": "tools.ly.tl",
         "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",

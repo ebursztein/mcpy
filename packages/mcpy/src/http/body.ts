@@ -5,7 +5,7 @@ import { ProviderFailure } from "../errors.js";
 export async function readTextCapped(res: Response, maxBytes: number): Promise<string> {
   const declared = Number(res.headers.get("content-length") ?? "");
   if (Number.isFinite(declared) && declared > maxBytes) {
-    await res.body?.cancel();
+    await res.body?.cancel().catch(() => undefined);
     throw tooLarge(maxBytes);
   }
   if (!res.body) return "";
@@ -19,7 +19,7 @@ export async function readTextCapped(res: Response, maxBytes: number): Promise<s
     if (done) break;
     total += value.byteLength;
     if (total > maxBytes) {
-      await reader.cancel();
+      await reader.cancel().catch(() => undefined);
       throw tooLarge(maxBytes);
     }
     out += decoder.decode(value, { stream: true });

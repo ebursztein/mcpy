@@ -4,9 +4,8 @@
  *
  * Main-content isolation: mdream's `minimal` mode drops nav, footers, forms
  * and asides. It occasionally drops nearly everything (table layouts such as
- * Hacker News), so when it keeps less than MIN_MAIN_SHARE of the full page's
- * words we return the cleaned full page instead. Too much text beats
- * silently missing content.
+ * Hacker News); then the full page is converted and the larger result wins.
+ * Too much text beats silently missing content.
  */
 
 import { htmlToMarkdown as mdream } from "mdream";
@@ -16,10 +15,12 @@ export interface Extracted {
   markdown: string;
 }
 
-/** `minimal` must keep at least this share of the full page's words. */
-export const MIN_MAIN_SHARE = 0.25;
-/** Below this many words in the full page, isolation is not worth it. */
-const MIN_WORDS_FOR_ISOLATION = 150;
+/**
+ * When `minimal` keeps at least this many words it is trusted as is (one
+ * conversion). Below it, the full page is converted too and the larger wins:
+ * table layouts like Hacker News lose almost everything in `minimal`.
+ */
+export const MIN_MAIN_WORDS = 200;
 
 function wordCount(text: string): number {
   return text.match(/\w+/g)?.length ?? 0;
@@ -42,13 +43,11 @@ function convert(html: string, url: string, minimal: boolean): string {
 
 export function htmlToMarkdown(html: string, url: string): Extracted {
   const title = htmlTitle(html);
-  const full = convert(html, url, false);
-  const fullWords = wordCount(full);
-  if (fullWords < MIN_WORDS_FOR_ISOLATION) return { title, markdown: full };
-
   const main = convert(html, url, true);
-  const keepsEnough = wordCount(main) >= fullWords * MIN_MAIN_SHARE;
-  return { title, markdown: keepsEnough ? main : full };
+  const mainWords = wordCount(main);
+  if (mainWords >= MIN_MAIN_WORDS) return { title, markdown: main };
+  const full = convert(html, url, false);
+  return { title, markdown: wordCount(full) > mainWords ? full : main };
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", apos: "'", nbsp: " " };

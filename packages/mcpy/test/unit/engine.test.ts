@@ -71,7 +71,7 @@ describe("engine cache: pages", () => {
   });
 
   it("never caches a challenge page that ended in failure", async () => {
-    const challenge = page({ contentType: "text/html", content: `<html><head><title>Just a moment...</title></head>${LONG_TEXT}</html>` });
+    const challenge = page({ contentType: "text/html", title: "Just a moment...", content: `Enable JavaScript and cookies to continue` });
     const p = fakePages("p", challenge);
     const { mcpy } = testMcpy({ pages: [p] });
     for (let i = 0; i < 2; i++) {

@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { CacheStatusSchema, ErrorCodeSchema, PageFormat, PageFormatSchema, UserAgentProfileSchema } from "./enums.js";
+import { CacheStatusSchema, ErrorCodeSchema, GrepMode, GrepModeSchema, PageFormat, PageFormatSchema, UserAgentProfileSchema } from "./enums.js";
 
 /** Hard ceiling on characters returned by one call, whatever the caller asks. */
 export const MAX_OUTPUT_CHARS = 100_000;
@@ -25,7 +25,8 @@ export const FetchInputSchema = z.object({
 
 export const GrepInputSchema = z.object({
   url,
-  pattern: z.string().min(1).max(500).describe("Case-insensitive regular expression"),
+  pattern: z.string().min(1).max(500).describe("Case-insensitive pattern: an RE2 regular expression, or plain text when mode is literal"),
+  mode: GrepModeSchema.default(GrepMode.Regex).describe("regex (RE2 syntax, no lookaround/backreferences) or literal"),
   context_lines: z.number().int().min(0).max(20).default(3),
   max_matches: z.number().int().min(1).max(200).default(20),
   format,

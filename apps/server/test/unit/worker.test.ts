@@ -84,9 +84,10 @@ describe("authentication", () => {
 });
 
 describe("request ids", () => {
-  it("uses cf-ray when present", async () => {
+  // Regression (Fable): a client-supplied cf-ray must not choose the request id.
+  it("never takes the request id from a client-supplied cf-ray header", async () => {
     const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(articleUrl())}`, { headers: { "cf-ray": "8abc123-SJC" } });
-    expect(response.headers.get("X-Request-Id")).toBe("8abc123-SJC");
+    expect(response.headers.get("X-Request-Id")).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("generates one otherwise", async () => {
@@ -253,7 +254,8 @@ describe("structured logs", () => {
     expect(lines.length).toBeGreaterThanOrEqual(2);
     for (const line of lines) {
       expect(line[Attr.ClientName], JSON.stringify(line)).toBe("alice");
-      expect(line[Attr.RequestId], JSON.stringify(line)).toBe("ray-logs-1");
+      expect(line[Attr.RequestId], JSON.stringify(line)).toBe(response.headers.get("X-Request-Id"));
+      expect(line[Attr.CfRay], JSON.stringify(line)).toBe("ray-logs-1");
     }
     expect(lines.some((l) => l.message === "fetch ok")).toBe(true);
   });

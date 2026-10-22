@@ -59,6 +59,7 @@ describe("firecrawl scrape contract", () => {
       finalUrl: "https://www.example.com/blog/circuit-breakers",
       status: 200,
       contentType: "text/html; charset=utf-8",
+      kind: "html",
       title: "Understanding Circuit Breakers | Example Engineering Blog",
       content: scrape().data.markdown,
       format: PageFormat.Markdown,
@@ -77,7 +78,8 @@ describe("firecrawl scrape contract", () => {
     const body = { success: true, data: { markdown: "hi", metadata: { sourceURL: TARGET, title: "" } } };
     const { fetch } = stubFetch(() => json(body));
     const page = await firecrawl({ apiKey: KEY }).fetchPage(req(), providerCall(fetch));
-    expect(page).toMatchObject({ finalUrl: TARGET, status: 0, contentType: "text/markdown", content: "hi" });
+    // Without metadata the source is assumed to be a web page (HTML).
+    expect(page).toMatchObject({ finalUrl: TARGET, status: 0, contentType: "text/html", content: "hi" });
     expect(page.title).toBeUndefined();
   });
 

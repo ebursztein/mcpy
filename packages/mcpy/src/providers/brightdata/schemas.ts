@@ -18,5 +18,7 @@ export const SerpSchema = z.object({
       }),
     )
     .optional(),
+  /** Present on every parsed SERP, including ones with zero results. */
+  general: z.unknown().optional(),
   body: z.string().optional(),
 });

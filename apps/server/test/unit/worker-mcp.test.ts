@@ -93,7 +93,7 @@ describe("MCP over /mcp", () => {
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("POST");
   });
 
-  it("rejects browser origins outside the allow-list (DNS-rebinding protection)", async () => {
+  it("agents SDK contract: rejects browser origins outside the allow-list (DNS-rebinding protection)", async () => {
     const response = await call("/mcp", { method: "OPTIONS", key: null, headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "POST" } });
     expect(response.status).toBe(403);
   });
@@ -162,11 +162,11 @@ describe("trace propagation", () => {
   it("writes Analytics Engine rows tagged with client and request id", async () => {
     const rows: { indexes?: string[]; blobs?: string[]; doubles?: number[] }[] = [];
     const env = makeEnv({ TELEMETRY: { writeDataPoint: (row: (typeof rows)[number]) => void rows.push(row) } });
-    await call(RestRoute.Fetch, { body: { url: articleUrl("ae") }, env, headers: { "cf-ray": "ray-ae-1" } });
+    const response = await call(RestRoute.Fetch, { body: { url: articleUrl("ae") }, env, headers: { "cf-ray": "ray-ae-1" } });
     const operation = rows.find((r) => r.blobs?.[0] === SpanName.Operation);
     const attempt = rows.find((r) => r.blobs?.[0] === SpanName.Attempt);
     expect(operation?.indexes).toEqual(["alice"]);
-    expect(operation?.blobs?.[8]).toBe("ray-ae-1");
+    expect(operation?.blobs?.[8]).toBe(response.headers.get("X-Request-Id"));
     expect(attempt?.blobs?.[6]).toBe("alice");
   });
 });

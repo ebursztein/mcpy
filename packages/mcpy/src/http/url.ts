@@ -14,10 +14,25 @@ const PRIVATE_HOST = [
   /^169\.254\./,
   /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // carrier-grade NAT
   /^0\./,
+  /^192\.0\.0\./, // IETF protocol assignments
+  /^192\.0\.2\./, // documentation
+  /^198\.(1[89])\./, // benchmarking
+  /^198\.51\.100\./, // documentation
+  /^203\.0\.113\./, // documentation
+  /^(22[4-9]|23\d)\./, // multicast
+  /^(24\d|25[0-5])\./, // reserved and broadcast
 ];
 
 /** IPv6 literals (brackets stripped) that are loopback, unspecified, private or IPv4-mapped. */
-const PRIVATE_IPV6 = [/^::1?$/, /^f[cd][0-9a-f]{2}:/i, /^fe[89ab][0-9a-f]:/i, /^::ffff:/i];
+const PRIVATE_IPV6 = [
+  /^::1?$/, // loopback, unspecified
+  /^f[cd][0-9a-f]{2}:/i, // unique local
+  /^fe[89ab][0-9a-f]:/i, // link local
+  /^ff[0-9a-f]{2}:/i, // multicast
+  /^::ffff:/i, // IPv4-mapped
+  /^64:ff9b:/i, // NAT64
+  /^2001:db8:/i, // documentation
+];
 
 /** Lowercased host with brackets and a trailing root dot removed ("localhost." is "localhost"). */
 function canonicalHost(hostname: string): string {

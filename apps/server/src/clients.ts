@@ -24,8 +24,8 @@ export const ANONYMOUS: Client = { name: "anonymous", key: "", role: ClientRole.
 export function parseClients(raw: string | undefined): Client[] {
   const entries = (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const clients = entries.map((entry, index) => {
-    const [name, key, role] = entry.split(":");
-    const parsed = ClientSchema.safeParse({ name, key, role: role || undefined });
+    const { name, key, role } = splitEntry(entry);
+    const parsed = ClientSchema.safeParse({ name, key, role });
     if (!parsed.success) {
       throw new McpyError(ErrorCode.Internal, `MCPY_CLIENTS entry ${index + 1} is invalid`, parsed.error.issues.map((i) => i.message));
     }
@@ -34,6 +34,23 @@ export function parseClients(raw: string | undefined): Client[] {
   const names = new Set(clients.map((c) => c.name));
   if (names.size !== clients.length) throw new McpyError(ErrorCode.Internal, "MCPY_CLIENTS has duplicate client names");
   return clients;
+}
+
+/**
+ * `name:key[:role]`. The name ends at the first ":"; a trailing ":user" or
+ * ":admin" is the role; everything between is the key, so keys may contain ":".
+ */
+function splitEntry(entry: string): { name: string; key: string; role?: string } {
+  const first = entry.indexOf(":");
+  if (first < 0) return { name: entry, key: "" };
+  const name = entry.slice(0, first);
+  const key = entry.slice(first + 1);
+  const last = key.lastIndexOf(":");
+  const suffix = last >= 0 ? key.slice(last + 1) : "";
+  if (ClientRoleSchema.safeParse(suffix).success) {
+    return { name, key: key.slice(0, last), role: suffix };
+  }
+  return { name, key };
 }
 
 /**

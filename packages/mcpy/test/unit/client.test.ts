@@ -61,7 +61,7 @@ describe("McpyClient requests", () => {
     expect(await c.grep({ url: "https://example.com/a", pattern: "hit" })).toEqual(grepResult);
     expect(await c.search({ query: "  q  ", limit: 3 })).toEqual(searchResult);
     expect(calls.map((x) => x.url)).toEqual([`${BASE}${RestRoute.Grep}`, `${BASE}${RestRoute.Search}`]);
-    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", context_lines: 3, max_matches: 20, format: PageFormat.Markdown, fresh: false });
+    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", mode: "regex", context_lines: 3, max_matches: 20, format: PageFormat.Markdown, fresh: false });
     expect(calls[1].body).toEqual({ query: "q", limit: 3, fresh: false });
   });
 

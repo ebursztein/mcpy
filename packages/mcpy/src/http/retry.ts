@@ -15,11 +15,19 @@ export function isRetryableStatus(status: number): boolean {
   return RETRYABLE_STATUS.has(status);
 }
 
-/** Network-level failures (not aborts: an abort means our own deadline hit). */
+/** Transient network failures as reported by undici (Node), workerd and browsers. */
+const NETWORK_FAILURE = /fetch failed|network (error|connection lost)|failed to fetch|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|EPIPE|UND_ERR/i;
+
+/**
+ * Network-level failures only. Not aborts (our own deadline hit) and not
+ * programming errors: a TypeError for an invalid header or URL is permanent.
+ */
 export function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if (err.name === "AbortError" || err.name === "TimeoutError") return false;
-  return err.name === "TypeError" || /network|fetch failed|ECONNRESET|socket|EAI_AGAIN/i.test(err.message);
+  const cause = (err as { cause?: unknown }).cause;
+  const causeText = cause instanceof Error ? `${cause.message} ${(cause as { code?: string }).code ?? ""}` : "";
+  return NETWORK_FAILURE.test(`${err.message} ${causeText}`);
 }
 
 /** Delay before retry `attempt` (1-based): full-jitter exponential backoff. */

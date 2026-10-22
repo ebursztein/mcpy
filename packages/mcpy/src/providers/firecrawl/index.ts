@@ -1,3 +1,4 @@
+import { contentKindOf } from "../../content/kind.js";
 import { ErrorCode, PageFormat } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod, type HttpResponse } from "../../http/client.js";
@@ -52,14 +53,16 @@ export function firecrawl(options: FirecrawlOptions): PageProvider {
         { ...call.context, maxBytes: call.context.maxBytes * 2 },
       );
       check(response, data);
-      const page = data.data ?? {};
+      if (!data.data) throw new ProviderFailure(ErrorCode.BadResponse, "scrape succeeded without data", response.status);
+      const page = data.data;
       const meta = page.metadata ?? {};
       const title = Array.isArray(meta.title) ? meta.title[0] : meta.title;
       return {
         url: req.url,
         finalUrl: meta.url ?? meta.sourceURL ?? req.url,
         status: meta.statusCode ?? 0,
-        contentType: meta.contentType ?? (html ? "text/html" : "text/markdown"),
+        contentType: meta.contentType ?? "text/html",
+        kind: contentKindOf(meta.contentType ?? "text/html"),
         title: title || undefined,
         content: (html ? page.rawHtml : page.markdown) ?? "",
         format: req.format,
@@ -85,7 +88,9 @@ export function firecrawlSearch(options: FirecrawlOptions): SearchProvider {
         call.context,
       );
       check(response, data);
-      return (data.data?.web ?? []).map((r) => ({ url: r.url, title: r.title ?? r.url, snippet: r.description ?? "" }));
+      // A success without `data` is a soft failure, not "no results": do not cache it as such.
+      if (!data.data) throw new ProviderFailure(ErrorCode.BadResponse, "search succeeded without data", response.status);
+      return (data.data.web ?? []).map((r) => ({ url: r.url, title: r.title ?? r.url, snippet: r.description ?? "" }));
     },
   };
 }

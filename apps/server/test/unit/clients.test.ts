@@ -55,8 +55,12 @@ describe("parseClients", () => {
     expect(parseError(`alice:${KEY_A},alice:${KEY_B}`).message).toContain("duplicate");
   });
 
-  it("rejects an unknown role", () => {
-    expect(parseError(`alice:${KEY_A}:root`).code).toBe(ErrorCode.Internal);
+  // Regression (Fable #14): keys may contain ":"; only a trailing ":user" or
+  // ":admin" is a role, anything else stays part of the key.
+  it("keeps colons inside keys and only treats a known trailing role as a role", () => {
+    const [plain, admin] = parseClients(`alice:${KEY_A}:root,bob:${KEY_A}:x:admin`);
+    expect(plain).toMatchObject({ name: "alice", key: `${KEY_A}:root`, role: "user" });
+    expect(admin).toMatchObject({ name: "bob", key: `${KEY_A}:x`, role: "admin" });
   });
 
   it("never echoes the key in the error", () => {

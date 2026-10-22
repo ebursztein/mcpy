@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ErrorCode, PageFormat, USER_AGENTS, UserAgentProfile } from "mcpy";
+import { ContentKind, ErrorCode, PageFormat, USER_AGENTS, UserAgentProfile } from "mcpy";
 import { cloudflareBrowser, ProviderId } from "mcpy/providers";
 import { fixture, fixtureJson, stubFetch } from "../helpers.js";
 import { failureOf, json, providerCall, TIMEOUT_MS } from "./call.js";
@@ -41,7 +41,8 @@ describe("cloudflare browser run contract", () => {
   it("strips YAML frontmatter and takes the title from it", async () => {
     const { fetch } = stubFetch(() => json(fixtureJson("browser-run-markdown.json")));
     const page = await provider().fetchPage(req(), providerCall(fetch));
-    expect(page).toMatchObject({ url: TARGET, finalUrl: TARGET, status: 200, contentType: "text/markdown", format: PageFormat.Markdown });
+    // No `meta` in the fixture: the target status is unknown (0), not assumed 200.
+    expect(page).toMatchObject({ url: TARGET, finalUrl: TARGET, status: 0, contentType: "text/markdown", kind: ContentKind.Html, format: PageFormat.Markdown });
     expect(page.title).toBe("Understanding Circuit Breakers");
     expect(page.content.startsWith("# Understanding Circuit Breakers")).toBe(true);
     expect(page.content).not.toContain("---");

@@ -1,4 +1,5 @@
 import { htmlTitle, htmlToMarkdown } from "../../content/extract.js";
+import { contentKindOf } from "../../content/kind.js";
 import { ErrorCode, PageFormat } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod, type HttpResponse } from "../../http/client.js";
@@ -48,7 +49,7 @@ export function brightData(options: BrightDataOptions): PageProvider {
       const body = envelope.body ?? "";
       const headers = new Headers(envelope.headers ?? {});
       const contentType = headers.get("content-type") ?? "text/html";
-      const base = { url: req.url, finalUrl: req.url, status: envelope.status_code ?? 0, contentType };
+      const base = { url: req.url, finalUrl: req.url, status: envelope.status_code ?? 0, contentType, kind: contentKindOf(contentType) };
       if (req.format === PageFormat.Html || !/html/i.test(contentType)) {
         return { ...base, title: htmlTitle(body), content: body, format: req.format };
       }
@@ -85,6 +86,10 @@ export function brightDataSearch(options: BrightDataOptions): SearchProvider {
       if (serp.success && !serp.data.organic && serp.data.body) serp = SerpSchema.safeParse(safeJson(serp.data.body));
       if (!serp.success) {
         throw new ProviderFailure(ErrorCode.BadResponse, "SERP response was not JSON (is brd_json enabled for this zone?)", response.status);
+      }
+      // No organic block and no `general` block means an error envelope, not "no results".
+      if (!serp.data.organic && serp.data.general === undefined) {
+        throw new ProviderFailure(ErrorCode.BadResponse, "SERP response has no results block", response.status);
       }
       return (serp.data.organic ?? []).slice(0, req.limit).map((r) => ({ url: r.link, title: r.title ?? r.link, snippet: r.description ?? "" }));
     },

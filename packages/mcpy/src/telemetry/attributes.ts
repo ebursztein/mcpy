@@ -14,13 +14,12 @@ export const Attr = {
   ServerAddress: "server.address",
   UrlPath: "url.path",
   ErrorType: "error.type",
-  UserAgentOriginal: "user_agent.original",
 
   // mcpy
   RequestId: "mcpy.request.id",
+  CfRay: "mcpy.cf_ray",
   Operation: "mcpy.operation",
   Provider: "mcpy.provider",
-  ProviderKind: "mcpy.provider.kind",
   Outcome: "mcpy.outcome",
   Reason: "mcpy.reason",
   Cache: "mcpy.cache",

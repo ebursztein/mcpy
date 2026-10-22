@@ -29,7 +29,8 @@ export class KvCache implements Cache {
 
   async put<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     const body = JSON.stringify(value);
-    if (body.length > KV_MAX_VALUE_BYTES) return;
+    // Measure UTF-8 bytes, not UTF-16 code units.
+    if (new TextEncoder().encode(body).byteLength > KV_MAX_VALUE_BYTES) return;
     try {
       await this.kv.put(key, body, { expirationTtl: Math.max(KV_MIN_TTL, ttlSeconds) });
     } catch {
@@ -45,7 +46,7 @@ export class NoCache implements Cache {
   async put(): Promise<void> {}
 }
 
-/** In-process LRU-ish cache for Node/Bun use and tests. */
+/** In-process LRU cache with TTLs, for Node/Bun use, local dev and tests. */
 export class MemoryCache implements Cache {
   private readonly store = new Map<string, { value: unknown; expires: number }>();
   constructor(private readonly maxEntries = 1000) {}
@@ -53,14 +54,15 @@ export class MemoryCache implements Cache {
   async get<T>(key: string): Promise<T | null> {
     const hit = this.store.get(key);
     if (!hit) return null;
-    if (hit.expires < Date.now()) {
-      this.store.delete(key);
-      return null;
-    }
+    this.store.delete(key);
+    if (hit.expires < Date.now()) return null;
+    // Re-insert so iteration order is least-recently-used first.
+    this.store.set(key, hit);
     return hit.value as T;
   }
 
   async put<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+    this.store.delete(key);
     if (this.store.size >= this.maxEntries) {
       const oldest = this.store.keys().next().value;
       if (oldest !== undefined) this.store.delete(oldest);

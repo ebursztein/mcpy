@@ -49,20 +49,24 @@ afterEach(() => {
 describe("HttpClient.send", () => {
   it("returns status, final url, headers and text on success", async () => {
     const { client, ctx, calls, httpSpans } = setup((url) =>
-      responseAt("https://api.example.com/final", "hello", { status: 200, headers: { "x-test": "1" } }),
+      url === URL_A
+        ? responseAt(url, null, { status: 302, headers: { location: "/final" } })
+        : responseAt(url, "hello", { status: 200, headers: { "x-test": "1" } }),
     );
     const res = await client.send({ url: URL_A, headers: { accept: "text/plain" } }, ctx);
     expect(res).toMatchObject({ status: 200, url: "https://api.example.com/final", text: "hello" });
     expect(res.headers.get("x-test")).toBe("1");
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(calls[0]).toMatchObject({ url: URL_A, method: HttpMethod.Get });
     expect(calls[0].headers.get("accept")).toBe("text/plain");
-    const [span] = httpSpans();
-    expect(span.status).toBe(SpanStatus.Ok);
-    expect(span.attributes).toMatchObject({
+    // One span per hop: the redirect, then the final page.
+    const [hop, final] = httpSpans();
+    expect(hop.attributes).toMatchObject({ [Attr.UrlPath]: "/v1/thing", [Attr.HttpStatus]: 302 });
+    expect(final.status).toBe(SpanStatus.Ok);
+    expect(final.attributes).toMatchObject({
       [Attr.HttpMethod]: HttpMethod.Get,
       [Attr.ServerAddress]: "api.example.com",
-      [Attr.UrlPath]: "/v1/thing",
+      [Attr.UrlPath]: "/final",
       [Attr.HttpResendCount]: 0,
       [Attr.HttpStatus]: 200,
     });

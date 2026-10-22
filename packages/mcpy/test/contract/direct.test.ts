@@ -31,7 +31,10 @@ describe("direct provider contract", () => {
   });
 
   it("extracts HTML into markdown with the title, final URL and target status", async () => {
-    const { fetch } = stubFetch(() => responseAt(URL_FINAL, ARTICLE, { headers: HTML }));
+    // Redirects are followed hop by hop (each hop passes the private-address guard).
+    const { fetch } = stubFetch((url) =>
+      url === URL_IN ? responseAt(url, null, { status: 301, headers: { location: URL_FINAL } }) : responseAt(URL_FINAL, ARTICLE, { headers: HTML }),
+    );
     const page = await direct().fetchPage(req(), providerCall(fetch));
     expect(page).toMatchObject({ url: URL_IN, finalUrl: URL_FINAL, status: 200, contentType: HTML["content-type"], format: PageFormat.Markdown });
     expect(page.title).toContain("Understanding Circuit Breakers");

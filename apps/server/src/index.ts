@@ -36,9 +36,12 @@ export default {
       return errorResponse(new McpyError(ErrorCode.Internal, "server misconfigured"));
     }
 
-    const requestId = request.headers.get("cf-ray") ?? crypto.randomUUID();
+    // Always our own id: a client-supplied header must not choose it. The
+    // Cloudflare ray id is kept alongside for correlating with CF logs.
+    const requestId = crypto.randomUUID();
     const ids = { "X-Request-Id": requestId };
-    const base = requestTelemetry(env, config).with({ [Attr.RequestId]: requestId });
+    const ray = request.headers.get("cf-ray");
+    const base = requestTelemetry(env, config).with({ [Attr.RequestId]: requestId, ...(ray ? { [Attr.CfRay]: ray } : {}) });
     const span = base.startSpan(
       SpanName.Request,
       { [Attr.HttpMethod]: request.method, [Attr.HttpRoute]: url.pathname, [Attr.Transport]: isMcp ? Transport.Mcp : Transport.Rest },
@@ -58,7 +61,14 @@ export default {
       if (isMcp && request.method === "OPTIONS") return finish(await mcpHandler(config)(request, env, ctx));
 
       const client = await authenticate(request, url, env);
-      if (!client) return finish(errorResponse(new McpyError(ErrorCode.Unauthorized, "missing or invalid API key"), { ...ids, "WWW-Authenticate": 'Bearer realm="mcpy"' }));
+      if (!client) {
+        // Failed attempts are rate-limited per IP so keys cannot be guessed at speed.
+        const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+        if (env.AUTH_LIMITER && !(await env.AUTH_LIMITER.limit({ key: `auth:${ip}` })).success) {
+          return finish(errorResponse(new McpyError(ErrorCode.RateLimited, "too many failed authentications"), { ...ids, "Retry-After": "60" }));
+        }
+        return finish(errorResponse(new McpyError(ErrorCode.Unauthorized, "missing or invalid API key"), { ...ids, "WWW-Authenticate": 'Bearer realm="mcpy"' }));
+      }
       span.setAttributes({ [Attr.ClientName]: client.name });
       const telemetry = base.with({ [Attr.ClientName]: client.name });
 
@@ -68,7 +78,13 @@ export default {
       }
 
       const { mcpy, providers } = sdkFor(env, config, telemetry);
-      const api = mcpy.with({ client: client.name, requestId, transport: isMcp ? Transport.Mcp : Transport.Rest, parent: span.context });
+      const api = mcpy.with({
+        client: client.name,
+        requestId,
+        transport: isMcp ? Transport.Mcp : Transport.Rest,
+        parent: span.context,
+        defer: (work) => ctx.waitUntil(work),
+      });
 
       if (!isMcp) return finish(withHeaders(await handleRest(request, url, api, client, providers), ids));
       return finish(withHeaders(await mcpHandler(config, api)(stripUrlKey(request, url), env, ctx), ids));

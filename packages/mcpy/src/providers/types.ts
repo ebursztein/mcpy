@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { PageFormat, UserAgentProfile } from "../enums.js";
+import type { ContentKind, PageFormat, UserAgentProfile } from "../enums.js";
 import type { HttpClient, HttpContext } from "../http/client.js";
 
 /** Ids of the built-in providers (custom providers may use their own). */
@@ -29,6 +29,8 @@ export interface FetchedPage {
   /** HTTP status of the target page (0 when the provider does not report it). */
   status: number;
   contentType: string;
+  /** What the content was produced from; drives quality judgement. */
+  kind: ContentKind;
   title?: string;
   /** In the requested format. */
   content: string;
@@ -60,6 +62,12 @@ interface ProviderBase {
   readonly id: string;
   /** Estimated USD per call, for cost telemetry. */
   readonly costPerCall: number;
+  /**
+   * Whether thrown failures count toward this provider's circuit breaker
+   * (default true). Set false when failures reflect the target site rather
+   * than the provider's own health, as for a direct fetch.
+   */
+  readonly circuitBreaker?: boolean;
 }
 
 export interface PageProvider extends ProviderBase {

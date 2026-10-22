@@ -176,7 +176,7 @@ describe("runChain", () => {
     const started = Date.now();
     const result = await setup([stuck, next], { attemptTimeoutMs: 15 }).run();
     expect(result.provider).toBe("next");
-    expect(result.attempts[0]).toMatchObject({ provider: "stuck", outcome: AttemptOutcome.Error, reason: "timed out", publicReason: ErrorCode.Timeout });
+    expect(result.attempts[0]).toMatchObject({ provider: "stuck", outcome: AttemptOutcome.Error, reason: expect.stringMatching(/timed out/), publicReason: ErrorCode.Timeout });
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 
