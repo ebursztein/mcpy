@@ -59,7 +59,7 @@ export async function authorize(request: Request, url: URL, config: Config): Pro
     ok: false,
     response: new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
-      headers: { "Content-Type": "application/json", "WWW-Authenticate": 'Bearer realm="tools-mcp"' },
+      headers: { "Content-Type": "application/json", "WWW-Authenticate": 'Bearer realm="toolshed"' },
     }),
   };
 }
