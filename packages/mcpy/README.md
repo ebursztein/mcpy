@@ -11,7 +11,7 @@ npm install mcpy
 ## Use it
 
 ```ts
-import { createMcpy, GrepMode, PageFormat } from "mcpy";
+import { createMcpy, Recency, SearchMode, SearchType } from "mcpy";
 import { direct, firecrawl, firecrawlSearch } from "mcpy/providers";
 
 const mcpy = createMcpy({
@@ -19,14 +19,23 @@ const mcpy = createMcpy({
   search: [firecrawlSearch({ apiKey: process.env.FIRECRAWL_API_KEY! })],
 });
 
-const page = await mcpy.fetch({ url: "https://elie.net", max_length: 5_000 });
-page.content;     // markdown
-page.next_index;  // pass as start_index for the next chunk
-page.meta.cache;  // "hit" | "miss" | "bypass"
+const page = await mcpy.fetch({ url: "https://elie.net", max_chars: 5_000 });
+page.content;      // markdown
+page.next_offset;  // pass as offset to read the next part (absent at the end)
+page.meta.cache;   // "hit" | "miss" | "bypass"
 
 const hits = await mcpy.grep({ url: "https://elie.net", pattern: "secur(e|ity)" });         // RE2 syntax
-const exact = await mcpy.grep({ url: "https://elie.net", pattern: "$5.00", mode: GrepMode.Literal });
-const results = await mcpy.search({ query: "cloudflare workers", limit: 5 });
+const exact = await mcpy.grep({ url: "https://elie.net", pattern: "$5.00", literal: true });
+
+const news = await mcpy.search({
+  query: "cloudflare workers",
+  type: SearchType.News,          // web, news, images, videos, shopping, jobs, places
+  recency: Recency.Week,          // hour, day, week, month, year
+  country: "us",
+  sites: ["blog.cloudflare.com"],
+  mode: SearchMode.Thorough,      // combine every capable source
+});
+news.results[0].sources;          // how many sources returned it
 ```
 
 Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
@@ -69,7 +78,7 @@ createMcpy({
             pageTtlSeconds: 3_600, searchTtlSeconds: 900 },
   retry: { retries: 2, baseDelayMs: 250, maxDelayMs: 4_000 },
   breaker: { failureThreshold: 5, cooldownMs: 30_000 },
-  userAgent: { default: UserAgentProfile.Mcpy, mcpyString: "mybot/1.0 (+https://example.com)" },
+  userAgent: { default: UserAgentProfile.Default, custom: "mybot/1.0 (+https://example.com)" },
 });
 ```
 

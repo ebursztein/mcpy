@@ -31,11 +31,11 @@ export const McpyConfigSchema = z.object({
   breaker: BreakerPolicySchema.default(BreakerPolicySchema.parse({})),
   userAgent: z
     .object({
-      default: UserAgentProfileSchema.default(UserAgentProfile.Mcpy),
+      default: UserAgentProfileSchema.default(UserAgentProfile.Default),
       /** Replaces the `mcpy` profile string, e.g. to add your contact URL. */
-      mcpyString: z.string().min(1).max(512).optional(),
+      custom: z.string().min(1).max(512).optional(),
     })
-    .default({ default: UserAgentProfile.Mcpy }),
+    .default({ default: UserAgentProfile.Default }),
 });
 export type McpyConfig = z.input<typeof McpyConfigSchema>;
 
@@ -170,7 +170,7 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
     http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
     breaker: new CircuitBreaker(config.breaker),
     limits: config.limits,
-    userAgents: { defaultProfile: config.userAgent.default, customMcpyString: config.userAgent.mcpyString },
+    userAgents: { defaultProfile: config.userAgent.default, customString: config.userAgent.custom },
   });
   return new Mcpy(engine, options.telemetry ?? Telemetry.noop(), config.userAgent.default);
 }

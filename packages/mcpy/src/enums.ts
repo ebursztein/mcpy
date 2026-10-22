@@ -16,11 +16,13 @@ export const PageFormatSchema = pageFormat.schema;
 export type PageFormat = z.infer<typeof PageFormatSchema>;
 
 const userAgentProfile = enumOf({
-  Mcpy: "mcpy",
-  ChromeDesktop: "chrome_desktop",
-  ChromeMobile: "chrome_mobile",
-  SafariDesktop: "safari_desktop",
-  FirefoxDesktop: "firefox_desktop",
+  /** Honest mcpy user agent (identifies the tool). */
+  Default: "default",
+  Chrome: "chrome",
+  Safari: "safari",
+  Firefox: "firefox",
+  /** Chrome on Android. */
+  Mobile: "mobile",
   Googlebot: "googlebot",
 } as const);
 export const UserAgentProfile = userAgentProfile.values;
@@ -110,3 +112,34 @@ const contentKind = enumOf({ Html: "html", Markdown: "markdown", Text: "text", J
 export const ContentKind = contentKind.values;
 export const ContentKindSchema = contentKind.schema;
 export type ContentKind = z.infer<typeof ContentKindSchema>;
+
+/** Kind of results a search returns. */
+const searchType = enumOf({
+  Web: "web",
+  News: "news",
+  Images: "images",
+  Videos: "videos",
+  Shopping: "shopping",
+  Jobs: "jobs",
+  Places: "places",
+} as const);
+export const SearchType = searchType.values;
+export const SearchTypeSchema = searchType.schema;
+export type SearchType = z.infer<typeof SearchTypeSchema>;
+
+/** Only results published within this window. */
+const recency = enumOf({ Hour: "hour", Day: "day", Week: "week", Month: "month", Year: "year" } as const);
+export const Recency = recency.values;
+export const RecencySchema = recency.schema;
+export type Recency = z.infer<typeof RecencySchema>;
+
+const device = enumOf({ Desktop: "desktop", Mobile: "mobile" } as const);
+export const Device = device.values;
+export const DeviceSchema = device.schema;
+export type Device = z.infer<typeof DeviceSchema>;
+
+/** fast: first source that answers. thorough: ask every capable source and merge. */
+const searchMode = enumOf({ Fast: "fast", Thorough: "thorough" } as const);
+export const SearchMode = searchMode.values;
+export const SearchModeSchema = searchMode.schema;
+export type SearchMode = z.infer<typeof SearchModeSchema>;

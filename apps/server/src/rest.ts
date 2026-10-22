@@ -2,6 +2,7 @@
  * REST front door, built only on the public SDK.
  *
  *   GET|POST /v1/fetch   /v1/grep   /v1/search    (same fields as the SDK)
+ *   e.g. GET /v1/search?query=rust&type=news&recency=week&country=us&sites=github.com,lwn.net
  *   GET      /v1/admin/providers                   (admin clients only)
  *
  * POST takes a JSON body; GET takes the same fields as query parameters so
@@ -19,16 +20,21 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const errorResponse = (err: McpyError, headers: Record<string, string> = {}) => json(err.toJSON(), err.httpStatus, headers);
 
-const NUMERIC = new Set(["start_index", "max_length", "context_lines", "max_matches", "limit"]);
-const BOOLEAN = new Set(["fresh"]);
+const NUMERIC = new Set(["offset", "max_chars", "context", "max_matches", "max_results", "page"]);
+const BOOLEAN = new Set(["fresh", "literal"]);
+const LIST = new Set(["sites", "exclude_sites"]);
 
-/** Query strings are untyped: coerce the known numeric/boolean fields. */
+/**
+ * Query strings are untyped: coerce the known numeric, boolean and list
+ * fields (lists are comma-separated: sites=a.com,b.org).
+ */
 function fromQuery(params: URLSearchParams): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of params) {
     if (k === "key") continue; // credentials, not input
     if (NUMERIC.has(k) && /^\d+$/.test(v)) out[k] = Number(v);
     else if (BOOLEAN.has(k) && (v === "true" || v === "false")) out[k] = v === "true";
+    else if (LIST.has(k)) out[k] = v.split(",").map((s) => s.trim()).filter(Boolean);
     else out[k] = v;
   }
   return out;

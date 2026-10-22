@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CacheStatus, createMcpy, MemoryCache, PageFormat } from "mcpy";
+import { CacheStatus, createMcpy, MemoryCache, PageFormat, Recency, SearchType } from "mcpy";
 import { brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
@@ -33,9 +33,9 @@ function sdk(options: Parameters<typeof createMcpy>[0]) {
 }
 
 async function expectRealPage(mcpy: ReturnType<typeof createMcpy>) {
-  const result = await mcpy.fetch({ url: TARGET, max_length: 5_000, fresh: true });
+  const result = await mcpy.fetch({ url: TARGET, max_chars: 5_000, fresh: true });
   expect(result.status).toBe(200);
-  expect(result.total_length).toBeGreaterThan(500);
+  expect(result.total_chars).toBeGreaterThan(500);
   expect(result.content).toMatch(/elie/i);
   expect(result.meta.cache).toBe(CacheStatus.Bypass);
   return result;
@@ -46,7 +46,7 @@ describe("direct (live)", () => {
     const mcpy = sdk({ pages: [direct()] });
     const md = await expectRealPage(mcpy);
     expect(md.title).toBeTruthy();
-    const html = await mcpy.fetch({ url: TARGET, format: PageFormat.Html, max_length: 2_000 });
+    const html = await mcpy.fetch({ url: TARGET, format: PageFormat.Html, max_chars: 2_000 });
     expect(html.content).toMatch(/<html|<!doctype/i);
   });
 });
@@ -64,9 +64,25 @@ describe.skipIf(!has("FIRECRAWL_API_KEY"))("firecrawl (live)", () => {
   });
 
   it("searches", async () => {
-    const result = await sdk({ search: [firecrawlSearch(opts())] }).search({ query: "Elie Bursztein", limit: 3, fresh: true });
+    const result = await sdk({ search: [firecrawlSearch(opts())] }).search({ query: "Elie Bursztein", max_results: 3, fresh: true });
     expect(result.results.length).toBeGreaterThan(0);
     expect(result.results[0].url).toMatch(/^https?:\/\//);
+  });
+});
+
+describe.skipIf(!has("FIRECRAWL_API_KEY"))("firecrawl search options (live)", () => {
+  const search = () => sdk({ search: [firecrawlSearch({ apiKey: k.FIRECRAWL_API_KEY })] });
+
+  it("searches news from the past week", async () => {
+    const result = await search().search({ query: "Cloudflare", type: SearchType.News, recency: Recency.Week, max_results: 3, fresh: true });
+    expect(result.type).toBe(SearchType.News);
+    expect(result.results.length).toBeGreaterThan(0);
+  });
+
+  it("restricts results to the given sites", async () => {
+    const result = await search().search({ query: "workers", sites: ["developers.cloudflare.com"], max_results: 5, fresh: true });
+    expect(result.results.length).toBeGreaterThan(0);
+    for (const hit of result.results) expect(new URL(hit.url).hostname).toBe("developers.cloudflare.com");
   });
 });
 
@@ -80,7 +96,7 @@ describe.skipIf(!has("BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE"))("bright data
   it("searches", async () => {
     const result = await sdk({ search: [brightDataSearch({ apiKey: k.BRIGHTDATA_API_KEY, zone: k.BRIGHTDATA_SERP_ZONE })] }).search({
       query: "Elie Bursztein",
-      limit: 3,
+      max_results: 3,
       fresh: true,
     });
     expect(result.results.length).toBeGreaterThan(0);
@@ -98,7 +114,7 @@ describe.skipIf(!has("FIRECRAWL_API_KEY"))("fallback chain (live)", () => {
     // A provider pointed at a dead endpoint fails fast; the chain must recover.
     const broken = firecrawl({ apiKey: "invalid", apiUrl: "https://127.0.0.1:9" });
     const mcpy = sdk({ pages: [broken, firecrawl({ apiKey: k.FIRECRAWL_API_KEY })], retry: { retries: 0 } });
-    const result = await mcpy.fetch({ url: TARGET, max_length: 1_000, fresh: true });
+    const result = await mcpy.fetch({ url: TARGET, max_chars: 1_000, fresh: true });
     expect(result.status).toBe(200);
     expect(result.meta.attempts).toBe(2);
   });

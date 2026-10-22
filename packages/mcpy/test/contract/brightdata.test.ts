@@ -9,7 +9,7 @@ const API = "https://api.brightdata.com/request";
 const TARGET = "https://example.com/blog/circuit-breakers";
 const unlocker = () => brightData({ apiKey: KEY, zone: "web_unlocker1" });
 const serp = () => brightDataSearch({ apiKey: KEY, zone: "serp_api1" });
-const req = (format: PageFormat = PageFormat.Markdown) => ({ url: TARGET, format, userAgent: UserAgentProfile.ChromeDesktop });
+const req = (format: PageFormat = PageFormat.Markdown) => ({ url: TARGET, format, userAgent: UserAgentProfile.Chrome });
 type Envelope = { status_code: number; headers: Record<string, string>; body: string };
 
 describe("bright data web unlocker contract", () => {
@@ -104,9 +104,9 @@ describe("bright data SERP contract", () => {
     { url: "https://example.com/blog/circuit-breakers", title: "https://example.com/blog/circuit-breakers", snippet: "" },
   ];
 
-  it("POSTs a Google URL with q, num and brd_json=1 in raw format", async () => {
+  it("POSTs a Google URL with q and brd_json=1 in raw format (no num: Google dropped it)", async () => {
     const { fetch, calls } = stubFetch(() => json(fixtureJson("brightdata-serp.json")));
-    await serp().search({ query: "circuit breaker pattern", limit: 10 }, providerCall(fetch));
+    await serp().search({ query: "circuit breaker pattern", type: "web", limit: 10, page: 1 }, providerCall(fetch));
     expect(calls[0].url).toBe(API);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].headers.get("authorization")).toBe(`Bearer ${KEY}`);
@@ -115,46 +115,51 @@ describe("bright data SERP contract", () => {
     expect(body).not.toHaveProperty("headers");
     const google = new URL(body.url);
     expect(`${google.origin}${google.pathname}`).toBe("https://www.google.com/search");
-    expect(Object.fromEntries(google.searchParams)).toEqual({ q: "circuit breaker pattern", num: "10", brd_json: "1" });
+    expect(Object.fromEntries(google.searchParams)).toEqual({ q: "circuit breaker pattern", brd_json: "1" });
   });
 
-  it("caps num at 100", async () => {
-    const { fetch, calls } = stubFetch(() => json(fixtureJson("brightdata-serp.json")));
-    await serp().search({ query: "x", limit: 500 }, providerCall(fetch));
-    expect(new URL((calls[0].body as { url: string }).url).searchParams.get("num")).toBe("100");
+  // Regression: Google ignores `num` since 2025, so results past the first
+  // page come from follow-up requests with `start`.
+  it("pages with start until it has enough results", async () => {
+    const page = (from: number, n: number) => ({ general: {}, organic: Array.from({ length: n }, (_, i) => ({ link: `https://r${from + i}.example/`, title: `R${from + i}` })) });
+    const { fetch, calls } = stubFetch((_url, n) => json(n === 1 ? page(0, 10) : page(10, 10)));
+    const hits = await serp().search({ query: "x", type: "web", limit: 15, page: 1 }, providerCall(fetch));
+    expect(hits).toHaveLength(15);
+    expect(calls).toHaveLength(2);
+    expect(new URL((calls[1].body as { url: string }).url).searchParams.get("start")).toBe("10");
   });
 
   it("maps organic results, defaulting title to the link and snippet to empty", async () => {
     const { fetch } = stubFetch(() => json(fixtureJson("brightdata-serp.json")));
-    expect(await serp().search({ query: "circuit breaker pattern", limit: 10 }, providerCall(fetch))).toEqual(expected);
+    expect(await serp().search({ query: "circuit breaker pattern", type: "web", limit: 10, page: 1 }, providerCall(fetch))).toEqual(expected);
   });
 
   it("unwraps a SERP delivered inside the unlocker envelope", async () => {
     const { fetch } = stubFetch(() => json(fixtureJson("brightdata-serp-wrapped.json")));
-    expect(await serp().search({ query: "circuit breaker pattern", limit: 10 }, providerCall(fetch))).toEqual(expected);
+    expect(await serp().search({ query: "circuit breaker pattern", type: "web", limit: 10, page: 1 }, providerCall(fetch))).toEqual(expected);
   });
 
   it("honors the limit", async () => {
     const { fetch } = stubFetch(() => json(fixtureJson("brightdata-serp.json")));
-    expect(await serp().search({ query: "x", limit: 1 }, providerCall(fetch))).toEqual(expected.slice(0, 1));
+    expect(await serp().search({ query: "x", type: "web", limit: 1, page: 1 }, providerCall(fetch))).toEqual(expected.slice(0, 1));
   });
 
   it("maps an HTML SERP (brd_json not enabled) to bad_response", async () => {
     const { fetch } = stubFetch(() => new Response("<!doctype html><title>Google</title>", { status: 200 }));
-    const failure = await failureOf(serp().search({ query: "x", limit: 5 }, providerCall(fetch)));
+    const failure = await failureOf(serp().search({ query: "x", type: "web", limit: 5, page: 1 }, providerCall(fetch)));
     expect(failure.code).toBe(ErrorCode.BadResponse);
     expect(failure.message).toContain("brd_json");
   });
 
   it("maps a wrapped body that is not JSON to bad_response", async () => {
     const { fetch } = stubFetch(() => json({ status_code: 200, body: "<html>captcha</html>" }));
-    const failure = await failureOf(serp().search({ query: "x", limit: 5 }, providerCall(fetch)));
+    const failure = await failureOf(serp().search({ query: "x", type: "web", limit: 5, page: 1 }, providerCall(fetch)));
     expect(failure.code).toBe(ErrorCode.BadResponse);
   });
 
   it("maps HTTP errors to upstream_failed with the status", async () => {
     const { fetch } = stubFetch(() => new Response("zone not found", { status: 400 }));
-    const failure = await failureOf(serp().search({ query: "x", limit: 5 }, providerCall(fetch)));
+    const failure = await failureOf(serp().search({ query: "x", type: "web", limit: 5, page: 1 }, providerCall(fetch)));
     expect([failure.code, failure.status]).toEqual([ErrorCode.UpstreamFailed, 400]);
   });
 });

@@ -125,18 +125,17 @@ describe("REST operations", () => {
     const env = makeEnv();
     const url = articleUrl("get");
     await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}`, { env });
-    const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}&max_length=150&start_index=10&fresh=true`, { env });
+    const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}&max_chars=150&offset=10&fresh=true`, { env });
     expect(response.status).toBe(200);
     const result = FetchResultSchema.parse(await response.json());
     expect(result.content.length).toBeLessThanOrEqual(150);
-    expect(result.start_index).toBe(10);
-    expect(result.truncated).toBe(true);
-    expect(result.next_index).toBe(result.end_index);
+    expect(result.offset).toBe(10);
+    expect(result.next_offset).toBe(result.offset + result.content.length);
     expect(result.meta.cache).toBe(CacheStatus.Bypass);
   });
 
   it("POST /v1/grep returns matching lines", async () => {
-    const response = await call(RestRoute.Grep, { body: { url: articleUrl("grep"), pattern: "garden society", context_lines: 0 } });
+    const response = await call(RestRoute.Grep, { body: { url: articleUrl("grep"), pattern: "garden society", context: 0 } });
     expect(response.status).toBe(200);
     const result = GrepResultSchema.parse(await response.json());
     expect(result.matches).toBe(1);
@@ -147,16 +146,16 @@ describe("REST operations", () => {
     const query = `url=${encodeURIComponent(articleUrl("grepget"))}&pattern=${encodeURIComponent("section \\d+")}&max_matches=2`;
     const result = GrepResultSchema.parse(await (await call(`${RestRoute.Grep}?${query}`)).json());
     expect(result.matches).toBe(2);
-    expect(result.capped).toBe(true);
+    expect(result.more_matches).toBe(true);
   });
 
   it("rejects invalid input with 400 invalid_input and details", async () => {
-    const response = await call(RestRoute.Fetch, { body: { url: "not a url", max_length: 5 } });
+    const response = await call(RestRoute.Fetch, { body: { url: "not a url", max_chars: 5 } });
     expect(response.status).toBe(400);
     const error = await errorOf(response);
     expect(error.code).toBe(ErrorCode.InvalidInput);
     expect(error.details?.some((d) => d.startsWith("url"))).toBe(true);
-    expect(error.details?.some((d) => d.startsWith("max_length"))).toBe(true);
+    expect(error.details?.some((d) => d.startsWith("max_chars"))).toBe(true);
   });
 
   it.each([["not json"], ["[1,2]"]])("rejects the body %j with 400 invalid_input", async (body) => {

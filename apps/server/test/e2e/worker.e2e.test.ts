@@ -104,7 +104,7 @@ describe("worker basics", () => {
 
 describe("REST against elie.net", () => {
   it("fetches cold, then serves the repeat from cache within budget", async () => {
-    const cold = await post(RestRoute.Fetch, { url: TARGET, max_length: 2_000 });
+    const cold = await post(RestRoute.Fetch, { url: TARGET, max_chars: 2_000 });
     expect(cold.response.status, cold.text).toBe(200);
     expect(cold.response.headers.get("X-Request-Id")).toBeTruthy();
     const first = FetchResultSchema.parse(JSON.parse(cold.text));
@@ -117,7 +117,7 @@ describe("REST against elie.net", () => {
     expect(cold.text.length).toBeLessThanOrEqual(2_000 + BUDGET.restSlackBytes);
     Object.assign(measured, { coldWallMs: Math.round(cold.wallMs), coldServerMs: first.meta.latency_ms, restBodyBytes: cold.text.length });
 
-    const warm = await post(RestRoute.Fetch, { url: TARGET, max_length: 2_000 });
+    const warm = await post(RestRoute.Fetch, { url: TARGET, max_chars: 2_000 });
     const second = FetchResultSchema.parse(JSON.parse(warm.text));
     expect(second.meta.cache).toBe(CacheStatus.Hit);
     expect(second.meta.attempts).toBe(0);
@@ -128,15 +128,15 @@ describe("REST against elie.net", () => {
   });
 
   it("paginates with GET query parameters", async () => {
-    const { response, text } = await api(`${RestRoute.Fetch}?url=${encodeURIComponent(TARGET)}&max_length=500&start_index=100`);
+    const { response, text } = await api(`${RestRoute.Fetch}?url=${encodeURIComponent(TARGET)}&max_chars=500&offset=100`);
     expect(response.status).toBe(200);
     const result = FetchResultSchema.parse(JSON.parse(text));
-    expect(result.start_index).toBe(100);
+    expect(result.offset).toBe(100);
     expect(result.content.length).toBeLessThanOrEqual(500);
   });
 
   it("greps for Elie", async () => {
-    const { response, text } = await post(RestRoute.Grep, { url: TARGET, pattern: "Elie", context_lines: 1 });
+    const { response, text } = await post(RestRoute.Grep, { url: TARGET, pattern: "Elie", context: 1 });
     expect(response.status, text).toBe(200);
     const result = GrepResultSchema.parse(JSON.parse(text));
     expect(result.matches).toBeGreaterThan(0);
@@ -183,7 +183,7 @@ describe("MCP against elie.net", () => {
 
   it("calls web_fetch on elie.net within the size budget", async () => {
     const maxLength = 2_000;
-    const { message, wallMs } = await rpc("tools/call", { name: ToolName.Fetch, arguments: { url: TARGET, max_length: maxLength } });
+    const { message, wallMs } = await rpc("tools/call", { name: ToolName.Fetch, arguments: { url: TARGET, max_chars: maxLength } });
     const result = message.result as { content: { type: string; text: string }[]; structuredContent: unknown; isError?: boolean };
     expect(result.isError).toBeFalsy();
     const structured = FetchResultSchema.parse(result.structuredContent);

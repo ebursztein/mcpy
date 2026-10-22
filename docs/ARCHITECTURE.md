@@ -49,6 +49,7 @@ Rules, each enforced by tests where possible:
 | Huge or binary pages | Content type checked before download; byte cap on every upstream body |
 | Grep patterns | RE2 (re2js): linear time, so no pattern can stall the server; `literal` mode for plain text |
 | LLM context | Hard caps on returned characters, pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
+| Search coverage | Search providers declare capabilities (types, recency, site filters, depth); requests go only to providers that can honor them. Country, language and device are hints. `thorough` mode asks every capable provider in parallel and merges with reciprocal rank fusion, deduplicating by normalized URL |
 | Repeat requests | Cache keyed by normalized URL / query; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
 
 ## Observability
@@ -80,8 +81,8 @@ Request ids are always generated server-side.
 
 ## User agents
 
-Requests use a `UserAgentProfile` enum (`mcpy`, `chrome_desktop`,
-`chrome_mobile`, `safari_desktop`, `firefox_desktop`, `googlebot`). The honest
+Requests use a `UserAgentProfile` enum (`mcpy`, `chrome`,
+`mobile`, `safari`, `firefox`, `googlebot`). The honest
 `mcpy` profile is the default. Callers may choose a profile per call; the
 engine can also retry a blocked direct fetch with a browser profile before
 paying for the next provider.

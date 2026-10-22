@@ -46,10 +46,10 @@ describe("engine cache: pages", () => {
     const p = fakePages("p", page());
     const { mcpy } = testMcpy({ pages: [p] });
     await mcpy.fetch({ url: URL_A });
-    const chrome = await mcpy.fetch({ url: URL_A, user_agent: UserAgentProfile.ChromeDesktop });
+    const chrome = await mcpy.fetch({ url: URL_A, user_agent: UserAgentProfile.Chrome });
     expect(chrome.meta.cache).toBe(CacheStatus.Miss);
-    expect((await mcpy.fetch({ url: URL_A, user_agent: UserAgentProfile.ChromeDesktop })).meta.cache).toBe(CacheStatus.Hit);
-    expect(p.calls.map((c) => c.userAgent)).toEqual([UserAgentProfile.Mcpy, UserAgentProfile.ChromeDesktop]);
+    expect((await mcpy.fetch({ url: URL_A, user_agent: UserAgentProfile.Chrome })).meta.cache).toBe(CacheStatus.Hit);
+    expect(p.calls.map((c) => c.userAgent)).toEqual([UserAgentProfile.Default, UserAgentProfile.Chrome]);
   });
 
   it("normalizes the fragment and query order to the same key", async () => {
@@ -130,7 +130,7 @@ describe("engine cache: search", () => {
     expect(hit.results).toHaveLength(1);
     expect(s.calls).toBe(1);
 
-    expect((await mcpy.search({ query: "cats", limit: 3 })).meta.cache).toBe(CacheStatus.Miss);
+    expect((await mcpy.search({ query: "cats", max_results: 3 })).meta.cache).toBe(CacheStatus.Miss);
     expect(s.calls).toBe(2);
   });
 
@@ -164,16 +164,16 @@ describe("engine user agents", () => {
     const p = fakePages("p", page());
     const { mcpy } = testMcpy({ pages: [p] });
     await mcpy.fetch({ url: URL_A });
-    expect(p.calls[0].userAgent).toBe(UserAgentProfile.Mcpy);
+    expect(p.calls[0].userAgent).toBe(UserAgentProfile.Default);
   });
 
   it("takes the default from createMcpy and lets each call override it", async () => {
     const p = fakePages("p", page());
-    const { mcpy } = testMcpy({ pages: [p], userAgent: { default: UserAgentProfile.ChromeDesktop } });
+    const { mcpy } = testMcpy({ pages: [p], userAgent: { default: UserAgentProfile.Chrome } });
     await mcpy.fetch({ url: URL_A });
     await mcpy.fetch({ url: "https://example.com/b", user_agent: UserAgentProfile.Googlebot });
-    await mcpy.grep({ url: "https://example.com/c", pattern: "x", user_agent: UserAgentProfile.SafariDesktop });
-    expect(p.calls.map((c) => c.userAgent)).toEqual([UserAgentProfile.ChromeDesktop, UserAgentProfile.Googlebot, UserAgentProfile.SafariDesktop]);
+    await mcpy.grep({ url: "https://example.com/c", pattern: "x", user_agent: UserAgentProfile.Safari });
+    expect(p.calls.map((c) => c.userAgent)).toEqual([UserAgentProfile.Chrome, UserAgentProfile.Googlebot, UserAgentProfile.Safari]);
   });
 
   it("resolves profiles to header strings, honoring a custom mcpy string", async () => {
@@ -182,11 +182,11 @@ describe("engine user agents", () => {
       id: "p",
       costPerCall: 0,
       async fetchPage(_req: unknown, call: { userAgent(profile: UserAgentProfile): string }) {
-        seen.push(call.userAgent(UserAgentProfile.Mcpy), call.userAgent(UserAgentProfile.Googlebot));
+        seen.push(call.userAgent(UserAgentProfile.Default), call.userAgent(UserAgentProfile.Googlebot));
         return page();
       },
     };
-    const { mcpy } = testMcpy({ pages: [p], userAgent: { mcpyString: "acme-bot/1.0 (+https://acme.example)" } });
+    const { mcpy } = testMcpy({ pages: [p], userAgent: { custom: "acme-bot/1.0 (+https://acme.example)" } });
     await mcpy.fetch({ url: URL_A });
     expect(seen[0]).toBe("acme-bot/1.0 (+https://acme.example)");
     expect(seen[1]).toMatch(/Googlebot/);

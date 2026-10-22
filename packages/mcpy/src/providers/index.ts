@@ -4,10 +4,10 @@
  * a provider.
  */
 
-export { brightData, brightDataSearch, type BrightDataOptions } from "./brightdata/index.js";
+export { brightData, brightDataSearch, BRIGHTDATA_SEARCH_CAPABILITIES, type BrightDataOptions } from "./brightdata/index.js";
 export { cloudflareBrowser, type CloudflareBrowserOptions } from "./cloudflare-browser/index.js";
 export { direct, type DirectOptions } from "./direct/index.js";
-export { firecrawl, firecrawlSearch, type FirecrawlOptions } from "./firecrawl/index.js";
+export { firecrawl, firecrawlSearch, FIRECRAWL_SEARCH_CAPABILITIES, type FirecrawlOptions } from "./firecrawl/index.js";
 export {
   ProviderId,
   ProviderIdSchema,
@@ -16,6 +16,7 @@ export {
   type PageProvider,
   type PageRequest,
   type ProviderCall,
+  type SearchCapabilities,
   type SearchProvider,
   type SearchRequest,
 } from "./types.js";

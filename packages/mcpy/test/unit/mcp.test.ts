@@ -72,17 +72,17 @@ describe("registerMcpyTools registration", () => {
 
 describe("registerMcpyTools handlers", () => {
   it("web_fetch returns structuredContent matching the output schema and the rendered text", async () => {
-    const out = await capture(sdk()).get(ToolName.Fetch)!.handler({ url: "https://example.com/a", max_length: 200 });
+    const out = await capture(sdk()).get(ToolName.Fetch)!.handler({ url: "https://example.com/a", max_chars: 200 });
     expect(out.isError).toBeUndefined();
     const result = FetchResultSchema.parse(out.structuredContent);
-    expect(result).toMatchObject({ final_url: "https://www.example.com/a", title: "Breakers", start_index: 0, end_index: 200, truncated: true, next_index: 200 });
+    expect(result).toMatchObject({ final_url: "https://www.example.com/a", title: "Breakers", offset: 0, next_offset: 200 });
     expect(out.content).toEqual([{ type: "text", text: renderFetch(result) }]);
-    expect(out.content[0].text).toContain("More: call again with start_index=200");
+    expect(out.content[0].text).toContain("More: call again with offset=200");
     expect(mentionsProvider(out)).toBe(false);
   });
 
   it("web_grep renders with the pattern", async () => {
-    const out = await capture(sdk()).get(ToolName.Grep)!.handler({ url: "https://example.com/a", pattern: "circuit", context_lines: 1 });
+    const out = await capture(sdk()).get(ToolName.Grep)!.handler({ url: "https://example.com/a", pattern: "circuit", context: 1 });
     const result = GrepResultSchema.parse(out.structuredContent);
     expect(result.matches).toBe(1);
     expect(out.content[0].text).toBe(renderGrep(result, "circuit"));
@@ -137,11 +137,11 @@ describe("registerMcpyTools handlers", () => {
 describe("render helpers", () => {
   const meta = { cache: "hit" as const, latency_ms: 3, attempts: 0 };
   it("handle missing title, unknown status, no matches and no results", () => {
-    const fetchText = renderFetch({ url: "u", final_url: "u", status: 0, format: "markdown", content: "c", start_index: 0, end_index: 1, total_length: 1, truncated: false, meta });
+    const fetchText = renderFetch({ url: "u", final_url: "u", status: 0, format: "markdown", content: "c", offset: 0, total_chars: 1, meta });
     expect(fetchText).toBe("URL: u\nStatus: unknown (cache: hit, 3 ms)\nShowing 0-1 of 1 chars\n---\nc");
-    const grepText = renderGrep({ url: "u", final_url: "u", matches: 0, capped: false, total_lines: 4, output: "", truncated: true, meta }, "zz");
+    const grepText = renderGrep({ url: "u", final_url: "u", matches: 0, more_matches: false, total_lines: 4, output: "", truncated: true, meta }, "zz");
     expect(grepText).toBe("URL: u\nMatches: 0 in 4 lines (cache: hit, 3 ms)\n---\nNo matches for /zz/i\n[output truncated]");
-    expect(renderSearch({ query: "q", results: [], meta })).toBe("Query: q (cache: hit, 3 ms)\n---\nNo results.");
+    expect(renderSearch({ query: "q", type: "web", page: 1, results: [], meta })).toBe("Query: q (web; cache: hit, 3 ms)\n---\nNo results.");
   });
 });
 
@@ -175,7 +175,7 @@ describe("real McpServer over an in-memory transport", () => {
   it("calls web_fetch end to end", async () => {
     const { client, close } = await connect(sdk());
     try {
-      const out = await client.callTool({ name: ToolName.Fetch, arguments: { url: "https://example.com/a", max_length: 200 } });
+      const out = await client.callTool({ name: ToolName.Fetch, arguments: { url: "https://example.com/a", max_chars: 200 } });
       expect(out.isError ?? false).toBe(false);
       const result = FetchResultSchema.parse(out.structuredContent);
       expect(result.final_url).toBe("https://www.example.com/a");

@@ -19,7 +19,9 @@ import {
   type SearchInputSchema,
   type SearchResult,
 } from "../schemas.js";
-import type { UserAgentProfile } from "../enums.js";
+import { GrepMode, type UserAgentProfile } from "../enums.js";
+import type { MergedPage } from "../engine/merge.js";
+import type { SearchHit } from "../schemas.js";
 
 /** Grep output is capped separately: matches with context can balloon. */
 export const MAX_GREP_OUTPUT_CHARS = 20_000;
@@ -40,7 +42,7 @@ export async function fetchOp(
   const url = assertPublicHttpUrl(input.url).toString();
   const served = await engine.page({ url, format: input.format, userAgent: input.user_agent ?? defaultUserAgent }, input.fresh, scope);
   const page = served.value;
-  const { chunk, total, end, hasMore } = paginate(page.content, input.start_index, input.max_length);
+  const { chunk, total, end, hasMore } = paginate(page.content, input.offset, input.max_chars);
   const result = FetchResultSchema.parse({
     url: page.url,
     final_url: page.finalUrl,
@@ -48,11 +50,9 @@ export async function fetchOp(
     status: page.status,
     format: page.format,
     content: chunk,
-    start_index: input.start_index,
-    end_index: end,
-    total_length: total,
-    next_index: hasMore ? end : undefined,
-    truncated: hasMore,
+    offset: input.offset,
+    total_chars: total,
+    next_offset: hasMore ? end : undefined,
     meta: meta(served, startedAt),
   });
   return { result, served, outputChars: result.content.length };
@@ -68,13 +68,13 @@ export async function grepOp(
   const url = assertPublicHttpUrl(input.url).toString();
   const served = await engine.page({ url, format: input.format, userAgent: input.user_agent ?? defaultUserAgent }, input.fresh, scope);
   const lines = served.value.content.split("\n");
-  const grep = grepLines(lines, input.pattern, input.context_lines, input.max_matches, input.mode);
+  const grep = grepLines(lines, input.pattern, input.context, input.max_matches, input.literal ? GrepMode.Literal : GrepMode.Regex);
   const truncated = grep.output.length > MAX_GREP_OUTPUT_CHARS;
   const result = GrepResultSchema.parse({
     url: served.value.url,
     final_url: served.value.finalUrl,
     matches: grep.matches,
-    capped: grep.capped,
+    more_matches: grep.capped,
     total_lines: lines.length,
     output: truncated ? clip(grep.output, MAX_GREP_OUTPUT_CHARS) : grep.output,
     truncated,
@@ -83,20 +83,61 @@ export async function grepOp(
   return { result, served, outputChars: result.output.length };
 }
 
+/** Clean a merged result for output: collapse whitespace, clip long text. */
+function toHit(hit: MergedPage): SearchHit {
+  const text = (v: string | undefined) => (v ? clip(v.replace(/\s+/g, " ").trim(), MAX_SNIPPET_CHARS) : undefined);
+  return compact({
+    title: text(hit.title) ?? hit.url,
+    url: hit.url,
+    snippet: text(hit.snippet) ?? "",
+    date: text(hit.date),
+    publisher: text(hit.publisher),
+    image: hit.image,
+    price: text(hit.price),
+    rating: hit.rating,
+    reviews: hit.reviews,
+    address: text(hit.address),
+    phone: text(hit.phone),
+    company: text(hit.company),
+    location: text(hit.location),
+    duration: text(hit.duration),
+    sources: hit.sources,
+  });
+}
+
+/** Drop undefined fields so results only carry what the source returned. */
+function compact<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+}
+
 export async function searchOp(
   engine: Engine,
   input: z.infer<typeof SearchInputSchema>,
   scope: CallScope,
 ): Promise<{ result: SearchResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
-  const served = await engine.search({ query: input.query, limit: input.limit }, input.fresh, scope);
+  const served = await engine.search(
+    {
+      query: input.query,
+      type: input.type,
+      limit: input.max_results,
+      page: input.page,
+      country: input.country?.toLowerCase(),
+      language: input.language?.toLowerCase(),
+      recency: input.recency,
+      device: input.device,
+      sites: input.sites?.map((s) => s.toLowerCase()),
+      excludeSites: input.exclude_sites?.map((s) => s.toLowerCase()),
+    },
+    input.mode,
+    input.fresh,
+    scope,
+  );
   const result = SearchResultSchema.parse({
     query: input.query,
-    results: served.value.map((hit) => ({
-      title: clip(hit.title.trim(), MAX_SNIPPET_CHARS),
-      url: hit.url,
-      snippet: clip(hit.snippet.replace(/\s+/g, " ").trim(), MAX_SNIPPET_CHARS),
-    })),
+    type: input.type,
+    page: input.page,
+    results: served.value.map(toHit),
     meta: meta(served, startedAt),
   });
   const outputChars = result.results.reduce((n, r) => n + r.title.length + r.url.length + r.snippet.length, 0);

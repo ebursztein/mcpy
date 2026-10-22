@@ -43,7 +43,7 @@ function toPage(req: PageRequest, res: HttpResponse): FetchedPage {
  * what the fallback chain is for.
  */
 export function direct(options: DirectOptions = {}): PageProvider {
-  const retryProfile = options.blockedRetryProfile === undefined ? UserAgentProfile.ChromeDesktop : options.blockedRetryProfile;
+  const retryProfile = options.blockedRetryProfile === undefined ? UserAgentProfile.Chrome : options.blockedRetryProfile;
 
   async function get(req: PageRequest, profile: UserAgentProfile, call: ProviderCall): Promise<HttpResponse> {
     return call.http.send(

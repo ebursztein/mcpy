@@ -83,7 +83,7 @@ export const EnvSchema = z.object({
   RETRIES: intVar(0, 5, 2),
 
   // User agent
-  DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Mcpy),
+  DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Default),
   USER_AGENT_STRING: z.string().min(1).max(512).optional(),
 
   // Telemetry

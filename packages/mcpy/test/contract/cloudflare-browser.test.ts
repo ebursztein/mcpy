@@ -9,7 +9,7 @@ const TOKEN = "cf-test-token";
 const BASE = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/browser-run`;
 const TARGET = "https://example.com/blog/circuit-breakers";
 const provider = () => cloudflareBrowser({ accountId: ACCOUNT, apiToken: TOKEN });
-const req = (format: PageFormat = PageFormat.Markdown, userAgent: UserAgentProfile = UserAgentProfile.Mcpy) => ({ url: TARGET, format, userAgent });
+const req = (format: PageFormat = PageFormat.Markdown, userAgent: UserAgentProfile = UserAgentProfile.Default) => ({ url: TARGET, format, userAgent });
 
 describe("cloudflare browser run contract", () => {
   it("identifies itself", () => {
@@ -19,7 +19,7 @@ describe("cloudflare browser run contract", () => {
 
   it("POSTs to /markdown with Bearer auth, the user agent and goto options", async () => {
     const { fetch, calls } = stubFetch(() => json(fixtureJson("browser-run-markdown.json")));
-    await provider().fetchPage(req(PageFormat.Markdown, UserAgentProfile.SafariDesktop), providerCall(fetch));
+    await provider().fetchPage(req(PageFormat.Markdown, UserAgentProfile.Safari), providerCall(fetch));
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(`${BASE}/markdown`);
     expect(calls[0].method).toBe("POST");
@@ -27,7 +27,7 @@ describe("cloudflare browser run contract", () => {
     expect(calls[0].headers.get("content-type")).toBe("application/json");
     expect(calls[0].body).toEqual({
       url: TARGET,
-      userAgent: USER_AGENTS[UserAgentProfile.SafariDesktop],
+      userAgent: USER_AGENTS[UserAgentProfile.Safari],
       gotoOptions: { waitUntil: "networkidle2", timeout: TIMEOUT_MS },
     });
   });

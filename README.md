@@ -21,19 +21,35 @@ Design and rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | MCP tool | REST | Does |
 | --- | --- | --- |
-| `web_fetch` | `GET\|POST /v1/fetch` | Page as markdown (or HTML), paginated |
-| `web_grep` | `GET\|POST /v1/grep` | RE2 regex or literal search in a page, with context lines |
-| `web_search` | `GET\|POST /v1/search` | Web search: titles, URLs, snippets |
+| `web_fetch` | `GET\|POST /v1/fetch` | Page as markdown (or HTML), in parts |
+| `web_grep` | `GET\|POST /v1/grep` | Find lines in a page (regex or plain text), with context |
+| `web_search` | `GET\|POST /v1/search` | Search the web, news, images, videos, shopping, jobs or places |
+
+### Parameters
+
+| Tool | Parameters (all but the first are optional) |
+| --- | --- |
+| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `max_chars`, `user_agent`, `fresh` |
+| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `fresh` |
+| search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `fresh` |
+
+- `user_agent`: `default` (honest mcpy agent), `chrome`, `safari`, `firefox`, `mobile`, `googlebot`.
+- `type`: `web`, `news`, `images`, `videos`, `shopping`, `jobs`, `places`.
+- `recency`: `hour`, `day`, `week`, `month`, `year`. `device`: `desktop`, `mobile`.
+- `country` / `language`: two-letter codes (`us`, `fr`, `en`). Hints: a source that cannot honor them still answers.
+- `sites` / `exclude_sites`: hostnames (comma-separated in GET query strings).
+- `mode`: `fast` (first source that answers) or `thorough` (every source that supports the request, merged; results carry `sources`, the number of sources that returned them).
+- Long pages: pass the returned `next_offset` as `offset` to read on.
 
 Operators also get `GET /v1/admin/providers` (admin clients only).
 
 ```bash
 curl -s https://tools.example.com/v1/fetch \
   -H "Authorization: Bearer $KEY" -H "content-type: application/json" \
-  -d '{"url":"https://elie.net","max_length":5000}'
+  -d '{"url":"https://elie.net","max_chars":5000}'
 
 # URL-only agents can pass everything as query parameters:
-curl -s "https://tools.example.com/v1/search?query=cloudflare&limit=5&key=$KEY"
+curl -s "https://tools.example.com/v1/search?query=cloudflare&type=news&recency=week&max_results=5&key=$KEY"
 ```
 
 ## Run your own server
@@ -76,8 +92,8 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 | `RETRIES` | `2` | Retries per upstream request |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
 | `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` | `3600` / `900` | Cache TTLs |
-| `DEFAULT_USER_AGENT` | `mcpy` | `mcpy`, `chrome_desktop`, `chrome_mobile`, `safari_desktop`, `firefox_desktop`, `googlebot` |
-| `USER_AGENT_STRING` | - | Replace the `mcpy` UA string |
+| `DEFAULT_USER_AGENT` | `default` | `default`, `chrome`, `safari`, `firefox`, `mobile`, `googlebot` |
+| `USER_AGENT_STRING` | - | Replace the `default` user-agent string |
 | `ALLOWED_HOSTNAMES` | - | Accepted Host headers (set on custom domains) |
 | `ALLOWED_ORIGIN_HOSTNAMES` | - | Extra browser origins allowed to call `/mcp` |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |

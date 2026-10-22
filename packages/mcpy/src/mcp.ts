@@ -17,6 +17,7 @@ import {
   type FetchResult,
   type GrepResult,
   type McpyApi,
+  type SearchHit,
   type SearchResult,
 } from "./schemas.js";
 
@@ -43,20 +44,38 @@ export function renderFetch(r: FetchResult): string {
     `URL: ${r.final_url}`,
     r.title ? `Title: ${r.title}` : "",
     `Status: ${r.status || "unknown"} (${cacheNote(r.meta)})`,
-    `Showing ${r.start_index}-${r.end_index} of ${r.total_length} chars`,
-    r.next_index !== undefined ? `More: call again with start_index=${r.next_index}` : "",
+    `Showing ${r.offset}-${r.offset + r.content.length} of ${r.total_chars} chars`,
+    r.next_offset !== undefined ? `More: call again with offset=${r.next_offset}` : "",
   ].filter(Boolean);
   return `${header.join("\n")}\n---\n${r.content}`;
 }
 
 export function renderGrep(r: GrepResult, pattern: string): string {
-  const head = `URL: ${r.final_url}\nMatches: ${r.matches}${r.capped ? " (capped)" : ""} in ${r.total_lines} lines (${cacheNote(r.meta)})`;
+  const head = `URL: ${r.final_url}\nMatches: ${r.matches}${r.more_matches ? " (more exist)" : ""} in ${r.total_lines} lines (${cacheNote(r.meta)})`;
   return `${head}\n---\n${r.matches ? r.output : `No matches for /${pattern}/i`}${r.truncated ? "\n[output truncated]" : ""}`;
 }
 
+/** The optional facts of a hit, as one compact line. */
+function facts(h: SearchHit): string {
+  const parts = [
+    h.publisher,
+    h.date,
+    h.company,
+    h.location,
+    h.price,
+    h.rating !== undefined ? `${h.rating}★${h.reviews !== undefined ? ` (${h.reviews})` : ""}` : undefined,
+    h.address,
+    h.phone,
+    h.duration,
+    h.sources > 1 ? `${h.sources} sources` : undefined,
+  ].filter(Boolean);
+  return parts.length ? `\n   ${parts.join(" · ")}` : "";
+}
+
 export function renderSearch(r: SearchResult): string {
-  const body = r.results.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}${h.snippet ? `\n   ${h.snippet}` : ""}`).join("\n\n");
-  return `Query: ${r.query} (${cacheNote(r.meta)})\n---\n${body || "No results."}`;
+  const body = r.results.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}${facts(h)}${h.snippet ? `\n   ${h.snippet}` : ""}`).join("\n\n");
+  const page = r.page > 1 ? `, page ${r.page}` : "";
+  return `Query: ${r.query} (${r.type}${page}; ${cacheNote(r.meta)})\n---\n${body || "No results."}`;
 }
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -67,7 +86,7 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
     {
       title: "Web Fetch",
       description:
-        "Fetch a web page as clean markdown (or raw HTML). Handles blocked and JavaScript-heavy pages automatically. Long pages are paginated: pass next_index as start_index to continue.",
+        "Fetch a web page as clean markdown (or raw HTML). Handles blocked and JavaScript-heavy pages automatically. Long pages come in parts: pass next_offset as offset to continue.",
       inputSchema: FetchInputSchema,
       outputSchema: FetchResultSchema,
       annotations: READ_ONLY,
@@ -92,7 +111,8 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
     ToolName.Search,
     {
       title: "Web Search",
-      description: "Search the web. Returns titles, URLs and short snippets; read a result with web_fetch.",
+      description:
+        "Search the web, news, images, videos, shopping, jobs or places. Filter by country, language, recency (hour/day/week/month/year) and sites. mode=thorough combines several sources for better coverage. Read a result with web_fetch.",
       inputSchema: SearchInputSchema,
       outputSchema: SearchResultSchema,
       annotations: READ_ONLY,

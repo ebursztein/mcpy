@@ -1,8 +1,8 @@
 /** Shared test doubles. Tests import the SDK through the `mcpy` aliases. */
 
 import { readFileSync } from "node:fs";
-import { ContentKind, createMcpy, MemoryCache, PageFormat, type McpyOptions } from "mcpy";
-import type { FetchedPage, FoundPage, PageProvider, PageRequest, SearchProvider } from "mcpy/providers";
+import { ContentKind, createMcpy, MemoryCache, PageFormat, SearchType, type McpyOptions } from "mcpy";
+import type { FetchedPage, FoundPage, PageProvider, PageRequest, SearchCapabilities, SearchProvider, SearchRequest } from "mcpy/providers";
 import { MemorySink, Telemetry } from "mcpy/telemetry";
 
 export const LONG_TEXT = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(20);
@@ -37,13 +37,32 @@ export function fakePages(id: string, script: Script<FetchedPage>, costPerCall =
   };
 }
 
-export function fakeSearch(id: string, script: FoundPage[] | Error, costPerCall = 0): SearchProvider & { calls: number } {
+/** A provider that can do everything, unless a test narrows it. */
+export const ALL_SEARCH: SearchCapabilities = {
+  types: Object.values(SearchType),
+  recency: true,
+  sites: true,
+  country: true,
+  language: true,
+  device: true,
+  maxDepth: 1_000,
+};
+
+export function fakeSearch(
+  id: string,
+  script: FoundPage[] | Error,
+  costPerCall = 0,
+  capabilities: SearchCapabilities = ALL_SEARCH,
+): SearchProvider & { calls: number; requests: SearchRequest[] } {
   const p = {
     id,
     costPerCall,
+    capabilities,
     calls: 0,
-    async search() {
+    requests: [] as SearchRequest[],
+    async search(req: SearchRequest) {
       p.calls++;
+      p.requests.push(req);
       if (script instanceof Error) throw script;
       return script;
     },

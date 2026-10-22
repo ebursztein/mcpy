@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AttemptOutcome, CacheStatus, LogLevel, type UserAgentProfile } from "../enums.js";
+import { AttemptOutcome, CacheStatus, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
 import type { HttpClient } from "../http/client.js";
 import { normalizeUrl, sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
@@ -9,7 +9,9 @@ import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
 import type { Cache } from "./cache.js";
-import { runChain, type ChainResult } from "./chain.js";
+import { runChain, type AttemptRecord, type ChainResult } from "./chain.js";
+import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
+import { capableProviders } from "./search-routing.js";
 import { assessPage } from "./quality.js";
 
 export const EngineLimitsSchema = z.object({
@@ -82,19 +84,52 @@ export class Engine {
     );
   }
 
-  async search(req: SearchRequest, fresh: boolean, scope: CallScope): Promise<Served<FoundPage[]>> {
-    const key = `${CACHE_VERSION}:search:${await sha256Hex(`${req.query.toLowerCase()}\n${req.limit}`)}`;
-    const ttl = (hits: FoundPage[]) => (hits.length ? this.deps.limits.searchTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
+  /**
+   * Fast mode: capable providers in order, first answer wins. Thorough mode:
+   * every capable provider in parallel under the same deadline, results
+   * merged by rank fusion. Every search parameter is part of the cache key.
+   */
+  async search(req: SearchRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPage[]>> {
+    const providers = capableProviders(this.deps.searchProviders, req);
+    const identity = [mode, req.query.toLowerCase(), req.type, req.limit, req.page, req.country, req.language, req.recency, req.device, req.sites, req.excludeSites];
+    const key = `${CACHE_VERSION}:search:${await sha256Hex(JSON.stringify(identity))}`;
+    const ttl = (hits: MergedPage[]) => (hits.length ? this.deps.limits.searchTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
     return this.cached(key, ttl, fresh, scope, (deadlineAt) =>
-      runChain({
-        providers: this.deps.searchProviders,
-        attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
-        // Any answer from a search provider is final, even zero hits.
-        judge: () => ({ outcome: AttemptOutcome.Ok }),
-        describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
-        ...this.chainCommon(deadlineAt, scope),
-      }),
+      mode === SearchMode.Thorough ? this.searchAll(providers, req, deadlineAt, scope) : this.searchFirst(providers, req, deadlineAt, scope),
     );
+  }
+
+  private searchChain(providers: SearchProvider[], req: SearchRequest, deadlineAt: number, scope: CallScope) {
+    return runChain({
+      providers,
+      attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
+      // Any answer from a search provider is final, even zero hits.
+      judge: () => ({ outcome: AttemptOutcome.Ok }),
+      describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
+      ...this.chainCommon(deadlineAt, scope),
+    });
+  }
+
+  private async searchFirst(providers: SearchProvider[], req: SearchRequest, deadlineAt: number, scope: CallScope): Promise<ChainResult<MergedPage[]>> {
+    const result = await this.searchChain(providers, req, deadlineAt, scope);
+    return { ...result, value: dedupe(result.value, req.limit) };
+  }
+
+  private async searchAll(providers: SearchProvider[], req: SearchRequest, deadlineAt: number, scope: CallScope): Promise<ChainResult<MergedPage[]>> {
+    const settled = await Promise.allSettled(providers.map((p) => this.searchChain([p], req, deadlineAt, scope)));
+    const ok = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+    if (ok.length === 0) throw (settled[0] as PromiseRejectedResult).reason;
+    const attempts: AttemptRecord[] = settled.flatMap((s, i) =>
+      s.status === "fulfilled" ? s.value.attempts : [{ provider: providers[i].id, outcome: AttemptOutcome.Error, latencyMs: 0 }],
+    );
+    const costUsd = settled.reduce((sum, s, i) => sum + (s.status === "fulfilled" ? s.value.costUsd : providers[i].costPerCall), 0);
+    return {
+      value: mergeRanked(ok.map((r) => r.value), req.limit),
+      provider: ok.map((r) => r.provider).join("+"),
+      attempts,
+      costUsd,
+      salvaged: false,
+    };
   }
 
   private chainCommon(deadlineAt: number, scope: CallScope) {

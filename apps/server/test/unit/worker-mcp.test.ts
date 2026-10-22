@@ -46,7 +46,7 @@ describe("MCP over /mcp", () => {
 
   it("tools/call web_fetch returns structuredContent and a readable text", async () => {
     const url = articleUrl("mcp");
-    const { message } = await rpc("tools/call", { name: ToolName.Fetch, arguments: { url, max_length: 500 } });
+    const { message } = await rpc("tools/call", { name: ToolName.Fetch, arguments: { url, max_chars: 500 } });
     const result = message.result as ToolCallResult;
     expect(result.isError).toBeFalsy();
     const structured = FetchResultSchema.parse(result.structuredContent);

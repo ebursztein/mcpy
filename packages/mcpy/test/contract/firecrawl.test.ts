@@ -8,7 +8,7 @@ const KEY = "fc-test-key";
 const TARGET = "https://example.com/blog/circuit-breakers";
 type Scrape = { success: boolean; data: { markdown: string; rawHtml?: string; metadata: Record<string, unknown> } };
 const scrape = () => fixtureJson<Scrape>("firecrawl-scrape.json");
-const req = (format: PageFormat = PageFormat.Markdown) => ({ url: TARGET, format, userAgent: UserAgentProfile.Mcpy });
+const req = (format: PageFormat = PageFormat.Markdown) => ({ url: TARGET, format, userAgent: UserAgentProfile.Default });
 
 describe("firecrawl scrape contract", () => {
   it("identifies itself", () => {
@@ -24,7 +24,7 @@ describe("firecrawl scrape contract", () => {
     expect(calls[0].headers.get("authorization")).toBe(`Bearer ${KEY}`);
     expect(calls[0].headers.get("content-type")).toBe("application/json");
     expect(calls[0].body).toMatchObject({ url: TARGET, formats: ["markdown"], onlyMainContent: true, timeout: TIMEOUT_MS, maxAge: 0 });
-    expect(calls[0].body).toMatchObject({ headers: { "User-Agent": USER_AGENTS[UserAgentProfile.Mcpy] } });
+    expect(calls[0].body).toMatchObject({ headers: { "User-Agent": USER_AGENTS[UserAgentProfile.Default] } });
   });
 
   it("asks for rawHtml of the whole page in HTML mode", async () => {
@@ -137,22 +137,22 @@ describe("firecrawl scrape contract", () => {
 describe("firecrawl search contract", () => {
   it("POSTs /v2/search with the query, limit and timeout", async () => {
     const { fetch, calls } = stubFetch(() => json(fixtureJson("firecrawl-search.json")));
-    await firecrawlSearch({ apiKey: KEY }).search({ query: "circuit breaker pattern", limit: 3 }, providerCall(fetch));
+    await firecrawlSearch({ apiKey: KEY }).search({ query: "circuit breaker pattern", type: "web", limit: 3, page: 1 }, providerCall(fetch));
     expect(calls[0].url).toBe("https://api.firecrawl.dev/v2/search");
     expect(calls[0].method).toBe("POST");
     expect(calls[0].headers.get("authorization")).toBe(`Bearer ${KEY}`);
-    expect(calls[0].body).toEqual({ query: "circuit breaker pattern", limit: 3, timeout: TIMEOUT_MS });
+    expect(calls[0].body).toEqual({ query: "circuit breaker pattern", limit: 3, sources: [{ type: "web" }], timeout: TIMEOUT_MS });
   });
 
   it("truncates very long queries to 500 characters", async () => {
     const { fetch, calls } = stubFetch(() => json(fixtureJson("firecrawl-search.json")));
-    await firecrawlSearch({ apiKey: KEY }).search({ query: "q".repeat(800), limit: 5 }, providerCall(fetch));
+    await firecrawlSearch({ apiKey: KEY }).search({ query: "q".repeat(800), type: "web", limit: 5, page: 1 }, providerCall(fetch));
     expect((calls[0].body as { query: string }).query).toHaveLength(500);
   });
 
   it("maps web results, defaulting a missing title to the URL", async () => {
     const { fetch } = stubFetch(() => json(fixtureJson("firecrawl-search.json")));
-    const hits = await firecrawlSearch({ apiKey: KEY }).search({ query: "circuit breaker", limit: 10 }, providerCall(fetch));
+    const hits = await firecrawlSearch({ apiKey: KEY }).search({ query: "circuit breaker", type: "web", limit: 10, page: 1 }, providerCall(fetch));
     expect(hits).toEqual([
       {
         url: "https://example.com/blog/circuit-breakers",
@@ -170,16 +170,16 @@ describe("firecrawl search contract", () => {
 
   it("returns no hits when data.web is absent", async () => {
     const { fetch } = stubFetch(() => json({ success: true, data: {} }));
-    expect(await firecrawlSearch({ apiKey: KEY }).search({ query: "x", limit: 5 }, providerCall(fetch))).toEqual([]);
+    expect(await firecrawlSearch({ apiKey: KEY }).search({ query: "x", type: "web", limit: 5, page: 1 }, providerCall(fetch))).toEqual([]);
   });
 
   it("maps 402 to upstream_failed and malformed hits to bad_response", async () => {
     const credits = stubFetch(() => json(fixtureJson("firecrawl-error-402.json"), 402));
-    const f1 = await failureOf(firecrawlSearch({ apiKey: KEY }).search({ query: "x", limit: 5 }, providerCall(credits.fetch)));
+    const f1 = await failureOf(firecrawlSearch({ apiKey: KEY }).search({ query: "x", type: "web", limit: 5, page: 1 }, providerCall(credits.fetch)));
     expect([f1.code, f1.status]).toEqual([ErrorCode.UpstreamFailed, 402]);
 
     const bad = stubFetch(() => json({ success: true, data: { web: [{ title: "no url" }] } }));
-    const f2 = await failureOf(firecrawlSearch({ apiKey: KEY }).search({ query: "x", limit: 5 }, providerCall(bad.fetch)));
+    const f2 = await failureOf(firecrawlSearch({ apiKey: KEY }).search({ query: "x", type: "web", limit: 5, page: 1 }, providerCall(bad.fetch)));
     expect(f2.code).toBe(ErrorCode.BadResponse);
   });
 });

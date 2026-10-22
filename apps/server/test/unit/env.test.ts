@@ -26,7 +26,7 @@ describe("loadEnv defaults", () => {
     expect(config.SEARCH_CACHE_TTL_SECONDS).toBe(900);
     expect(config.RETRIES).toBe(2);
     expect(config.LOG_LEVEL).toBe(LogLevel.Info);
-    expect(config.DEFAULT_USER_AGENT).toBe(UserAgentProfile.Mcpy);
+    expect(config.DEFAULT_USER_AGENT).toBe(UserAgentProfile.Default);
     expect(config.OTEL_SERVICE_NAME).toBe("mcpy");
     expect(config.DEPLOYMENT_ENV).toBe("production");
     expect(config.ALLOW_ANONYMOUS).toBe(false);
@@ -38,13 +38,13 @@ describe("loadEnv defaults", () => {
   it("accepts explicit values", () => {
     const config = loadEnv({
       LOG_LEVEL: LogLevel.Debug,
-      DEFAULT_USER_AGENT: UserAgentProfile.ChromeDesktop,
+      DEFAULT_USER_AGENT: UserAgentProfile.Chrome,
       RETRIES: "0",
       DEADLINE_MS: "60000",
       ALLOW_ANONYMOUS: "true",
     });
     expect(config.LOG_LEVEL).toBe(LogLevel.Debug);
-    expect(config.DEFAULT_USER_AGENT).toBe(UserAgentProfile.ChromeDesktop);
+    expect(config.DEFAULT_USER_AGENT).toBe(UserAgentProfile.Chrome);
     expect(config.RETRIES).toBe(0);
     expect(config.DEADLINE_MS).toBe(60_000);
     expect(config.ALLOW_ANONYMOUS).toBe(true);
@@ -140,7 +140,7 @@ describe("empty strings and memoization", () => {
     expect(config.LOG_LEVEL).toBe(LogLevel.Info);
     expect(config.FIRECRAWL_API_KEY).toBeUndefined();
     expect(config.OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
-    expect(config.DEFAULT_USER_AGENT).toBe(UserAgentProfile.Mcpy);
+    expect(config.DEFAULT_USER_AGENT).toBe(UserAgentProfile.Default);
   });
 
   it("ignores bindings and other non-string values", () => {

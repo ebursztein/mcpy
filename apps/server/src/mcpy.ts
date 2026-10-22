@@ -26,7 +26,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
         searchTtlSeconds: config.SEARCH_CACHE_TTL_SECONDS,
       },
       retry: { retries: config.RETRIES },
-      userAgent: { default: config.DEFAULT_USER_AGENT, mcpyString: config.USER_AGENT_STRING },
+      userAgent: { default: config.DEFAULT_USER_AGENT, custom: config.USER_AGENT_STRING },
     });
     entry = { mcpy, providers };
     instances.set(env, entry);

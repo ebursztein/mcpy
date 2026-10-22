@@ -14,14 +14,18 @@ const fetchResult: FetchResult = {
   status: 200,
   format: PageFormat.Markdown,
   content: "# A",
-  start_index: 0,
-  end_index: 3,
-  total_length: 3,
-  truncated: false,
+  offset: 0,
+  total_chars: 3,
   meta,
 };
-const grepResult: GrepResult = { url: "https://example.com/a", final_url: "https://example.com/a", matches: 1, capped: false, total_lines: 10, output: "3: hit", truncated: false, meta };
-const searchResult: SearchResult = { query: "q", results: [{ title: "T", url: "https://example.com/t", snippet: "s" }], meta };
+const grepResult: GrepResult = { url: "https://example.com/a", final_url: "https://example.com/a", matches: 1, more_matches: false, total_lines: 10, output: "3: hit", truncated: false, meta };
+const searchResult: SearchResult = {
+  query: "q",
+  type: "web",
+  page: 1,
+  results: [{ title: "T", url: "https://example.com/t", snippet: "s", sources: 1 }],
+  meta,
+};
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const client = (fetch: typeof globalThis.fetch, extra: { timeoutMs?: number; baseUrl?: string } = {}) => new McpyClient({ baseUrl: BASE, apiKey: KEY, fetch, ...extra });
@@ -38,7 +42,7 @@ async function errorOf(promise: Promise<unknown>): Promise<McpyError> {
 describe("McpyClient requests", () => {
   it("posts fetch to its route with Bearer auth and the validated body (defaults applied)", async () => {
     const { fetch, calls } = stubFetch(() => json(fetchResult));
-    const out = await client(fetch).fetch({ url: "https://example.com/a", user_agent: UserAgentProfile.ChromeDesktop });
+    const out = await client(fetch).fetch({ url: "https://example.com/a", user_agent: UserAgentProfile.Chrome });
     expect(out).toEqual(fetchResult);
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(`${BASE}${RestRoute.Fetch}`);
@@ -48,9 +52,9 @@ describe("McpyClient requests", () => {
     expect(calls[0].body).toEqual({
       url: "https://example.com/a",
       format: PageFormat.Markdown,
-      start_index: 0,
-      max_length: 10_000,
-      user_agent: UserAgentProfile.ChromeDesktop,
+      offset: 0,
+      max_chars: 10_000,
+      user_agent: UserAgentProfile.Chrome,
       fresh: false,
     });
   });
@@ -59,10 +63,10 @@ describe("McpyClient requests", () => {
     const { fetch, calls } = stubFetch((url) => json(url.endsWith(RestRoute.Grep) ? grepResult : searchResult));
     const c = client(fetch);
     expect(await c.grep({ url: "https://example.com/a", pattern: "hit" })).toEqual(grepResult);
-    expect(await c.search({ query: "  q  ", limit: 3 })).toEqual(searchResult);
+    expect(await c.search({ query: "  q  ", max_results: 3 })).toEqual(searchResult);
     expect(calls.map((x) => x.url)).toEqual([`${BASE}${RestRoute.Grep}`, `${BASE}${RestRoute.Search}`]);
-    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", mode: "regex", context_lines: 3, max_matches: 20, format: PageFormat.Markdown, fresh: false });
-    expect(calls[1].body).toEqual({ query: "q", limit: 3, fresh: false });
+    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", literal: false, context: 3, max_matches: 20, format: PageFormat.Markdown, fresh: false });
+    expect(calls[1].body).toEqual({ query: "q", type: "web", max_results: 3, page: 1, mode: "fast", fresh: false });
   });
 
   it("strips a trailing slash from the base URL", async () => {
@@ -80,7 +84,7 @@ describe("McpyClient requests", () => {
 describe("McpyClient local validation", () => {
   it.each([
     ["fetch", (c: McpyClient) => c.fetch({ url: "not a url" })],
-    ["fetch max_length", (c: McpyClient) => c.fetch({ url: "https://example.com", max_length: 5 })],
+    ["fetch max_chars", (c: McpyClient) => c.fetch({ url: "https://example.com", max_chars: 5 })],
     ["grep", (c: McpyClient) => c.grep({ url: "https://example.com", pattern: "" })],
     ["search", (c: McpyClient) => c.search({ query: "   " })],
   ])("rejects invalid %s input without a request", async (_name, call) => {
@@ -93,8 +97,8 @@ describe("McpyClient local validation", () => {
 
   it("names the offending field in details", async () => {
     const { fetch } = stubFetch(() => json({}));
-    const err = await errorOf(client(fetch).fetch({ url: "https://example.com", start_index: -1 }));
-    expect(err.details?.[0]).toMatch(/^start_index: /);
+    const err = await errorOf(client(fetch).fetch({ url: "https://example.com", offset: -1 }));
+    expect(err.details?.[0]).toMatch(/^offset: /);
   });
 });
 

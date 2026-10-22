@@ -42,7 +42,7 @@ describe("#1 grep cannot be stalled by a pathological pattern", () => {
   it("literal mode treats regex metacharacters as text", async () => {
     const content = `price is $5.00 (approx)\n${"filler line\n".repeat(30)}`;
     const { mcpy } = testMcpy({ pages: [fakePages("p", page({ content }))] });
-    const r = await mcpy.grep({ url: "https://example.com/a", pattern: "$5.00 (approx", mode: GrepMode.Literal });
+    const r = await mcpy.grep({ url: "https://example.com/a", pattern: "$5.00 (approx", literal: true });
     expect(r.matches).toBe(1);
   });
 });
@@ -63,7 +63,7 @@ describe("#2 redirects cannot reach private addresses", () => {
   it("checks every hop, including relative and metadata-endpoint locations", async () => {
     for (const location of ["http://169.254.169.254/latest/meta-data", "http://[::ffff:7f00:1]/", "//localhost./x"]) {
       const { fetch, calls } = stubFetch((url) => (calls.length === 1 ? responseAt(url, null, { status: 301, headers: { location } }) : html("x")));
-      const err = await direct().fetchPage({ url: "https://a.example/", format: PageFormat.Markdown, userAgent: UserAgentProfile.Mcpy }, call(fetch)).catch((e) => e);
+      const err = await direct().fetchPage({ url: "https://a.example/", format: PageFormat.Markdown, userAgent: UserAgentProfile.Default }, call(fetch)).catch((e) => e);
       expect(err.code, location).toBe(ErrorCode.InvalidTarget);
       expect(calls, location).toHaveLength(1);
     }

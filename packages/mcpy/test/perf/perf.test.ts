@@ -33,7 +33,7 @@ describe("latency budgets", () => {
   it("cache hit p95 < 25 ms", async () => {
     const { mcpy } = testMcpy({ pages: [fakePages("p", BIG_PAGE)] });
     await mcpy.fetch({ url: "https://example.com/a" });
-    const samples = await time(() => mcpy.fetch({ url: "https://example.com/a", max_length: 5_000 }), 200);
+    const samples = await time(() => mcpy.fetch({ url: "https://example.com/a", max_chars: 5_000 }), 200);
     expect(p95(samples)).toBeLessThan(25);
   });
 
@@ -62,9 +62,9 @@ describe("latency budgets", () => {
 });
 
 describe("response-size budgets (context protection)", () => {
-  it.each([500, 2_000, 10_000, 100_000])("fetch result for max_length=%i stays within max_length + 2 KB", async (max) => {
+  it.each([500, 2_000, 10_000, 100_000])("fetch result for max_chars=%i stays within max_chars + 2 KB", async (max) => {
     const { mcpy } = testMcpy({ pages: [fakePages("p", BIG_PAGE)] });
-    const result = await mcpy.fetch({ url: "https://example.com/a", max_length: max });
+    const result = await mcpy.fetch({ url: "https://example.com/a", max_chars: max });
     expect(result.content.length).toBeLessThanOrEqual(max);
     // Envelope overhead around the (JSON-escaped) content stays under 2 KB.
     expect(JSON.stringify(result).length - JSON.stringify(result.content).length).toBeLessThanOrEqual(2_048);
@@ -74,7 +74,7 @@ describe("response-size budgets (context protection)", () => {
   it("grep output is capped no matter how many lines match", async () => {
     const dense = page({ content: `${"match ".repeat(200)}\n`.repeat(5_000) });
     const { mcpy } = testMcpy({ pages: [fakePages("p", dense)] });
-    const result = await mcpy.grep({ url: "https://example.com/a", pattern: "match", max_matches: 200, context_lines: 20 });
+    const result = await mcpy.grep({ url: "https://example.com/a", pattern: "match", max_matches: 200, context: 20 });
     expect(result.output.length).toBeLessThanOrEqual(MAX_GREP_OUTPUT_CHARS);
     expect(result.truncated).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("response-size budgets (context protection)", () => {
   it("50 search results with huge snippets stay under 50 KB", async () => {
     const hits = Array.from({ length: 50 }, (_, i) => ({ url: `https://r${i}.example`, title: `Result ${i}`, snippet: "x ".repeat(10_000) }));
     const { mcpy } = testMcpy({ search: [fakeSearch("s", hits)] });
-    const result = await mcpy.search({ query: "q", limit: 50 });
+    const result = await mcpy.search({ query: "q", max_results: 50 });
     expect(result.results.every((r) => r.snippet.length <= MAX_SNIPPET_CHARS)).toBe(true);
     expect(JSON.stringify(result).length).toBeLessThan(50_000);
   });
@@ -90,8 +90,8 @@ describe("response-size budgets (context protection)", () => {
   it("html format respects the same character budget", async () => {
     const html = page({ content: `<html><body>${"<div>x</div>".repeat(50_000)}</body></html>`, format: PageFormat.Html, contentType: "text/html" });
     const { mcpy } = testMcpy({ pages: [fakePages("p", html)] });
-    const result = await mcpy.fetch({ url: "https://example.com/a", format: PageFormat.Html, max_length: 3_000 });
+    const result = await mcpy.fetch({ url: "https://example.com/a", format: PageFormat.Html, max_chars: 3_000 });
     expect(result.content.length).toBe(3_000);
-    expect(result.next_index).toBe(3_000);
+    expect(result.next_offset).toBe(3_000);
   });
 });

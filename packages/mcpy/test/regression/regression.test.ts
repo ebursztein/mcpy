@@ -19,7 +19,7 @@ function call(fetch: typeof globalThis.fetch) {
   };
 }
 
-const req = { url: "https://example.com/post", format: PageFormat.Markdown, userAgent: UserAgentProfile.Mcpy };
+const req = { url: "https://example.com/post", format: PageFormat.Markdown, userAgent: UserAgentProfile.Default };
 
 describe("regressions", () => {
   it("#1 title is read from frontmatter when a site serves markdown directly", async () => {

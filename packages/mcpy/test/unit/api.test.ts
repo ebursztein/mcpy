@@ -43,9 +43,9 @@ describe("result shapes", () => {
   });
 
   it("grep returns a GrepResult with no provider in it", async () => {
-    const result = await mcpy.grep({ url: URL_A, pattern: "NEEDLE", context_lines: 0 });
+    const result = await mcpy.grep({ url: URL_A, pattern: "NEEDLE", context: 0 });
     expect(GrepResultSchema.parse(result)).toEqual(result);
-    expect(result).toMatchObject({ matches: 1, capped: false, total_lines: 3, output: "> 2: needle here", truncated: false });
+    expect(result).toMatchObject({ matches: 1, more_matches: false, total_lines: 3, output: "> 2: needle here", truncated: false });
     expect(mentionsProvider(result)).toBe(false);
   });
 
@@ -53,7 +53,7 @@ describe("result shapes", () => {
     const result = await mcpy.search({ query: "  cats  " });
     expect(SearchResultSchema.parse(result)).toEqual(result);
     expect(result.query).toBe("cats");
-    expect(result.results).toEqual([{ url: "https://a.example/", title: "A", snippet: "about a" }]);
+    expect(result.results).toEqual([{ url: "https://a.example/", title: "A", snippet: "about a", sources: 1 }]);
     expect(mentionsProvider(result)).toBe(false);
   });
 
@@ -68,31 +68,33 @@ describe("fetch pagination", () => {
   const content = "0123456789".repeat(25); // 250 chars
   const { mcpy } = testMcpy({ pages: [fakePages("p", page({ content }))] });
 
-  it("returns the first window with a next_index", async () => {
-    const r = await mcpy.fetch({ url: URL_A, max_length: 100 });
-    expect(r).toMatchObject({ start_index: 0, end_index: 100, total_length: 250, next_index: 100, truncated: true });
+  it("returns the first window with a next_offset", async () => {
+    const r = await mcpy.fetch({ url: URL_A, max_chars: 100 });
+    expect(r).toMatchObject({ offset: 0, total_chars: 250, next_offset: 100 });
+    expect(r.content).toHaveLength(100);
     expect(r.content).toBe(content.slice(0, 100));
   });
 
-  it("follows next_index to the last window, which has none", async () => {
-    const mid = await mcpy.fetch({ url: URL_A, max_length: 100, start_index: 100 });
-    expect(mid).toMatchObject({ end_index: 200, next_index: 200, truncated: true });
-    const last = await mcpy.fetch({ url: URL_A, max_length: 100, start_index: mid.next_index });
-    expect(last).toMatchObject({ start_index: 200, end_index: 250, truncated: false });
-    expect(last.next_index).toBeUndefined();
+  it("follows next_offset to the last window, which has none", async () => {
+    const mid = await mcpy.fetch({ url: URL_A, max_chars: 100, offset: 100 });
+    expect(mid).toMatchObject({ offset: 100, next_offset: 200 });
+    const last = await mcpy.fetch({ url: URL_A, max_chars: 100, offset: mid.next_offset });
+    expect(last).toMatchObject({ offset: 200, next_offset: undefined });
+    expect(last.content).toHaveLength(50);
+    expect(last.next_offset).toBeUndefined();
     expect(last.content).toBe(content.slice(200));
   });
 
   it("returns an empty window past the end", async () => {
-    const r = await mcpy.fetch({ url: URL_A, start_index: 1_000 });
-    expect(r).toMatchObject({ content: "", truncated: false, total_length: 250 });
+    const r = await mcpy.fetch({ url: URL_A, offset: 1_000 });
+    expect(r).toMatchObject({ content: "", next_offset: undefined, total_chars: 250 });
   });
 
-  it.each([MAX_OUTPUT_CHARS + 1, 99, 1.5])("rejects max_length %s as invalid_input with details", async (max_length) => {
-    const err = await mcpyError(mcpy.fetch({ url: URL_A, max_length }));
+  it.each([MAX_OUTPUT_CHARS + 1, 99, 1.5])("rejects max_chars %s as invalid_input with details", async (max_chars) => {
+    const err = await mcpyError(mcpy.fetch({ url: URL_A, max_chars }));
     expect(err.code).toBe(ErrorCode.InvalidInput);
     expect(err.httpStatus).toBe(400);
-    expect(err.details?.some((d) => d.startsWith("max_length"))).toBe(true);
+    expect(err.details?.some((d) => d.startsWith("max_chars"))).toBe(true);
   });
 
   it("rejects a malformed input object as invalid_input", async () => {
@@ -151,8 +153,8 @@ describe("grep limits", () => {
   it("caps output at MAX_GREP_OUTPUT_CHARS and flags it", async () => {
     const content = Array.from({ length: 300 }, (_, i) => `match ${i} ${"x".repeat(200)}`).join("\n");
     const { mcpy } = testMcpy({ pages: [fakePages("p", page({ content }))] });
-    const r = await mcpy.grep({ url: URL_A, pattern: "^match", context_lines: 0, max_matches: 200 });
-    expect(r).toMatchObject({ matches: 200, capped: true, total_lines: 300, truncated: true });
+    const r = await mcpy.grep({ url: URL_A, pattern: "^match", context: 0, max_matches: 200 });
+    expect(r).toMatchObject({ matches: 200, more_matches: true, total_lines: 300, truncated: true });
     expect(r.output.length).toBeLessThanOrEqual(MAX_GREP_OUTPUT_CHARS);
     expect(r.output.endsWith("…")).toBe(true);
   });

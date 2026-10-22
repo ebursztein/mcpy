@@ -26,16 +26,20 @@ export const ScrapeResponseSchema = envelope(
   }),
 );
 
+const SearchItem = z.object({
+  url: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  snippet: z.string().optional(),
+  date: z.string().optional(),
+  imageUrl: z.string().optional(),
+});
+
+/** v2 search: one array per requested source. */
 export const SearchResponseSchema = envelope(
   z.object({
-    web: z
-      .array(
-        z.object({
-          url: z.string(),
-          title: z.string().optional(),
-          description: z.string().optional(),
-        }),
-      )
-      .optional(),
+    web: z.array(SearchItem).optional(),
+    news: z.array(SearchItem).optional(),
+    images: z.array(SearchItem).optional(),
   }),
 );

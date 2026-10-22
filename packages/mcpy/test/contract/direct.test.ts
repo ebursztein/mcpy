@@ -9,7 +9,7 @@ const URL_FINAL = "https://www.example.com/blog/circuit-breakers";
 const ARTICLE = fixture("article.html");
 const HTML = { "content-type": "text/html; charset=utf-8" };
 
-const req = (format: PageFormat = PageFormat.Markdown, userAgent: UserAgentProfile = UserAgentProfile.Mcpy) => ({ url: URL_IN, format, userAgent });
+const req = (format: PageFormat = PageFormat.Markdown, userAgent: UserAgentProfile = UserAgentProfile.Default) => ({ url: URL_IN, format, userAgent });
 
 describe("direct provider contract", () => {
   it("identifies itself and is free", () => {
@@ -24,7 +24,7 @@ describe("direct provider contract", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(URL_IN);
     expect(calls[0].method).toBe("GET");
-    expect(calls[0].headers.get("user-agent")).toBe(USER_AGENTS[UserAgentProfile.Mcpy]);
+    expect(calls[0].headers.get("user-agent")).toBe(USER_AGENTS[UserAgentProfile.Default]);
     expect(calls[0].headers.get("accept")).toMatch(/^text\/markdown/);
     expect(calls[0].headers.get("authorization")).toBeNull();
     expect(calls[0].body).toBeUndefined();
@@ -71,12 +71,12 @@ describe("direct provider contract", () => {
     expect(page.title).toBeUndefined();
   });
 
-  it.each([401, 403])("retries once with the chrome_desktop profile on HTTP %i", async (status) => {
+  it.each([401, 403])("retries once with the chrome profile on HTTP %i", async (status) => {
     const { fetch, calls } = stubFetch((_u, n) =>
       n === 1 ? responseAt(URL_IN, "denied", { status, headers: { "content-type": "text/plain" } }) : responseAt(URL_FINAL, ARTICLE, { headers: HTML }),
     );
     const page = await direct().fetchPage(req(), providerCall(fetch));
-    expect(calls.map((c) => c.headers.get("user-agent"))).toEqual([USER_AGENTS[UserAgentProfile.Mcpy], USER_AGENTS[UserAgentProfile.ChromeDesktop]]);
+    expect(calls.map((c) => c.headers.get("user-agent"))).toEqual([USER_AGENTS[UserAgentProfile.Default], USER_AGENTS[UserAgentProfile.Chrome]]);
     expect(page.status).toBe(200);
   });
 
@@ -89,7 +89,7 @@ describe("direct provider contract", () => {
 
   it("does not retry when the caller already uses the retry profile", async () => {
     const { fetch, calls } = stubFetch(() => responseAt(URL_IN, "denied", { status: 403, headers: { "content-type": "text/plain" } }));
-    await direct().fetchPage(req(PageFormat.Markdown, UserAgentProfile.ChromeDesktop), providerCall(fetch));
+    await direct().fetchPage(req(PageFormat.Markdown, UserAgentProfile.Chrome), providerCall(fetch));
     expect(calls).toHaveLength(1);
   });
 
@@ -100,8 +100,8 @@ describe("direct provider contract", () => {
     expect(off.calls).toHaveLength(1);
 
     const custom = stubFetch(blocked);
-    await direct({ blockedRetryProfile: UserAgentProfile.FirefoxDesktop }).fetchPage(req(), providerCall(custom.fetch));
-    expect(custom.calls[1].headers.get("user-agent")).toBe(USER_AGENTS[UserAgentProfile.FirefoxDesktop]);
+    await direct({ blockedRetryProfile: UserAgentProfile.Firefox }).fetchPage(req(), providerCall(custom.fetch));
+    expect(custom.calls[1].headers.get("user-agent")).toBe(USER_AGENTS[UserAgentProfile.Firefox]);
   });
 
   it("does not retry other client errors and reports 404 as the target status", async () => {

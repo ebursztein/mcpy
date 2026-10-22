@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { ContentKind, PageFormat, UserAgentProfile } from "../enums.js";
+import type { ContentKind, Device, PageFormat, Recency, SearchType, UserAgentProfile } from "../enums.js";
 import type { HttpClient, HttpContext } from "../http/client.js";
 
 /** Ids of the built-in providers (custom providers may use their own). */
@@ -37,15 +37,54 @@ export interface FetchedPage {
   format: PageFormat;
 }
 
+/** A search as the engine hands it to a provider (already validated). */
 export interface SearchRequest {
   query: string;
+  type: SearchType;
+  /** Results wanted on this page. */
   limit: number;
+  /** 1-based page: skip (page - 1) * limit results. */
+  page: number;
+  country?: string;
+  language?: string;
+  recency?: Recency;
+  device?: Device;
+  sites?: string[];
+  excludeSites?: string[];
 }
 
+/** One result as a provider found it. Optional fields depend on the type. */
 export interface FoundPage {
   url: string;
   title: string;
   snippet: string;
+  date?: string;
+  publisher?: string;
+  image?: string;
+  price?: string;
+  rating?: number;
+  reviews?: number;
+  address?: string;
+  phone?: string;
+  company?: string;
+  location?: string;
+  duration?: string;
+}
+
+/**
+ * What a search provider can honor. The engine only routes a search to
+ * providers that support its type and its hard filters (recency, sites, and
+ * the requested depth). Country, language and device are best-effort hints.
+ */
+export interface SearchCapabilities {
+  types: readonly SearchType[];
+  recency: boolean;
+  sites: boolean;
+  country: boolean;
+  language: boolean;
+  device: boolean;
+  /** Deepest result reachable: page * limit must not exceed it. */
+  maxDepth: number;
 }
 
 /** What the engine hands a provider for one attempt. */
@@ -75,5 +114,6 @@ export interface PageProvider extends ProviderBase {
 }
 
 export interface SearchProvider extends ProviderBase {
+  readonly capabilities: SearchCapabilities;
   search(req: SearchRequest, call: ProviderCall): Promise<FoundPage[]>;
 }
