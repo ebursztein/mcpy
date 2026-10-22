@@ -18,7 +18,7 @@ export const EngineLimitsSchema = z.object({
   /** Upper bound for a single provider attempt. */
   attemptTimeoutMs: z.number().int().min(1_000).max(300_000).default(20_000),
   /** Upper bound for a whole operation, fallbacks and retries included. */
-  deadlineMs: z.number().int().min(1_000).max(600_000).default(45_000),
+  deadlineMs: z.number().int().min(1_000).max(600_000).default(60_000),
   /** Largest upstream body read. */
   maxResponseBytes: z.number().int().min(10_000).max(50_000_000).default(5_000_000),
   pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),

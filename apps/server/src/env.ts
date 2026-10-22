@@ -76,7 +76,7 @@ export const EnvSchema = z.object({
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
-  DEADLINE_MS: intVar(1_000, 600_000, 45_000),
+  DEADLINE_MS: intVar(1_000, 600_000, 60_000),
   MAX_RESPONSE_BYTES: intVar(10_000, 50_000_000, 5_000_000),
   PAGE_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 3_600),
   SEARCH_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 900),

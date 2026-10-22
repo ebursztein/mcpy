@@ -13,6 +13,8 @@ export const UnlockerEnvelopeSchema = z.object({
  * (see serp-map.ts) so one odd item cannot discard a whole page.
  */
 export const SerpSchema = z.object({
+  /** Set when the SERP arrives inside the request envelope. */
+  status_code: z.number().optional(),
   organic: z.array(z.unknown()).optional(),
   news: z.array(z.unknown()).optional(),
   top_stories: z.object({ items: z.array(z.unknown()).optional() }).partial().optional(),
@@ -46,7 +48,7 @@ const priceText = z
 export const OrganicItem = z.object({ link: z.string(), title: text, description: text, last_modified_date: text, image: text });
 export const NewsItem = z.object({ link: z.string(), title: text, description: text, source: text, date: text, image: text });
 export const ImageItem = z.object({ link: z.string(), title: text, source: text, image: text, original_image: text });
-export const VideoItem = z.object({ link: z.string(), title: text, source: text, date: text, duration: text, image: text });
+export const VideoItem = z.object({ link: z.string(), title: text, description: text, source: text, date: text, duration: text, image: text });
 export const ShoppingItem = z.object({
   link: z.string(),
   title: text,
@@ -60,6 +62,7 @@ export const ShoppingItem = z.object({
 export const JobItem = z.object({ link: z.string(), title: text, company: text, location: text, source: text, description: text });
 export const PlaceItem = z.object({
   name: z.string(),
+  cid: text,
   link: text,
   maps_link: text,
   address: text,

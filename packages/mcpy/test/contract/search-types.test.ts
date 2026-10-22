@@ -24,12 +24,12 @@ describe("bright data: request mapping", () => {
     [SearchType.Jobs, { ibp: "htl;jobs" }],
     [SearchType.Places, { udm: "1" }],
   ])("%s uses the documented Google parameters", (type, extra) => {
-    expect(params(googleUrl(req({ type }), 0))).toEqual({ q: "rust", ...extra, brd_json: "1" });
+    expect(params(googleUrl(req({ type }), 0))).toEqual({ q: "rust", ...extra });
   });
 
   it("maps country, language, recency, device, sites and offsets", () => {
     const url = googleUrl(req({ country: "fr", language: "fr", recency: Recency.Week, device: Device.Mobile, sites: ["a.com", "b.org"] }), 20);
-    expect(params(url)).toEqual({ q: "rust (site:a.com OR site:b.org)", gl: "fr", hl: "fr", tbs: "qdr:w", brd_mobile: "1", start: "20", brd_json: "1" });
+    expect(params(url)).toEqual({ q: "rust (site:a.com OR site:b.org)", gl: "fr", hl: "fr", tbs: "qdr:w", brd_mobile: "1", start: "20" });
     expect(params(googleUrl(req({ excludeSites: ["x.com", "y.com"] }), 0)).q).toBe("rust -site:x.com -site:y.com");
   });
 
@@ -57,9 +57,11 @@ describe("bright data: result mapping per type", () => {
     ]);
   });
 
-  it("images prefer the original image", async () => {
-    const [h] = await run(SearchType.Images, { images: [{ link: "https://p.example/", title: "Cat", image: "thumb.jpg", original_image: "full.jpg", source: "P" }] });
-    expect(h).toMatchObject({ url: "https://p.example/", image: "full.jpg", publisher: "P" });
+  it("images: page title from source, site from title, image from original_image", async () => {
+    const [h] = await run(SearchType.Images, {
+      images: [{ link: "https://p.example/", title: "Pets", image: "https://t.example/thumb.jpg", original_image: "https://p.example/full.jpg", source: "A cat - PetsPets" }],
+    });
+    expect(h).toMatchObject({ url: "https://p.example/", title: "A cat - Pets", publisher: "Pets", image: "https://p.example/full.jpg" });
   });
 
   it("videos include short videos and durations", async () => {

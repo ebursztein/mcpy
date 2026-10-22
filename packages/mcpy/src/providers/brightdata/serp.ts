@@ -26,11 +26,18 @@ const RECENCY: Record<Recency, string> = {
   [Recency.Year]: "qdr:y",
 };
 
-/** Google no longer honors `num` (2025): pages are fetched with `start` until enough results arrive. */
+/** Google no longer honors `num` (2025): each request returns one page of about this many results. */
+const GOOGLE_PAGE_SIZE = 10;
 const MAX_REQUESTS_PER_SEARCH = 5;
+const DEFAULT_COUNTRY = "us";
+const DEFAULT_LANGUAGE = "en";
 
+/**
+ * Jobs is left out: Google Jobs through the SERP API failed upstream when
+ * verified live (2026-10-22: HTTP 502 after 81 s). Re-enable once it works.
+ */
 export const BRIGHTDATA_SEARCH_CAPABILITIES: SearchCapabilities = {
-  types: Object.values(SearchType),
+  types: Object.values(SearchType).filter((t) => t !== SearchType.Jobs),
   recency: true,
   sites: true,
   country: true,
@@ -56,17 +63,45 @@ export function googleUrl(req: SearchRequest, start: number): string {
   if (req.recency) url.searchParams.set("tbs", RECENCY[req.recency]);
   if (req.device === Device.Mobile) url.searchParams.set("brd_mobile", "1");
   if (start > 0) url.searchParams.set("start", String(start));
-  url.searchParams.set("brd_json", "1");
   return url.toString();
 }
 
+/**
+ * One SERP page. Parsed output is requested with `format: "json"` and
+ * `data_format: "parsed"` (verified live: `format: "raw"` with `brd_json=1`
+ * returned an empty body on a Full-JSON zone). The parsed SERP arrives as a
+ * JSON string in the envelope's `body`.
+ */
+/** Relayed search-engine failures worth one more try (Bright Data bills only successes). */
+const TRANSIENT_UPSTREAM = new Set([429, 500, 502, 503, 504]);
+const UPSTREAM_TRIES = 2;
+
 async function fetchSerp(options: BrightDataOptions, url: string, call: ProviderCall): Promise<Serp> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetchSerpOnce(options, url, call);
+    } catch (err) {
+      const retry = err instanceof ProviderFailure && err.status !== undefined && TRANSIENT_UPSTREAM.has(err.status) && attempt < UPSTREAM_TRIES;
+      if (!retry || Date.now() >= call.context.deadlineAt) throw err;
+    }
+  }
+}
+
+async function fetchSerpOnce(options: BrightDataOptions, url: string, call: ProviderCall): Promise<Serp> {
   const response = await call.http.send(
-    { url: API, method: HttpMethod.Post, headers: { Authorization: `Bearer ${options.apiKey}` }, json: { zone: options.zone, url, format: "raw" } },
-    call.context,
+    {
+      url: API,
+      method: HttpMethod.Post,
+      headers: { Authorization: `Bearer ${options.apiKey}` },
+      json: { zone: options.zone, url, format: "json", data_format: "parsed" },
+    },
+    { ...call.context, maxBytes: call.context.maxBytes * 2 },
   );
   if (response.status >= 400) fail(response);
   let serp = SerpSchema.safeParse(safeJson(response.text));
+  // Google's own failure, relayed inside a 200 envelope (seen live: 502 with an empty body).
+  const upstream = serp.success ? serp.data.status_code : undefined;
+  if (upstream !== undefined && upstream >= 400) throw new ProviderFailure(ErrorCode.UpstreamFailed, `search engine returned HTTP ${upstream}`, upstream);
   if (serp.success && serp.data.body && isEmptyEnvelope(serp.data)) serp = SerpSchema.safeParse(safeJson(serp.data.body));
   if (!serp.success) throw new ProviderFailure(ErrorCode.BadResponse, "SERP response was not JSON (is brd_json enabled for this zone?)", response.status);
   // No section at all and no `general` block is an error envelope, not "no results".
@@ -80,18 +115,29 @@ export function brightDataSearch(options: BrightDataOptions): SearchProvider {
     id: ProviderId.BrightData,
     costPerCall: options.costPerCall ?? 0.0015,
     capabilities: BRIGHTDATA_SEARCH_CAPABILITIES,
+    // Measured live: 4-26 s per SERP request.
+    attemptTimeoutMs: 50_000,
     async search(req, call) {
+      const located: SearchRequest = {
+        ...req,
+        country: req.country ?? options.defaultCountry ?? DEFAULT_COUNTRY,
+        language: req.language ?? options.defaultLanguage ?? DEFAULT_LANGUAGE,
+      };
+      // Google serves about 10 results per page and SERP calls take seconds,
+      // so the pages needed are fetched in parallel, then merged in order.
       const skip = (req.page - 1) * req.limit;
+      const requests = Math.min(MAX_REQUESTS_PER_SEARCH, Math.ceil(req.limit / GOOGLE_PAGE_SIZE));
+      const pages = await Promise.all(
+        Array.from({ length: requests }, (_, i) => fetchSerp(options, googleUrl(located, skip + i * GOOGLE_PAGE_SIZE), call)),
+      );
       const found: FoundPage[] = [];
       const seen = new Set<string>();
-      let start = skip;
-      for (let i = 0; i < MAX_REQUESTS_PER_SEARCH && found.length < req.limit; i++) {
-        const batch = mapSerp(req.type, await fetchSerp(options, googleUrl(req, start), call));
-        const fresh = batch.filter((hit) => !seen.has(hit.url));
-        if (fresh.length === 0) break; // the engine has nothing more (or ignores `start` for this type)
-        for (const hit of fresh) seen.add(hit.url);
-        found.push(...fresh);
-        start += batch.length;
+      for (const page of pages) {
+        for (const hit of mapSerp(req.type, page)) {
+          if (seen.has(hit.url)) continue;
+          seen.add(hit.url);
+          found.push(hit);
+        }
       }
       return found.slice(0, req.limit);
     },

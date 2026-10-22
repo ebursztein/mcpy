@@ -104,18 +104,18 @@ describe("bright data SERP contract", () => {
     { url: "https://example.com/blog/circuit-breakers", title: "https://example.com/blog/circuit-breakers", snippet: "" },
   ];
 
-  it("POSTs a Google URL with q and brd_json=1 in raw format (no num: Google dropped it)", async () => {
+  it("POSTs a Google URL asking for parsed JSON, US English by default (no num: Google dropped it)", async () => {
     const { fetch, calls } = stubFetch(() => json(fixtureJson("brightdata-serp.json")));
     await serp().search({ query: "circuit breaker pattern", type: "web", limit: 10, page: 1 }, providerCall(fetch));
     expect(calls[0].url).toBe(API);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].headers.get("authorization")).toBe(`Bearer ${KEY}`);
     const body = calls[0].body as { zone: string; url: string; format: string };
-    expect(body).toMatchObject({ zone: "serp_api1", format: "raw" });
+    expect(body).toMatchObject({ zone: "serp_api1", format: "json", data_format: "parsed" });
     expect(body).not.toHaveProperty("headers");
     const google = new URL(body.url);
     expect(`${google.origin}${google.pathname}`).toBe("https://www.google.com/search");
-    expect(Object.fromEntries(google.searchParams)).toEqual({ q: "circuit breaker pattern", brd_json: "1" });
+    expect(Object.fromEntries(google.searchParams)).toEqual({ q: "circuit breaker pattern", gl: "us", hl: "en" });
   });
 
   // Regression: Google ignores `num` since 2025, so results past the first

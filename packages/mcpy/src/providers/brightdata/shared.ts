@@ -7,6 +7,13 @@ export interface BrightDataOptions {
   /** Web Unlocker zone (pages) or SERP API zone (search). */
   zone: string;
   costPerCall?: number;
+  /**
+   * Search only: country and language used when a search does not set them.
+   * Without them Bright Data geolocates its proxy at random (a US caller can
+   * get Mexican results). Defaults: "us" and "en".
+   */
+  defaultCountry?: string;
+  defaultLanguage?: string;
 }
 
 export const API = "https://api.brightdata.com/request";

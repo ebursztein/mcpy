@@ -107,6 +107,12 @@ interface ProviderBase {
    * than the provider's own health, as for a direct fetch.
    */
   readonly circuitBreaker?: boolean;
+  /**
+   * Attempt budget this provider needs when it is longer than the engine's
+   * default (e.g. SERP APIs that take tens of seconds). Still capped by the
+   * operation deadline.
+   */
+  readonly attemptTimeoutMs?: number;
 }
 
 export interface PageProvider extends ProviderBase {

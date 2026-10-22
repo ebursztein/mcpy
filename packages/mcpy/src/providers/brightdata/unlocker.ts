@@ -17,6 +17,8 @@ export function brightData(options: BrightDataOptions): PageProvider {
   return {
     id: ProviderId.BrightData,
     costPerCall: options.costPerCall ?? 0.0015,
+    // Measured live: 2-38 s per request. As the last fallback it is worth the wait.
+    attemptTimeoutMs: 45_000,
     async fetchPage(req, call) {
       const response = await call.http.send(
         {

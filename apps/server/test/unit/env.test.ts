@@ -20,7 +20,7 @@ describe("loadEnv defaults", () => {
     expect(config.PAGE_PROVIDERS).toEqual([ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]);
     expect(config.SEARCH_PROVIDERS).toEqual([ProviderId.Firecrawl, ProviderId.BrightData]);
     expect(config.ATTEMPT_TIMEOUT_MS).toBe(20_000);
-    expect(config.DEADLINE_MS).toBe(45_000);
+    expect(config.DEADLINE_MS).toBe(60_000);
     expect(config.MAX_RESPONSE_BYTES).toBe(5_000_000);
     expect(config.PAGE_CACHE_TTL_SECONDS).toBe(3_600);
     expect(config.SEARCH_CACHE_TTL_SECONDS).toBe(900);

@@ -88,7 +88,7 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 | `MCPY_CLIENTS` (secret) | - | API clients |
 | `PAGE_PROVIDERS` | `direct,cloudflare_browser,firecrawl,brightdata` | Page fallback order |
 | `SEARCH_PROVIDERS` | `firecrawl,brightdata` | Search fallback order |
-| `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `45000` | Per attempt / per call |
+| `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `60000` | Per attempt / per call |
 | `RETRIES` | `2` | Retries per upstream request |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
 | `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` | `3600` / `900` | Cache TTLs |
@@ -106,7 +106,22 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 Everything is validated with zod at startup; a bad value fails closed with a
 clear log line. A provider without credentials is skipped.
 
-### Observability
+### Bright Data setup
+
+Create two zones in the Bright Data control panel (Proxies & Scraping):
+
+- **Web Unlocker API** (e.g. `mcpy_unlocker`) → `BRIGHTDATA_UNLOCKER_ZONE`
+- **SERP API** with data format **Full JSON** (e.g. `mcpy_serp`) → `BRIGHTDATA_SERP_ZONE`.
+  Light JSON only carries top organic results, so news, images, videos,
+  shopping and places would come back empty.
+
+Measured on 2026-10-22: unlocker requests took 2-38 s and SERP requests
+4-50 s, so mcpy gives them 45-50 s attempt budgets and keeps them after the
+faster providers in the default order. Searches without a country default to
+US English (Bright Data otherwise geolocates at random). Google Jobs through
+the SERP API failed upstream, so `type=jobs` is not offered for Bright Data.
+
+
 
 - **Logs**: one structured JSON line per operation in Workers Logs, with
   `client.name`, `mcpy.request.id`, trace ids, cache status, cost.

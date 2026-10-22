@@ -33,6 +33,8 @@ export interface ChainProvider {
    * (a direct fetch failing says the site is down, not that fetch is).
    */
   readonly circuitBreaker?: boolean;
+  /** Attempt budget this provider needs when longer than the engine default (slow APIs). */
+  readonly attemptTimeoutMs?: number;
 }
 
 export interface Judgement {
@@ -107,7 +109,7 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
       continue;
     }
 
-    const timeoutMs = Math.min(o.attemptTimeoutMs, remaining);
+    const timeoutMs = Math.min(Math.max(o.attemptTimeoutMs, provider.attemptTimeoutMs ?? 0), remaining);
     const started = Date.now();
     const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: provider.costPerCall }, o.parent);
     costUsd += provider.costPerCall;
