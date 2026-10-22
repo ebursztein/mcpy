@@ -1,4 +1,7 @@
-# toolshed
+# mcpy
+
+> mcpy is now a hosted tools server. The previous local, single-binary
+> version is archived at [ebursztein/mcpy-legacy](https://github.com/ebursztein/mcpy-legacy).
 
 A self-hostable tools server for AI agents, running on Cloudflare Workers.
 It exposes the same tools two ways:
@@ -90,7 +93,7 @@ Non-secret settings are `vars` in `wrangler.jsonc`. Secrets are set with
 | `SEARCH_CACHE_TTL_SECONDS` | `900` | Search cache TTL (min 60) |
 | `FETCH_TIMEOUT_MS` | `20000` | Per-provider timeout |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest body read from a provider |
-| `USER_AGENT` | `toolshed/0.1` | UA for direct and browser fetches |
+| `USER_AGENT` | `mcpy/0.1` | UA for direct and browser fetches |
 | `ALLOWED_HOSTNAMES` | - | Restrict accepted `Host` headers (set it on custom domains) |
 | `CF_BROWSER_API_BASE` | Browser Run endpoint | Override the Browser Run API base (`{account}` is substituted) |
 | `COST_*` | see `src/config.ts` | Per-call USD estimates used in telemetry |
@@ -129,7 +132,7 @@ and one per tool call (`blob1 = 'call'`). The column layout is documented in
 ```sql
 SELECT blob3 AS provider, blob4 AS outcome, count() AS n,
        avg(double1) AS avg_ms, sum(double3) AS usd
-FROM toolshed
+FROM mcpy
 WHERE blob1 = 'attempt' AND timestamp > NOW() - INTERVAL '7' DAY
 GROUP BY provider, outcome ORDER BY n DESC
 ```

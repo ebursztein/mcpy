@@ -93,6 +93,6 @@ export function loadConfig(env: Env): Config {
     maxResponseBytes: int(env.MAX_RESPONSE_BYTES, 5_000_000, 10_000),
     cacheTtlSeconds: int(env.CACHE_TTL_SECONDS, 3_600, MIN_CACHE_TTL),
     searchCacheTtlSeconds: int(env.SEARCH_CACHE_TTL_SECONDS, 900, MIN_CACHE_TTL),
-    userAgent: env.USER_AGENT || "Mozilla/5.0 (compatible; toolshed/0.1; +https://github.com/ebursztein/toolshed)",
+    userAgent: env.USER_AGENT || "Mozilla/5.0 (compatible; mcpy/0.1; +https://github.com/ebursztein/mcpy)",
   };
 }

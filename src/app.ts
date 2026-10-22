@@ -6,7 +6,7 @@ import { AnalyticsTelemetry } from "./core/telemetry";
 import { resolveFetchProviders, resolveSearchProviders } from "./providers/registry";
 import { registerWebTools } from "./tools/web";
 
-export const SERVER_NAME = "toolshed";
+export const SERVER_NAME = "mcpy";
 export const SERVER_VERSION = "0.1.0";
 
 /** Wire config, providers, cache and telemetry into the shared service. */

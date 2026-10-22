@@ -3,7 +3,7 @@
 // maintainers' own deployment (tools.ly.tl) and doubles as an example.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "toolshed",
+  "name": "mcpy",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -12,7 +12,7 @@
   // Cache. Wrangler provisions the namespace on first deploy when no id is set.
   "kv_namespaces": [{ "binding": "CACHE" }],
   // Per-call telemetry, queryable with the Analytics Engine SQL API.
-  "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "toolshed" }],
+  "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "mcpy" }],
 
   // Non-secret settings. Secrets (AUTH_TOKENS, provider keys) go through
   // `wrangler secret put`; see README.
@@ -27,10 +27,10 @@
   "env": {
     // Our deployment: `npm run deploy -- --env lytl`
     "lytl": {
-      "name": "toolshed-lytl",
+      "name": "mcpy-lytl",
       "routes": [{ "pattern": "tools.ly.tl", "custom_domain": true }],
       "kv_namespaces": [{ "binding": "CACHE" }],
-      "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "toolshed_lytl" }],
+      "analytics_engine_datasets": [{ "binding": "TELEMETRY", "dataset": "mcpy_lytl" }],
       "vars": {
         "ALLOWED_HOSTNAMES": "tools.ly.tl",
         "FETCH_PROVIDERS": "cf_fetch,cf_browser,firecrawl,brightdata",

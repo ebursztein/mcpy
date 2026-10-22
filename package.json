@@ -1,5 +1,5 @@
 {
-  "name": "toolshed",
+  "name": "mcpy",
   "version": "0.1.0",
   "description": "Self-hostable MCP tools server for Cloudflare Workers: web fetch/search with provider fallback, caching and telemetry",
   "scripts": {
@@ -29,6 +29,6 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/ebursztein/toolshed"
+    "url": "https://github.com/ebursztein/mcpy"
   }
 }
