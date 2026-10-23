@@ -24,6 +24,7 @@ Design and rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `web_fetch` | `GET\|POST /v1/fetch` | Page as markdown (or HTML), in parts |
 | `web_grep` | `GET\|POST /v1/grep` | Find lines in a page (regex or plain text), with context |
 | `web_search` | `GET\|POST /v1/search` | Search the web, news, images, videos, shopping, jobs or places |
+| `paper_search` | `GET\|POST /v1/papers` | Search scholarly papers: authors, year, venue, citations, abstract, free PDF |
 
 ### Parameters
 
@@ -32,6 +33,7 @@ Design and rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | fetch | `url`, `format` (`markdown`\|`html`), `offset`, `max_chars`, `user_agent`, `fresh` |
 | grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `fresh` |
 | search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `fresh` |
+| papers | `query`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `mode`, `fresh` |
 
 - `user_agent`: `default` (honest mcpy agent), `chrome`, `safari`, `firefox`, `mobile`, `googlebot`.
 - `type`: `web`, `news`, `images`, `videos`, `shopping`, `jobs`, `places`.
@@ -88,6 +90,7 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 | `MCPY_CLIENTS` (secret) | - | API clients |
 | `PAGE_PROVIDERS` | `direct,cloudflare_browser,firecrawl,brightdata` | Page fallback order |
 | `SEARCH_PROVIDERS` | `firecrawl,brightdata` | Search fallback order |
+| `PAPER_PROVIDERS` | `openalex,arxiv,semantic_scholar` | Paper index order |
 | `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `60000` | Per attempt / per call |
 | `RETRIES` | `2` | Retries per upstream request |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
@@ -102,9 +105,23 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 | `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run |
 | `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` | - | Firecrawl (URL for self-hosted) |
 | `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
+| `OPENALEX_API_KEY` | - | Optional, free at openalex.org/settings/api. Without it OpenAlex shares a ~100 requests/day budget per IP |
+| `SEMANTIC_SCHOLAR_API_KEY` | - | Enables Semantic Scholar (anonymous calls are rate-limited) |
+| `PAPER_CACHE_TTL_SECONDS` | `86400` | Paper search cache TTL |
 
 Everything is validated with zod at startup; a bad value fails closed with a
 clear log line. A provider without credentials is skipped.
+
+### Paper indexes
+
+OpenAlex (250M+ works with citations, venues and open-access links) and
+arXiv (preprints, always free to read) need no key; Semantic Scholar is
+used when `SEMANTIC_SCHOLAR_API_KEY` is set. In `thorough` mode the same
+paper found in several indexes is merged by DOI, arXiv id or title, keeping
+the highest citation count. Sorting by citations or newest matches title and
+abstract only (OpenAlex full-text matching ranked off-topic classics first).
+arXiv asks for one request every 3 s and throttles otherwise, so mcpy spaces
+its requests and retries patiently; its answers can take up to ~30 s.
 
 ### Bright Data setup
 

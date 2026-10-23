@@ -73,6 +73,7 @@ export const EnvSchema = z.object({
   // Routing between providers
   PAGE_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]),
   SEARCH_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Firecrawl, ProviderId.BrightData]),
+  PAPER_PROVIDERS: csv(ProviderIdSchema, [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.SemanticScholar]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
@@ -80,6 +81,7 @@ export const EnvSchema = z.object({
   MAX_RESPONSE_BYTES: intVar(10_000, 50_000_000, 5_000_000),
   PAGE_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 3_600),
   SEARCH_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 900),
+  PAPER_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 86_400),
   RETRIES: intVar(0, 5, 2),
 
   // User agent
@@ -102,6 +104,10 @@ export const EnvSchema = z.object({
   BRIGHTDATA_API_KEY: secret,
   BRIGHTDATA_UNLOCKER_ZONE: secret,
   BRIGHTDATA_SERP_ZONE: secret,
+  /** Optional: OpenAlex works without it, on a small budget shared per IP. */
+  OPENALEX_API_KEY: secret,
+  /** Semantic Scholar is enabled only with a key (anonymous calls are rate-limited). */
+  SEMANTIC_SCHOLAR_API_KEY: secret,
 });
 export type ServerEnv = z.infer<typeof EnvSchema>;
 

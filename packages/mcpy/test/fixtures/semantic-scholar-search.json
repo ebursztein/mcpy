@@ -1,0 +1,22 @@
+{
+  "total": 2,
+  "offset": 0,
+  "next": 2,
+  "data": [
+    {
+      "paperId": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+      "title": "Attention is All you Need",
+      "authors": [{ "authorId": "40348417", "name": "Ashish Vaswani" }, { "authorId": "1846258", "name": "Noam Shazeer" }],
+      "year": 2017,
+      "venue": "Neural Information Processing Systems",
+      "abstract": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks.",
+      "externalIds": { "DBLP": "journals/corr/VaswaniSPUJGKP17", "ArXiv": "1706.03762", "MAG": "2963403868", "CorpusId": 13756489 },
+      "url": "https://www.semanticscholar.org/paper/204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+      "openAccessPdf": { "url": "https://arxiv.org/pdf/1706.03762", "status": "GREEN" },
+      "citationCount": 151234,
+      "publicationDate": "2017-06-12",
+      "isOpenAccess": true
+    },
+    { "paperId": "x", "title": "A paper with almost nothing", "authors": [], "externalIds": null, "url": null, "openAccessPdf": null }
+  ]
+}

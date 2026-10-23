@@ -14,7 +14,7 @@
  */
 
 import { fileURLToPath } from "node:url";
-import { CacheStatus, ErrorBodySchema, ErrorCode, FetchResultSchema, GrepResultSchema, RestRoute, ToolName } from "mcpy";
+import { CacheStatus, ErrorBodySchema, ErrorCode, FetchResultSchema, GrepResultSchema, PaperSearchResultSchema, RestRoute, ToolName } from "mcpy";
 import { ProviderId } from "mcpy/providers";
 import { unstable_startWorker } from "wrangler";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -44,6 +44,8 @@ beforeAll(async () => {
       MCPY_CLIENTS: plain(`e2e:${USER_KEY},e2e-admin:${ADMIN_KEY}:admin`),
       PAGE_PROVIDERS: plain(ProviderId.Direct),
       SEARCH_PROVIDERS: plain(ProviderId.Firecrawl),
+      // Free and fast; arXiv is free too but can take 30 s per query.
+      PAPER_PROVIDERS: plain(ProviderId.OpenAlex),
       DEPLOYMENT_ENV: plain("e2e"),
       LOG_LEVEL: plain("warn"),
     },
@@ -90,9 +92,10 @@ describe("worker basics", () => {
   it("runs with the free provider only (no paid credentials loaded)", async () => {
     const { response, text } = await api("/v1/admin/providers", { key: ADMIN_KEY });
     expect(response.status).toBe(200);
-    const body = JSON.parse(text) as { pages: string[]; search: string[] };
+    const body = JSON.parse(text) as { pages: string[]; search: string[]; papers: string[] };
     expect(body.pages).toEqual([ProviderId.Direct]);
     expect(body.search).toEqual([]);
+    expect(body.papers).toEqual([ProviderId.OpenAlex]);
   });
 
   it("returns a clean 503 no_providers for search", async () => {
@@ -167,13 +170,13 @@ describe("MCP against elie.net", () => {
 
   const INIT = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "mcpy-e2e", version: "0.0.0" } };
 
-  it("initializes and lists exactly web_fetch, web_grep, web_search", async () => {
+  it("initializes and lists exactly web_fetch, web_grep, web_search, paper_search", async () => {
     const init = await rpc("initialize", INIT);
     expect(init.response.status).toBe(200);
     expect(init.message.result?.serverInfo).toMatchObject({ name: "mcpy" });
     const list = await rpc("tools/list", {});
     const names = ((list.message.result?.tools ?? []) as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search].sort());
+    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers].sort());
   });
 
   it("accepts the key as ?key= on /mcp", async () => {
@@ -193,6 +196,19 @@ describe("MCP against elie.net", () => {
     expect(text).toContain("URL: ");
     expect(text.length).toBeLessThanOrEqual(maxLength + BUDGET.mcpSlackChars);
     Object.assign(measured, { mcpFetchWallMs: Math.round(wallMs), mcpTextChars: text.length });
+  });
+
+  it("calls paper_search for real papers, sorted by citations", async () => {
+    const { message } = await rpc("tools/call", {
+      name: ToolName.Papers,
+      arguments: { query: "denoising diffusion probabilistic models", sort: "citations", max_results: 3 },
+    });
+    const result = message.result as { content: { text: string }[]; structuredContent: unknown; isError?: boolean };
+    expect(result.isError).toBeFalsy();
+    const papers = PaperSearchResultSchema.parse(result.structuredContent).results;
+    expect(papers.length).toBeGreaterThan(0);
+    expect(papers.map((p) => p.citations ?? 0)).toEqual([...papers.map((p) => p.citations ?? 0)].sort((a, b) => b - a));
+    expect(result.content[0].text).toContain("Papers: denoising diffusion probabilistic models (citations");
   });
 
   it("calls web_grep on elie.net", async () => {

@@ -4,6 +4,7 @@ import type { HttpClient } from "../http/client.js";
 import { normalizeUrl, sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
+import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
@@ -12,6 +13,7 @@ import type { Cache } from "./cache.js";
 import { runChain, type AttemptRecord, type ChainResult } from "./chain.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
+import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
 import { assessPage } from "./quality.js";
 
 export const EngineLimitsSchema = z.object({
@@ -23,6 +25,7 @@ export const EngineLimitsSchema = z.object({
   maxResponseBytes: z.number().int().min(10_000).max(50_000_000).default(5_000_000),
   pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
   searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
+  paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
 });
 export type EngineLimits = z.infer<typeof EngineLimitsSchema>;
 
@@ -31,6 +34,7 @@ const CACHE_VERSION = "v2";
 export interface EngineDeps {
   pageProviders: PageProvider[];
   searchProviders: SearchProvider[];
+  paperProviders: PaperProvider[];
   cache: Cache;
   http: HttpClient;
   breaker: CircuitBreaker;
@@ -68,7 +72,11 @@ export class Engine {
   constructor(private readonly deps: EngineDeps) {}
 
   get providerIds() {
-    return { pages: this.deps.pageProviders.map((p) => p.id), search: this.deps.searchProviders.map((p) => p.id) };
+    return {
+      pages: this.deps.pageProviders.map((p) => p.id),
+      search: this.deps.searchProviders.map((p) => p.id),
+      papers: this.deps.paperProviders.map((p) => p.id),
+    };
   }
 
   async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
@@ -116,20 +124,49 @@ export class Engine {
   }
 
   private async searchAll(providers: SearchProvider[], req: SearchRequest, deadlineAt: number, scope: CallScope): Promise<ChainResult<MergedPage[]>> {
-    const settled = await Promise.allSettled(providers.map((p) => this.searchChain([p], req, deadlineAt, scope)));
+    return this.fanOut(providers, (p) => this.searchChain([p], req, deadlineAt, scope), (lists) => mergeRanked(lists, req.limit));
+  }
+
+  /** Paper search: same modes as web search, merged by DOI, arXiv id or title. */
+  async papers(req: PaperRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPaper[]>> {
+    const providers = capablePaperProviders(this.deps.paperProviders, req);
+    const identity = [mode, req.query.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort];
+    const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
+    const ttl = (hits: MergedPaper[]) => (hits.length ? this.deps.limits.paperTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
+    const chain = (ps: PaperProvider[], deadlineAt: number) =>
+      runChain({
+        providers: ps,
+        attempt: (p, signal, timeoutMs, parent) => p.searchPapers(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
+        judge: () => ({ outcome: AttemptOutcome.Ok }),
+        describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
+        ...this.chainCommon(deadlineAt, scope),
+      });
+    return this.cached(key, ttl, fresh, scope, async (deadlineAt) => {
+      if (mode === SearchMode.Thorough) {
+        return this.fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort));
+      }
+      const result = await chain(providers, deadlineAt);
+      return { ...result, value: mergePapers([result.value], req.limit, req.sort) };
+    });
+  }
+
+  /**
+   * Thorough mode: one chain per provider, in parallel, under the same
+   * deadline. Succeeds if any provider answers; merges what came back.
+   */
+  private async fanOut<P extends { id: string; costPerCall: number }, T, V>(
+    providers: P[],
+    run: (provider: P) => Promise<ChainResult<T>>,
+    merge: (values: T[]) => V,
+  ): Promise<ChainResult<V>> {
+    const settled = await Promise.allSettled(providers.map(run));
     const ok = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
     if (ok.length === 0) throw (settled[0] as PromiseRejectedResult).reason;
     const attempts: AttemptRecord[] = settled.flatMap((s, i) =>
       s.status === "fulfilled" ? s.value.attempts : [{ provider: providers[i].id, outcome: AttemptOutcome.Error, latencyMs: 0 }],
     );
     const costUsd = settled.reduce((sum, s, i) => sum + (s.status === "fulfilled" ? s.value.costUsd : providers[i].costPerCall), 0);
-    return {
-      value: mergeRanked(ok.map((r) => r.value), req.limit),
-      provider: ok.map((r) => r.provider).join("+"),
-      attempts,
-      costUsd,
-      salvaged: false,
-    };
+    return { value: merge(ok.map((r) => r.value)), provider: ok.map((r) => r.provider).join("+"), attempts, costUsd, salvaged: false };
   }
 
   private chainCommon(deadlineAt: number, scope: CallScope) {

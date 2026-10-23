@@ -11,12 +11,13 @@ npm install mcpy
 ## Use it
 
 ```ts
-import { createMcpy, Recency, SearchMode, SearchType } from "mcpy";
-import { direct, firecrawl, firecrawlSearch } from "mcpy/providers";
+import { createMcpy, PaperSort, Recency, SearchMode, SearchType } from "mcpy";
+import { arxiv, direct, firecrawl, firecrawlSearch, openAlex } from "mcpy/providers";
 
 const mcpy = createMcpy({
   pages: [direct(), firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })],
   search: [firecrawlSearch({ apiKey: process.env.FIRECRAWL_API_KEY! })],
+  papers: [openAlex(), arxiv()],
 });
 
 const page = await mcpy.fetch({ url: "https://elie.net", max_chars: 5_000 });
@@ -36,6 +37,9 @@ const news = await mcpy.search({
   mode: SearchMode.Thorough,      // combine every capable source
 });
 news.results[0].sources;          // how many sources returned it
+
+const papers = await mcpy.papers({ query: "diffusion models", sort: PaperSort.Citations, year_from: 2020, open_access: true });
+papers.results[0];                // { title, authors, year, venue, citations, abstract, doi, url, pdf_url, ... }
 ```
 
 Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
@@ -47,7 +51,7 @@ Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
 | Import | What |
 | --- | --- |
 | `mcpy` | `createMcpy`, schemas, enums, errors, caches |
-| `mcpy/providers` | Backends: `direct`, `cloudflareBrowser`, `firecrawl`, `firecrawlSearch`, `brightData`, `brightDataSearch` |
+| `mcpy/providers` | Backends: `direct`, `cloudflareBrowser`, `firecrawl`, `firecrawlSearch`, `brightData`, `brightDataSearch`, `openAlex`, `arxiv`, `semanticScholar` |
 | `mcpy/telemetry` | OpenTelemetry-shaped spans and logs; sinks for console, OTLP, Analytics Engine, and an `@opentelemetry/api` bridge |
 | `mcpy/client` | `McpyClient`: typed client for a hosted mcpy server, same API as the SDK |
 | `mcpy/mcp` | `registerMcpyTools(server, api)`: mounts the tools on any MCP server |

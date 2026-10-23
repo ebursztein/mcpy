@@ -65,7 +65,7 @@ export const ErrorCode = errorCode.values;
 export const ErrorCodeSchema = errorCode.schema;
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
-const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search" } as const);
+const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers" } as const);
 export const Operation = operation.values;
 export const OperationSchema = operation.schema;
 export type Operation = z.infer<typeof OperationSchema>;
@@ -143,3 +143,9 @@ const searchMode = enumOf({ Fast: "fast", Thorough: "thorough" } as const);
 export const SearchMode = searchMode.values;
 export const SearchModeSchema = searchMode.schema;
 export type SearchMode = z.infer<typeof SearchModeSchema>;
+
+/** Order of paper results. */
+const paperSort = enumOf({ Relevance: "relevance", Citations: "citations", Newest: "newest" } as const);
+export const PaperSort = paperSort.values;
+export const PaperSortSchema = paperSort.schema;
+export type PaperSort = z.infer<typeof PaperSortSchema>;

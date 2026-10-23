@@ -6,8 +6,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CacheStatus, createMcpy, MemoryCache, PageFormat, Recency, SearchType } from "mcpy";
-import { brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch } from "mcpy/providers";
+import { CacheStatus, createMcpy, MemoryCache, PageFormat, PaperSort, Recency, SearchType } from "mcpy";
+import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, openAlex } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
 const DEV_VARS = new URL("../../../../apps/server/.dev.vars", import.meta.url);
@@ -83,6 +83,27 @@ describe.skipIf(!has("FIRECRAWL_API_KEY"))("firecrawl search options (live)", ()
     const result = await search().search({ query: "workers", sites: ["developers.cloudflare.com"], max_results: 5, fresh: true });
     expect(result.results.length).toBeGreaterThan(0);
     for (const hit of result.results) expect(new URL(hit.url).hostname).toBe("developers.cloudflare.com");
+  });
+});
+
+describe("paper indexes (live, no keys needed)", () => {
+  it("openalex finds the DDPM paper by citations within a year range", async () => {
+    const r = await sdk({ papers: [openAlex({ apiKey: k.OPENALEX_API_KEY || undefined })] }).papers({
+      query: "denoising diffusion probabilistic models",
+      sort: PaperSort.Citations,
+      year_from: 2020,
+      year_to: 2020,
+      max_results: 5,
+      fresh: true,
+    });
+    expect(r.results.some((p) => /denoising diffusion probabilistic models/i.test(p.title))).toBe(true);
+    for (const p of r.results) expect(p.year).toBe(2020);
+  });
+
+  it("arxiv returns the newest preprints with PDFs", async () => {
+    const r = await sdk({ papers: [arxiv()], limits: { attemptTimeoutMs: 100_000, deadlineMs: 110_000 } }).papers({ query: "large language model agents", sort: PaperSort.Newest, max_results: 3, fresh: true });
+    expect(r.results.length).toBeGreaterThan(0);
+    for (const p of r.results) expect(p.pdf_url).toMatch(/^https:\/\/arxiv\.org\/pdf\//);
   });
 });
 

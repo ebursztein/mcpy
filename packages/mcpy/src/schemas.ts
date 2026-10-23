@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import type { PaperSearchInput, PaperSearchResult } from "./schemas-papers.js";
 import {
   CacheStatusSchema,
   DeviceSchema,
@@ -160,4 +161,5 @@ export interface McpyApi {
   fetch(input: FetchInput): Promise<FetchResult>;
   grep(input: GrepInput): Promise<GrepResult>;
   search(input: SearchInput): Promise<SearchResult>;
+  papers(input: PaperSearchInput): Promise<PaperSearchResult>;
 }

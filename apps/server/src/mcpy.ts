@@ -17,6 +17,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
     const mcpy = createMcpy({
       pages: providers.pages,
       search: providers.search,
+      papers: providers.papers,
       cache: env.CACHE ? new KvCache(env.CACHE) : isolateCache,
       limits: {
         attemptTimeoutMs: config.ATTEMPT_TIMEOUT_MS,
@@ -24,6 +25,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
         maxResponseBytes: config.MAX_RESPONSE_BYTES,
         pageTtlSeconds: config.PAGE_CACHE_TTL_SECONDS,
         searchTtlSeconds: config.SEARCH_CACHE_TTL_SECONDS,
+        paperTtlSeconds: config.PAPER_CACHE_TTL_SECONDS,
       },
       retry: { retries: config.RETRIES },
       userAgent: { default: config.DEFAULT_USER_AGENT, custom: config.USER_AGENT_STRING },

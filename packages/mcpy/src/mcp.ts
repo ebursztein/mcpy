@@ -20,6 +20,7 @@ import {
   type SearchHit,
   type SearchResult,
 } from "./schemas.js";
+import { PaperSearchInputSchema, PaperSearchResultSchema, type PaperSearchResult } from "./schemas-papers.js";
 
 type ToolResult = {
   content: { type: "text"; text: string }[];
@@ -78,6 +79,21 @@ export function renderSearch(r: SearchResult): string {
   return `Query: ${r.query} (${r.type}${page}; ${cacheNote(r.meta)})\n---\n${body || "No results."}`;
 }
 
+export function renderPapers(r: PaperSearchResult): string {
+  const body = r.results
+    .map((p, i) => {
+      const authors = p.authors.length ? `${p.authors.slice(0, 3).join(", ")}${p.authors_total > 3 ? " et al." : ""}` : "";
+      const facts = [authors, p.year, p.venue, p.citations !== undefined ? `${p.citations} citations` : undefined, p.sources > 1 ? `${p.sources} sources` : undefined]
+        .filter((x) => x !== undefined && x !== "")
+        .join(" · ");
+      const links = [p.url, p.pdf_url && p.pdf_url !== p.url ? `PDF: ${p.pdf_url}` : undefined].filter(Boolean).join("\n   ");
+      return `${i + 1}. ${p.title}\n   ${facts}\n   ${links}${p.abstract ? `\n   ${p.abstract}` : ""}`;
+    })
+    .join("\n\n");
+  const page = r.page > 1 ? `, page ${r.page}` : "";
+  return `Papers: ${r.query} (${r.sort}${page}; ${cacheNote(r.meta)})\n---\n${body || "No papers found."}`;
+}
+
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
 export function registerMcpyTools(server: McpServer, api: McpyApi): void {
@@ -118,5 +134,18 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
       annotations: READ_ONLY,
     },
     async (input) => api.search(input).then((r) => ok(r, renderSearch(r)), fail),
+  );
+
+  server.registerTool(
+    ToolName.Papers,
+    {
+      title: "Paper Search",
+      description:
+        "Search scholarly papers (journals, conferences, arXiv preprints). Returns title, authors, year, venue, citations, abstract and links, including a free PDF when one exists. Filter by year range or open access; sort by relevance, citations or newest. mode=thorough combines several indexes.",
+      inputSchema: PaperSearchInputSchema,
+      outputSchema: PaperSearchResultSchema,
+      annotations: READ_ONLY,
+    },
+    async (input) => api.papers(input).then((r) => ok(r, renderPapers(r)), fail),
   );
 }

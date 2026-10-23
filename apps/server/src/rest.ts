@@ -1,7 +1,7 @@
 /**
  * REST front door, built only on the public SDK.
  *
- *   GET|POST /v1/fetch   /v1/grep   /v1/search    (same fields as the SDK)
+ *   GET|POST /v1/fetch   /v1/grep   /v1/search   /v1/papers    (same fields as the SDK)
  *   e.g. GET /v1/search?query=rust&type=news&recency=week&country=us&sites=github.com,lwn.net
  *   GET      /v1/admin/providers                   (admin clients only)
  *
@@ -20,8 +20,8 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const errorResponse = (err: McpyError, headers: Record<string, string> = {}) => json(err.toJSON(), err.httpStatus, headers);
 
-const NUMERIC = new Set(["offset", "max_chars", "context", "max_matches", "max_results", "page"]);
-const BOOLEAN = new Set(["fresh", "literal"]);
+const NUMERIC = new Set(["offset", "max_chars", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
+const BOOLEAN = new Set(["fresh", "literal", "open_access"]);
 const LIST = new Set(["sites", "exclude_sites"]);
 
 /**
@@ -52,6 +52,7 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.Fetch]: (api, input) => api.fetch(input as never),
   [RestRoute.Grep]: (api, input) => api.grep(input as never),
   [RestRoute.Search]: (api, input) => api.search(input as never),
+  [RestRoute.Papers]: (api, input) => api.papers(input as never),
 };
 
 export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, providers: ProviderSetup): Promise<Response> {
@@ -60,6 +61,7 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
     return json({
       pages: providers.pages.map((p) => p.id),
       search: providers.search.map((p) => p.id),
+      papers: providers.papers.map((p) => p.id),
       skipped: providers.skipped,
     });
   }

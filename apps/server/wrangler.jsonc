@@ -27,6 +27,7 @@
   "vars": {
     "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",
     "SEARCH_PROVIDERS": "firecrawl,brightdata",
+    "PAPER_PROVIDERS": "openalex,arxiv,semantic_scholar",
     "LOG_LEVEL": "info",
     "DEPLOYMENT_ENV": "production"
   },
@@ -46,6 +47,7 @@
         "ALLOWED_HOSTNAMES": "tools.ly.tl",
         "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",
         "SEARCH_PROVIDERS": "firecrawl,brightdata",
+        "PAPER_PROVIDERS": "openalex,arxiv,semantic_scholar",
         "LOG_LEVEL": "info",
         "DEPLOYMENT_ENV": "lytl"
       }

@@ -205,7 +205,12 @@ describe("admin", () => {
     expect(await response.json()).toEqual({
       pages: [ProviderId.Direct],
       search: [],
-      skipped: { pages: [], search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }] },
+      papers: [ProviderId.OpenAlex, ProviderId.Arxiv],
+      skipped: {
+        pages: [],
+        search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }],
+        papers: [{ id: ProviderId.SemanticScholar, reason: SkipReason.MissingCredentials }],
+      },
     });
   });
 });

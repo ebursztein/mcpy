@@ -23,6 +23,7 @@ import {
   type SearchInput,
   type SearchResult,
 } from "./schemas.js";
+import { PaperSearchInputSchema, PaperSearchResultSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 
 export interface McpyClientOptions {
   /** e.g. https://tools.example.com */
@@ -54,6 +55,10 @@ export class McpyClient implements McpyApi {
 
   search(input: SearchInput): Promise<SearchResult> {
     return this.post(RestRoute.Search, SearchInputSchema, SearchResultSchema, input);
+  }
+
+  papers(input: PaperSearchInput): Promise<PaperSearchResult> {
+    return this.post(RestRoute.Papers, PaperSearchInputSchema, PaperSearchResultSchema, input);
   }
 
   private async post<I extends z.ZodType, O extends z.ZodType>(route: RestRoute, inSchema: I, outSchema: O, input: unknown): Promise<z.infer<O>> {

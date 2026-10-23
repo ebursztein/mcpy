@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { fetchOp, grepOp, searchOp } from "./api/operations.js";
+import { papersOp } from "./api/papers.js";
+import { PaperSearchInputSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
+import type { PaperProvider } from "./providers/paper-types.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
@@ -44,6 +47,8 @@ export interface McpyOptions extends McpyConfig {
   pages?: PageProvider[];
   /** Search sources, tried in order. */
   search?: SearchProvider[];
+  /** Paper indexes, tried in order. */
+  papers?: PaperProvider[];
   /** Defaults to an in-memory cache. */
   cache?: Cache;
   /** Defaults to no telemetry. */
@@ -94,6 +99,10 @@ export class Mcpy implements McpyApi {
 
   search(input: SearchInput): Promise<SearchResult> {
     return this.run(Operation.Search, SearchInputSchema, input, (i, scope) => searchOp(this.engine, i, scope));
+  }
+
+  papers(input: PaperSearchInput): Promise<PaperSearchResult> {
+    return this.run(Operation.Papers, PaperSearchInputSchema, input, (i, scope) => papersOp(this.engine, i, scope));
   }
 
   /** Validation, span, structured log line and error mapping for every operation. */
@@ -166,6 +175,7 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
   const engine = new Engine({
     pageProviders: options.pages ?? [],
     searchProviders: options.search ?? [],
+    paperProviders: options.papers ?? [],
     cache: options.cache ?? new MemoryCache(),
     http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
     breaker: new CircuitBreaker(config.breaker),

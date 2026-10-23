@@ -26,3 +26,9 @@ export { ProviderFailure } from "../errors.js";
 export { HttpClient, HttpMethod, type HttpContext, type HttpRequest, type HttpResponse } from "../http/client.js";
 export { contentKindOf } from "../content/kind.js";
 export { htmlToMarkdown, htmlTitle, splitFrontmatter } from "../content/extract.js";
+
+// Paper indexes.
+export { openAlex, OPENALEX_CAPABILITIES, type OpenAlexOptions } from "./openalex/index.js";
+export { arxiv, ARXIV_CAPABILITIES, type ArxivOptions } from "./arxiv/index.js";
+export { semanticScholar, SEMANTIC_SCHOLAR_CAPABILITIES, type SemanticScholarOptions } from "./semantic-scholar/index.js";
+export { bareArxivId, bareDoi, type FoundPaper, type PaperCapabilities, type PaperProvider, type PaperRequest } from "./paper-types.js";

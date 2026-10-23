@@ -40,13 +40,14 @@ const failing: McpyApi = {
   fetch: () => Promise.reject(new McpyError(ErrorCode.UpstreamFailed, "every source failed for this request", ["error (timed out)"])),
   grep: () => Promise.reject(new Error("unexpected crash")),
   search: () => Promise.reject(new McpyError(ErrorCode.RateLimited, "slow down")),
+  papers: () => Promise.reject(new McpyError(ErrorCode.NoProviders, "no paper indexes are configured")),
 };
 
 describe("registerMcpyTools registration", () => {
   const tools = capture(sdk());
 
-  it("registers exactly web_fetch, web_grep and web_search", () => {
-    expect([...tools.keys()].sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search].sort());
+  it("registers exactly web_fetch, web_grep, web_search and paper_search", () => {
+    expect([...tools.keys()].sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers].sort());
   });
 
   it.each([
@@ -156,11 +157,11 @@ describe("real McpServer over an in-memory transport", () => {
     return { client, close: () => Promise.all([client.close(), server.close()]) };
   }
 
-  it("lists the three tools with JSON schemas and annotations", async () => {
+  it("lists the four tools with JSON schemas and annotations", async () => {
     const { client, close } = await connect(sdk());
     try {
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search].sort());
+      expect(tools.map((t) => t.name).sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers].sort());
       const fetchTool = tools.find((t) => t.name === ToolName.Fetch)!;
       expect(fetchTool.inputSchema.type).toBe("object");
       expect(fetchTool.inputSchema.required).toEqual(["url"]);

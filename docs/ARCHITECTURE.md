@@ -1,6 +1,6 @@
 # mcpy architecture
 
-mcpy gives agents web tools (fetch, grep, search) through one SDK. The SDK
+mcpy gives agents web tools (fetch, grep, search) and scholarly paper search through one SDK. The SDK
 hides which backend serves a request; the hosted server and the MCP endpoint
 are thin layers on top of it.
 

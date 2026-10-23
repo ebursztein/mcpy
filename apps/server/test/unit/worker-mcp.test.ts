@@ -28,7 +28,7 @@ afterEach(() => {
 type ToolCallResult = { content: { type: string; text: string }[]; structuredContent?: unknown; isError?: boolean };
 
 describe("MCP over /mcp", () => {
-  it("initializes, then lists exactly the three tools", async () => {
+  it("initializes, then lists exactly the four tools", async () => {
     const env = makeEnv();
     const init = await rpc("initialize", INITIALIZE, { env });
     expect(init.response.status).toBe(200);
@@ -37,7 +37,7 @@ describe("MCP over /mcp", () => {
 
     const { message } = await rpc("tools/list", {}, { env });
     const tools = (message.result?.tools ?? []) as { name: string; inputSchema: unknown; outputSchema?: unknown }[];
-    expect(tools.map((t) => t.name).sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers].sort());
     for (const tool of tools) {
       expect(tool.outputSchema).toBeTruthy();
       expect(mentionsProvider(tool)).toBe(false);

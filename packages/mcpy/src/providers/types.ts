@@ -13,8 +13,19 @@ export const ProviderId = {
   CloudflareBrowser: "cloudflare_browser",
   Firecrawl: "firecrawl",
   BrightData: "brightdata",
+  OpenAlex: "openalex",
+  Arxiv: "arxiv",
+  SemanticScholar: "semantic_scholar",
 } as const;
-export const ProviderIdSchema = z.enum([ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]);
+export const ProviderIdSchema = z.enum([
+  ProviderId.Direct,
+  ProviderId.CloudflareBrowser,
+  ProviderId.Firecrawl,
+  ProviderId.BrightData,
+  ProviderId.OpenAlex,
+  ProviderId.Arxiv,
+  ProviderId.SemanticScholar,
+]);
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 
 export interface PageRequest {
