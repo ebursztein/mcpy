@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CacheStatus, ErrorCode, MAX_ABSTRACT_CHARS, McpyError, PaperSearchInputSchema, PaperSearchResultSchema, PaperSort, SearchMode } from "mcpy";
+import { CacheStatus, ErrorCode, MAX_ABSTRACT_CHARS, McpyError, PaperCollection, PaperSearchInputSchema, PaperSearchResultSchema, PaperSort, SearchMode } from "mcpy";
 import { renderPapers } from "mcpy/mcp";
 import type { FoundPaper, PaperCapabilities, PaperProvider, PaperRequest } from "mcpy/providers";
 import { mergePapers, paperKeys } from "../../src/engine/papers.js";
 import { mentionsProvider, testMcpy } from "../helpers.js";
 
-const ALL: PaperCapabilities = { sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest], yearFilter: true, openAccessFilter: true, maxDepth: 1_000 };
+const ALL: PaperCapabilities = { sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest], yearFilter: true, openAccessFilter: true, maxDepth: 1_000, collections: [] };
 
 function index(id: string, papers: FoundPaper[] | Error, capabilities: PaperCapabilities = ALL): PaperProvider & { requests: PaperRequest[] } {
   const requests: PaperRequest[] = [];
@@ -40,11 +40,25 @@ describe("paper routing", () => {
     expect(mentionsProvider(err.toJSON())).toBe(false);
   });
 
+  it("routes a collection to the indexes that cover it, and explains only their gaps", async () => {
+    const general = index("general", [paper("G")]);
+    const bio = index("bio", [paper("B")], { ...ALL, sorts: [PaperSort.Relevance, PaperSort.Newest], collections: [PaperCollection.Biomedical] });
+    const pre = index("pre", [paper("P")], { ...ALL, collections: [PaperCollection.Preprints] });
+    const { mcpy } = testMcpy({ papers: [general, bio, pre] });
+    expect((await mcpy.papers({ query: "q", collection: PaperCollection.Biomedical })).results[0].title).toBe("B");
+    expect((await mcpy.papers({ query: "q", collection: PaperCollection.Preprints })).results[0].title).toBe("P");
+    expect((await mcpy.papers({ query: "q" })).results[0].title).toBe("G");
+    expect(general.requests).toHaveLength(1);
+    // Regression: the error used to also blame indexes outside the collection.
+    const err = (await mcpy.papers({ query: "q", collection: PaperCollection.Biomedical, sort: PaperSort.Citations }).catch((e) => e)) as McpyError;
+    expect(err.details).toEqual(["unsupported: sort citations"]);
+  });
+
   it("passes every filter to the index", async () => {
     const p = index("p", []);
     const { mcpy } = testMcpy({ papers: [p] });
     await mcpy.papers({ query: "q", max_results: 5, page: 2, year_from: 2019, year_to: 2021, open_access: true, sort: PaperSort.Newest });
-    expect(p.requests[0]).toEqual({ query: "q", limit: 5, page: 2, yearFrom: 2019, yearTo: 2021, openAccess: true, sort: "newest" });
+    expect(p.requests[0]).toEqual({ query: "q", limit: 5, page: 2, yearFrom: 2019, yearTo: 2021, openAccess: true, sort: "newest", collection: undefined });
   });
 
   it("validates the year range and has a publishable JSON Schema", () => {

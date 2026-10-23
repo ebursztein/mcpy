@@ -6,8 +6,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CacheStatus, createMcpy, MemoryCache, PageFormat, PaperSort, Recency, SearchType } from "mcpy";
-import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, openAlex } from "mcpy/providers";
+import { CacheStatus, createMcpy, MemoryCache, PageFormat, PaperCollection, PaperSort, Recency, SearchType } from "mcpy";
+import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, openAlex, pubmed } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
 const DEV_VARS = new URL("../../../../apps/server/.dev.vars", import.meta.url);
@@ -98,6 +98,16 @@ describe("paper indexes (live, no keys needed)", () => {
     });
     expect(r.results.some((p) => /denoising diffusion probabilistic models/i.test(p.title))).toBe(true);
     for (const p of r.results) expect(p.year).toBe(2020);
+  });
+
+  it("pubmed finds open-access biomedical papers with abstracts, never future-dated", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const mcpy = sdk({ papers: [pubmed({ apiKey: k.NCBI_API_KEY || undefined })] });
+    const relevant = await mcpy.papers({ query: "glp-1 receptor agonist weight loss", collection: PaperCollection.Biomedical, open_access: true, max_results: 3, fresh: true });
+    expect(relevant.results.length).toBeGreaterThan(0);
+    expect(relevant.results.some((p) => (p.abstract ?? "").length > 100)).toBe(true);
+    const newest = await mcpy.papers({ query: "crispr base editing", collection: PaperCollection.Biomedical, sort: PaperSort.Newest, max_results: 5, fresh: true });
+    for (const p of newest.results) expect(p.published! <= today).toBe(true);
   });
 
   it("arxiv returns the newest preprints with PDFs", async () => {

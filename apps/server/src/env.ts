@@ -73,7 +73,7 @@ export const EnvSchema = z.object({
   // Routing between providers
   PAGE_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]),
   SEARCH_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Firecrawl, ProviderId.BrightData]),
-  PAPER_PROVIDERS: csv(ProviderIdSchema, [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.SemanticScholar]),
+  PAPER_PROVIDERS: csv(ProviderIdSchema, [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed, ProviderId.SemanticScholar]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
@@ -82,6 +82,7 @@ export const EnvSchema = z.object({
   PAGE_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 3_600),
   SEARCH_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 900),
   PAPER_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 86_400),
+  THOROUGH_GRACE_MS: intVar(0, 120_000, 8_000),
   RETRIES: intVar(0, 5, 2),
 
   // User agent
@@ -108,6 +109,10 @@ export const EnvSchema = z.object({
   OPENALEX_API_KEY: secret,
   /** Semantic Scholar is enabled only with a key (anonymous calls are rate-limited). */
   SEMANTIC_SCHOLAR_API_KEY: secret,
+  /** Optional: PubMed works without it (3 requests/s); a free NCBI key allows 10. */
+  NCBI_API_KEY: secret,
+  /** Optional contact address NCBI asks integrations to send. */
+  NCBI_EMAIL: z.string().email().optional(),
 });
 export type ServerEnv = z.infer<typeof EnvSchema>;
 

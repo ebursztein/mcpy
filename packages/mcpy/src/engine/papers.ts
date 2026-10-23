@@ -14,6 +14,7 @@ export interface MergedPaper extends FoundPaper {
 
 function gap(provider: PaperProvider, req: PaperRequest): string | undefined {
   const caps = provider.capabilities;
+  if (req.collection && !caps.collections.includes(req.collection)) return `collection ${req.collection}`;
   if (!caps.sorts.includes(req.sort)) return `sort ${req.sort}`;
   if ((req.yearFrom !== undefined || req.yearTo !== undefined) && !caps.yearFilter) return "year filter";
   if (req.openAccess && !caps.openAccessFilter) return "open access filter";
@@ -26,7 +27,10 @@ export function capablePaperProviders(providers: PaperProvider[], req: PaperRequ
   if (providers.length === 0) throw new McpyError(ErrorCode.NoProviders, "no paper indexes are configured");
   const capable = providers.filter((p) => gap(p, req) === undefined);
   if (capable.length === 0) {
-    const missing = [...new Set(providers.map((p) => gap(p, req)).filter((g): g is string => !!g))];
+    // When some indexes cover the collection, explain what they lack (not that others do not cover it).
+    const inCollection = req.collection ? providers.filter((p) => p.capabilities.collections.includes(req.collection!)) : providers;
+    const explain = inCollection.length ? inCollection : providers;
+    const missing = [...new Set(explain.map((p) => gap(p, req)).filter((g): g is string => !!g))];
     throw new McpyError(ErrorCode.InvalidInput, "no configured paper index supports this request", missing.map((m) => `unsupported: ${m}`));
   }
   return capable;

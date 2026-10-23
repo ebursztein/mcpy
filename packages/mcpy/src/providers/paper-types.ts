@@ -1,10 +1,12 @@
 /** Contract for paper indexes (OpenAlex, arXiv, Semantic Scholar, your own). */
 
-import type { PaperSort } from "../enums.js";
+import type { PaperCollection, PaperSort } from "../enums.js";
 import type { ProviderCall } from "./types.js";
 
 export interface PaperRequest {
   query: string;
+  /** Unset: every index. Set: only indexes covering that collection. */
+  collection?: PaperCollection;
   /** Results wanted on this page. */
   limit: number;
   /** 1-based page: skip (page - 1) * limit results. */
@@ -41,6 +43,8 @@ export interface PaperCapabilities {
   openAccessFilter: boolean;
   /** Deepest result reachable: page * limit must not exceed it. */
   maxDepth: number;
+  /** Specialized collections this index covers (general indexes list none). */
+  collections: readonly PaperCollection[];
 }
 
 export interface PaperProvider {

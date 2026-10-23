@@ -1,4 +1,4 @@
-import { ErrorCode, PaperSort } from "../../enums.js";
+import { ErrorCode, PaperCollection, PaperSort } from "../../enums.js";
 import { sleep } from "../../http/retry.js";
 import { ProviderFailure } from "../../errors.js";
 import type { PaperCapabilities, PaperProvider, PaperRequest } from "../paper-types.js";
@@ -22,6 +22,7 @@ export const ARXIV_CAPABILITIES: PaperCapabilities = {
   // Every arXiv paper is open access, so the filter is always satisfied.
   openAccessFilter: true,
   maxDepth: MAX_DEPTH,
+  collections: [PaperCollection.Preprints],
 };
 
 /** Terms ANDed across all fields, plus an optional submission-date range. */

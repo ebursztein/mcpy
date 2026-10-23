@@ -16,6 +16,7 @@ export const ProviderId = {
   OpenAlex: "openalex",
   Arxiv: "arxiv",
   SemanticScholar: "semantic_scholar",
+  PubMed: "pubmed",
 } as const;
 export const ProviderIdSchema = z.enum([
   ProviderId.Direct,
@@ -25,6 +26,7 @@ export const ProviderIdSchema = z.enum([
   ProviderId.OpenAlex,
   ProviderId.Arxiv,
   ProviderId.SemanticScholar,
+  ProviderId.PubMed,
 ]);
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 

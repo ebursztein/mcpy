@@ -42,6 +42,7 @@ export const SEMANTIC_SCHOLAR_CAPABILITIES: PaperCapabilities = {
   yearFilter: true,
   openAccessFilter: true,
   maxDepth: MAX_DEPTH,
+  collections: [],
 };
 
 export function semanticScholarUrl(req: PaperRequest): string {

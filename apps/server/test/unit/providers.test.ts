@@ -29,8 +29,8 @@ describe("buildProviders", () => {
     const setup = buildProviders(loadEnv({ ...FIRECRAWL, ...BRIGHTDATA, ...CLOUDFLARE }));
     expect(ids(setup.pages)).toEqual([ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]);
     expect(ids(setup.search)).toEqual([ProviderId.Firecrawl, ProviderId.BrightData]);
-    expect(ids(setup.papers)).toEqual([ProviderId.OpenAlex, ProviderId.Arxiv]);
-    // Semantic Scholar needs a key; OpenAlex and arXiv work without one.
+    expect(ids(setup.papers)).toEqual([ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed]);
+    // Semantic Scholar needs a key; OpenAlex, arXiv and PubMed work without one.
     expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }] });
   });
 

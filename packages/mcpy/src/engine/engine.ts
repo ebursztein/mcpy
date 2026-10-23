@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { AttemptOutcome, CacheStatus, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
+import { AttemptOutcome, CacheStatus, ErrorCode, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
+import { McpyError } from "../errors.js";
 import type { HttpClient } from "../http/client.js";
 import { normalizeUrl, sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
@@ -14,6 +15,7 @@ import { runChain, type AttemptRecord, type ChainResult } from "./chain.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
 import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
+import { settleWithGrace } from "./fanout.js";
 import { assessPage } from "./quality.js";
 
 export const EngineLimitsSchema = z.object({
@@ -26,6 +28,8 @@ export const EngineLimitsSchema = z.object({
   pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
   searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
   paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
+  /** Thorough mode: after the first provider answers, how long to wait for the others. */
+  thoroughGraceMs: z.number().int().min(0).max(120_000).default(8_000),
 });
 export type EngineLimits = z.infer<typeof EngineLimitsSchema>;
 
@@ -130,7 +134,7 @@ export class Engine {
   /** Paper search: same modes as web search, merged by DOI, arXiv id or title. */
   async papers(req: PaperRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPaper[]>> {
     const providers = capablePaperProviders(this.deps.paperProviders, req);
-    const identity = [mode, req.query.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort];
+    const identity = [mode, req.query.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort, req.collection];
     const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
     const ttl = (hits: MergedPaper[]) => (hits.length ? this.deps.limits.paperTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
     const chain = (ps: PaperProvider[], deadlineAt: number) =>
@@ -152,18 +156,24 @@ export class Engine {
 
   /**
    * Thorough mode: one chain per provider, in parallel, under the same
-   * deadline. Succeeds if any provider answers; merges what came back.
+   * deadline. Once one answers, the rest get `thoroughGraceMs`; succeeds if
+   * any provider answered, merging what came back.
    */
   private async fanOut<P extends { id: string; costPerCall: number }, T, V>(
     providers: P[],
     run: (provider: P) => Promise<ChainResult<T>>,
     merge: (values: T[]) => V,
   ): Promise<ChainResult<V>> {
-    const settled = await Promise.allSettled(providers.map(run));
+    const settled = await settleWithGrace(providers.map(run), this.deps.limits.thoroughGraceMs);
     const ok = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-    if (ok.length === 0) throw (settled[0] as PromiseRejectedResult).reason;
+    if (ok.length === 0) {
+      const failure = settled.find((s) => s.status === "rejected");
+      throw failure && failure.status === "rejected" ? failure.reason : new McpyError(ErrorCode.Timeout, "no source answered in time");
+    }
     const attempts: AttemptRecord[] = settled.flatMap((s, i) =>
-      s.status === "fulfilled" ? s.value.attempts : [{ provider: providers[i].id, outcome: AttemptOutcome.Error, latencyMs: 0 }],
+      s.status === "fulfilled"
+        ? s.value.attempts
+        : [{ provider: providers[i].id, outcome: AttemptOutcome.Error, reason: s.status, publicReason: s.status, latencyMs: 0 }],
     );
     const costUsd = settled.reduce((sum, s, i) => sum + (s.status === "fulfilled" ? s.value.costUsd : providers[i].costPerCall), 0);
     return { value: merge(ok.map((r) => r.value)), provider: ok.map((r) => r.provider).join("+"), attempts, costUsd, salvaged: false };

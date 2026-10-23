@@ -47,6 +47,7 @@ export async function papersOp(
       yearTo: input.year_to,
       openAccess: input.open_access,
       sort: input.sort,
+      collection: input.collection,
     },
     input.mode,
     input.fresh,

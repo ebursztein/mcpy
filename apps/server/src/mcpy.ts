@@ -26,6 +26,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
         pageTtlSeconds: config.PAGE_CACHE_TTL_SECONDS,
         searchTtlSeconds: config.SEARCH_CACHE_TTL_SECONDS,
         paperTtlSeconds: config.PAPER_CACHE_TTL_SECONDS,
+        thoroughGraceMs: config.THOROUGH_GRACE_MS,
       },
       retry: { retries: config.RETRIES },
       userAgent: { default: config.DEFAULT_USER_AGENT, custom: config.USER_AGENT_STRING },

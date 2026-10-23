@@ -28,6 +28,7 @@ export const OPENALEX_CAPABILITIES: PaperCapabilities = {
   yearFilter: true,
   openAccessFilter: true,
   maxDepth: MAX_DEPTH,
+  collections: [],
 };
 
 /** OpenAlex ships abstracts as an inverted index: word -> positions. */

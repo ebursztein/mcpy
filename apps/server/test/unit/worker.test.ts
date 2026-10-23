@@ -205,7 +205,7 @@ describe("admin", () => {
     expect(await response.json()).toEqual({
       pages: [ProviderId.Direct],
       search: [],
-      papers: [ProviderId.OpenAlex, ProviderId.Arxiv],
+      papers: [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed],
       skipped: {
         pages: [],
         search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }],

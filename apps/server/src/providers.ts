@@ -1,6 +1,7 @@
 import {
   arxiv,
   openAlex,
+  pubmed,
   semanticScholar,
   type PaperProvider,
   brightData,
@@ -45,6 +46,7 @@ const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
   [ProviderId.OpenAlex]: () => UNSUPPORTED,
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
+  [ProviderId.PubMed]: () => UNSUPPORTED,
 };
 
 const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
@@ -56,6 +58,7 @@ const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
   [ProviderId.OpenAlex]: () => UNSUPPORTED,
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
+  [ProviderId.PubMed]: () => UNSUPPORTED,
 };
 
 const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
@@ -67,6 +70,7 @@ const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
   [ProviderId.OpenAlex]: (e) => openAlex({ apiKey: e.OPENALEX_API_KEY }),
   [ProviderId.Arxiv]: () => arxiv(),
   [ProviderId.SemanticScholar]: (e) => (e.SEMANTIC_SCHOLAR_API_KEY ? semanticScholar({ apiKey: e.SEMANTIC_SCHOLAR_API_KEY }) : null),
+  [ProviderId.PubMed]: (e) => pubmed({ apiKey: e.NCBI_API_KEY, email: e.NCBI_EMAIL }),
 };
 
 function resolve<P>(order: ProviderId[], builders: Record<ProviderId, Build<P>>, env: ServerEnv): { chain: P[]; skipped: Skipped[] } {

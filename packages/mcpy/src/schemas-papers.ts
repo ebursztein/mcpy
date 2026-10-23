@@ -1,7 +1,7 @@
 /** Public contract for paper search. No provider appears anywhere. */
 
 import { z } from "zod";
-import { PaperSort, PaperSortSchema, SearchMode, SearchModeSchema } from "./enums.js";
+import { PaperCollectionSchema, PaperSort, PaperSortSchema, SearchMode, SearchModeSchema } from "./enums.js";
 import { ResultMetaSchema } from "./schemas.js";
 
 export const MAX_PAPER_RESULTS = 50;
@@ -17,6 +17,7 @@ export const PaperSearchInputSchema = z
     year_to: year.optional().describe("Only papers published in or before this year"),
     open_access: z.boolean().default(false).describe("Only papers with a free full text"),
     sort: PaperSortSchema.default(PaperSort.Relevance).describe("relevance, citations (most cited first) or newest"),
+    collection: PaperCollectionSchema.optional().describe("preprints (not yet peer-reviewed) or biomedical (life sciences and medicine); default: everything"),
     mode: SearchModeSchema.default(SearchMode.Fast).describe("fast: first index that answers; thorough: combine all indexes (slower)"),
     fresh: z.boolean().default(false).describe("Ignore the cache and search again"),
   })

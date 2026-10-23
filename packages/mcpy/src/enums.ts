@@ -149,3 +149,9 @@ const paperSort = enumOf({ Relevance: "relevance", Citations: "citations", Newes
 export const PaperSort = paperSort.values;
 export const PaperSortSchema = paperSort.schema;
 export type PaperSort = z.infer<typeof PaperSortSchema>;
+
+/** Narrow paper search to one kind of collection (unset: everything). */
+const paperCollection = enumOf({ Preprints: "preprints", Biomedical: "biomedical" } as const);
+export const PaperCollection = paperCollection.values;
+export const PaperCollectionSchema = paperCollection.schema;
+export type PaperCollection = z.infer<typeof PaperCollectionSchema>;
