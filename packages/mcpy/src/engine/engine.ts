@@ -54,6 +54,15 @@ export interface CallScope {
   defer?: (work: Promise<unknown>) => void;
 }
 
+/**
+ * Search judgement: results are final; no results move on to the next
+ * source (seen live: one source found nothing for a site-restricted news
+ * search). If every source is empty, the empty answer is still returned.
+ */
+function emptyMovesOn(hits: unknown[]): { outcome: AttemptOutcome; reason?: string; salvageable?: boolean } {
+  return hits.length ? { outcome: AttemptOutcome.Ok } : { outcome: AttemptOutcome.Escalate, reason: "no results", salvageable: true };
+}
+
 /** Empty search results may be a transient upstream hiccup: keep them briefly. */
 export const EMPTY_SEARCH_TTL_SECONDS = 60;
 
@@ -85,7 +94,8 @@ export class Engine {
 
   async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
     const key = `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
-    return this.cached(key, () => this.deps.limits.pageTtlSeconds, fresh, scope, (deadlineAt) =>
+    // A salvaged thin page may be a JS shell nobody could render: never cache it.
+    return this.cached(key, (_page, salvaged) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds), fresh, scope, (deadlineAt) =>
       runChain({
         providers: this.deps.pageProviders,
         attempt: (p, signal, timeoutMs, parent) => p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
@@ -115,8 +125,7 @@ export class Engine {
     return runChain({
       providers,
       attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
-      // Any answer from a search provider is final, even zero hits.
-      judge: () => ({ outcome: AttemptOutcome.Ok }),
+      judge: emptyMovesOn,
       describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
       ...this.chainCommon(deadlineAt, scope),
     });
@@ -141,7 +150,7 @@ export class Engine {
       runChain({
         providers: ps,
         attempt: (p, signal, timeoutMs, parent) => p.searchPapers(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
-        judge: () => ({ outcome: AttemptOutcome.Ok }),
+        judge: emptyMovesOn,
         describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
         ...this.chainCommon(deadlineAt, scope),
       });
@@ -206,7 +215,8 @@ export class Engine {
    */
   private async cached<T>(
     key: string,
-    ttl: (value: T) => number,
+    /** Seconds to cache the result, or undefined to not cache it. */
+    ttl: (value: T, salvaged: boolean) => number | undefined,
     fresh: boolean,
     scope: CallScope,
     run: (deadlineAt: number) => Promise<ChainResult<T>>,
@@ -216,12 +226,13 @@ export class Engine {
       if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider, costUsd: 0 };
     }
     const result = await run(Date.now() + this.deps.limits.deadlineMs);
-    if (!result.salvaged) {
-      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, ttl(result.value)).catch(() => undefined);
+    const seconds = ttl(result.value, result.salvaged);
+    if (seconds !== undefined) {
+      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, seconds).catch(() => undefined);
       if (scope.defer) scope.defer(write);
       else await write;
     }
-    scope.telemetry.log(LogLevel.Debug, result.salvaged ? "served salvaged result (not cached)" : "cached result", { [Attr.Provider]: result.provider }, scope.parent);
+    scope.telemetry.log(LogLevel.Debug, seconds === undefined ? "result not cached" : "cached result", { [Attr.Provider]: result.provider }, scope.parent);
     return {
       value: result.value,
       cache: fresh ? CacheStatus.Bypass : CacheStatus.Miss,

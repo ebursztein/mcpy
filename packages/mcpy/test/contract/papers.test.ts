@@ -9,7 +9,7 @@ import { ErrorCode, PaperSort } from "mcpy";
 import { arxiv, openAlex, semanticScholar, type PaperRequest } from "mcpy/providers";
 import { arxivQuery, arxivUrl } from "../../src/providers/arxiv/index.js";
 import { parseArxivFeed } from "../../src/providers/arxiv/parse.js";
-import { abstractFromIndex, worksUrl } from "../../src/providers/openalex/index.js";
+import { abstractFromIndex, titleAbstractQuery, worksUrl } from "../../src/providers/openalex/index.js";
 import { semanticScholarUrl } from "../../src/providers/semantic-scholar/index.js";
 import { fixture, stubFetch } from "../helpers.js";
 import { failureOf, providerCall } from "./call.js";
@@ -27,13 +27,24 @@ describe("openalex: request", () => {
   it("matches title and abstract when sorting by citations or date", () => {
     const p = params(worksUrl(req({ sort: PaperSort.Citations, query: "a, b|c" })));
     expect(p).not.toHaveProperty("search");
-    expect(p).toMatchObject({ sort: "cited_by_count:desc", filter: "title_and_abstract.search:a  b c" });
+    expect(p).toMatchObject({ sort: "cited_by_count:desc", filter: 'title_and_abstract.search:"a b c",is_retracted:false' });
+  });
+
+  // Regression: loose words let off-topic and retracted papers top a citation sort.
+  it("matches short queries as phrases, leaves quoted and long ones alone", () => {
+    expect(titleAbstractQuery("diffusion models")).toBe('"diffusion models"');
+    expect(titleAbstractQuery('"exact" words')).toBe('"exact" words');
+    expect(titleAbstractQuery("transformers")).toBe("transformers");
+    expect(titleAbstractQuery("one two three four five")).toBe("one two three four five");
   });
 
   it("never returns future-dated papers for newest, and maps year and open-access filters", () => {
-    expect(params(worksUrl(req({ sort: PaperSort.Newest }), undefined, "2026-10-22")).filter).toBe("title_and_abstract.search:attention is all you need,to_publication_date:2026-10-22");
+    // Five words: matched as words, not as one phrase.
+    expect(params(worksUrl(req({ sort: PaperSort.Newest }), undefined, "2026-10-22")).filter).toBe(
+      "title_and_abstract.search:attention is all you need,is_retracted:false,to_publication_date:2026-10-22",
+    );
     const f = params(worksUrl(req({ yearFrom: 2018, yearTo: 2020, openAccess: true }), "key")).filter;
-    expect(f).toBe("from_publication_date:2018-01-01,to_publication_date:2020-12-31,is_oa:true");
+    expect(f).toBe("is_retracted:false,from_publication_date:2018-01-01,to_publication_date:2020-12-31,is_oa:true");
     expect(params(worksUrl(req(), "key")).api_key).toBe("key");
   });
 });

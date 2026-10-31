@@ -141,7 +141,18 @@ describe("engine cache: search", () => {
     expect((await mcpy.search({ query: "cats" })).meta.cache).toBe(CacheStatus.Hit);
   });
 
-  it("caches an empty result list (any search answer is final)", async () => {
+  // Regression: one source finding nothing used to end the search.
+  it("moves on when a source finds nothing, and serves the next source's results", async () => {
+    const empty = fakeSearch("empty", []);
+    const full = fakeSearch("full", hits);
+    const { mcpy } = testMcpy({ search: [empty, full] });
+    const r = await mcpy.search({ query: "cats" });
+    expect(r.results).toHaveLength(hits.length);
+    expect(empty.calls).toBe(1);
+    expect(full.calls).toBe(1);
+  });
+
+  it("caches an empty result briefly when every source finds nothing", async () => {
     const s = fakeSearch("s", []);
     const { mcpy } = testMcpy({ search: [s] });
     await mcpy.search({ query: "nothing" });

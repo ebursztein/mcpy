@@ -1,6 +1,6 @@
 # mcpy
 
-Web tools for AI agents (fetch, grep, search), as:
+Web and paper tools for AI agents (fetch, grep, search, paper search), as:
 
 - **an SDK** on npm: [`mcpy`](packages/mcpy), usable from any TypeScript project
 - **a hosted server** on Cloudflare Workers: [`apps/server`](apps/server), exposing the
@@ -16,6 +16,11 @@ traces and structured logs tagged with the calling client's name.
 > at [ebursztein/mcpy-legacy](https://github.com/ebursztein/mcpy-legacy).
 
 Design and rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Giving mcpy to an agent?** Hand it [`skills/mcpy/SKILL.md`](skills/mcpy/SKILL.md)
+([raw](https://raw.githubusercontent.com/ebursztein/mcpy/main/skills/mcpy/SKILL.md))
+with a base URL and its own API key. It covers connecting over MCP or REST,
+which tool to use when, errors, and safety rules.
 
 ## Tools
 
@@ -144,7 +149,7 @@ faster providers in the default order. Searches without a country default to
 US English (Bright Data otherwise geolocates at random). Google Jobs through
 the SERP API failed upstream, so `type=jobs` is not offered for Bright Data.
 
-
+## Observability
 
 - **Logs**: one structured JSON line per operation in Workers Logs, with
   `client.name`, `mcpy.request.id`, trace ids, cache status, cost.

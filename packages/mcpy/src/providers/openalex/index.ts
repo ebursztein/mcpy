@@ -47,15 +47,32 @@ export function abstractFromIndex(index: Record<string, number[]> | null | undef
  * win (seen live: a molecular-dynamics tool topped "diffusion models image
  * generation" by citations). Those sorts match title and abstract only.
  */
+/** Words in a query short enough to be matched as an exact phrase. */
+const PHRASE_MAX_WORDS = 4;
+
+/**
+ * Query for the title+abstract filter. Short queries are matched as a
+ * phrase: as loose words, "diffusion models" matched AlphaFold 3 and a
+ * COVID paper whose abstracts merely contain both words (seen live).
+ */
+export function titleAbstractQuery(query: string): string {
+  // "," separates filters and "|" means OR inside a filter value.
+  const clean = query.replace(/[,|]/g, " ").replace(/\s+/g, " ").trim();
+  if (clean.includes('"')) return clean;
+  const words = clean.split(" ").length;
+  return words >= 2 && words <= PHRASE_MAX_WORDS ? `"${clean}"` : clean;
+}
+
 export function worksUrl(req: PaperRequest, apiKey?: string, today = new Date().toISOString().slice(0, 10)): string {
   const url = new URL(API);
   const filters: string[] = [];
   if (req.sort === PaperSort.Relevance) {
     url.searchParams.set("search", req.query);
   } else {
-    // "," separates filters and "|" means OR inside a filter value.
-    filters.push(`title_and_abstract.search:${req.query.replace(/[,|]/g, " ").trim()}`);
+    filters.push(`title_and_abstract.search:${titleAbstractQuery(req.query)}`);
   }
+  // Retracted papers are never what a caller wants (seen live: one ranked #3 by citations).
+  filters.push("is_retracted:false");
   url.searchParams.set("per-page", String(req.limit));
   url.searchParams.set("page", String(req.page));
   url.searchParams.set("select", SELECT_FIELDS);
