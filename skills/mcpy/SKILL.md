@@ -18,23 +18,47 @@ your context. You never choose or see a backend.
 
 ## Connect
 
-You need the base URL and an API key from the person who runs mcpy. Below,
-`$MCPY_URL` is the base URL (e.g. `https://tools.ly.tl`) and `$MCPY_KEY` the key.
+- **Server: `https://tools.ly.tl`.** This is the real address, not an
+  example. Use it as is. (Only if you were explicitly told you run your own
+  mcpy deployment, use that URL instead.)
+- **API key: ask your user for it.** Each agent gets its own key from the
+  user. Never guess one, never reuse another agent's key, and never write it
+  into code, commits, or logs: read it from config or an environment
+  variable such as `MCPY_KEY`.
 
-**As an MCP server** (preferred when your runtime supports MCP over HTTP):
+Below, `$MCPY_URL` is `https://tools.ly.tl` and `$MCPY_KEY` the key.
 
-```bash
-claude mcp add --transport http mcpy "$MCPY_URL/mcp" --header "Authorization: Bearer $MCPY_KEY"
-```
-
-**As a REST API**: send the key as `Authorization: Bearer $MCPY_KEY` (or
-`X-API-Key`). POST takes a JSON body; GET takes the same fields as query
-parameters (lists comma-separated). If you can only open URLs, add
-`key=$MCPY_KEY` to the query string, but prefer a header: URLs end up in logs.
+**REST API** (works from any language): send the key as
+`Authorization: Bearer $MCPY_KEY` (or `X-API-Key`). POST takes a JSON body;
+GET takes the same fields as query parameters (lists comma-separated). If
+you can only open URLs, add `key=$MCPY_KEY` to the query string, but prefer a
+header: URLs end up in logs. Allow up to 60 s per call.
 
 ```bash
 curl -s "$MCPY_URL/v1/fetch" -H "Authorization: Bearer $MCPY_KEY" \
   -H "content-type: application/json" -d '{"url":"https://example.com","max_chars":5000}'
+```
+
+In JavaScript:
+
+```js
+async function mcpy(tool, body) {
+  const res = await fetch(`https://tools.ly.tl/v1/${tool}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.MCPY_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(`${data.error.code}: ${data.error.message}`), data.error);
+  return data;
+}
+const page = await mcpy("fetch", { url: "https://example.com", max_chars: 5000 });
+```
+
+**MCP** (only if your runtime speaks MCP over HTTP; same key):
+
+```bash
+claude mcp add --transport http mcpy "https://tools.ly.tl/mcp" --header "Authorization: Bearer $MCPY_KEY"
 ```
 
 ## Which tool, and how
@@ -101,11 +125,11 @@ Errors are `{"error": {"code", "message", "details"?}}` with an HTTP status.
 | `invalid_input` | 400 | Fix the request; `details` names each problem. Includes `unsupported: ...` when no source can do what you asked (e.g. `sort citations` with `collection: biomedical`): drop or change that option. |
 | `invalid_target` | 400 | The URL is not a public http(s) address (or redirects to one). Do not retry. |
 | `unsupported_content` | 415 | Not a text page (e.g. an image or archive). Do not retry. |
-| `unauthorized` / `forbidden` | 401 / 403 | Missing or wrong key. Ask the operator. |
+| `unauthorized` / `forbidden` | 401 / 403 | Missing or wrong key. Ask your user for a valid one. |
 | `rate_limited` | 429 | Wait for `Retry-After` seconds, then retry. |
 | `upstream_failed` | 502 | Every source failed (site down or blocking). Retry later, or try a different page. |
 | `timeout` | 504 | Took too long. Retry once; for search try `mode: "fast"`. |
-| `no_providers` | 503 | The operator has not enabled sources for this tool. Tell the user. |
+| `no_providers` | 503 | No sources are enabled for this tool on the server. Tell your user. |
 
 ## Rules
 
