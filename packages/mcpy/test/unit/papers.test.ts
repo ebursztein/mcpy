@@ -5,7 +5,7 @@ import type { FoundPaper, PaperCapabilities, PaperProvider, PaperRequest } from 
 import { mergePapers, paperKeys } from "../../src/engine/papers.js";
 import { mentionsProvider, testMcpy } from "../helpers.js";
 
-const ALL: PaperCapabilities = { sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest], yearFilter: true, openAccessFilter: true, maxDepth: 1_000, collections: [] };
+const ALL: PaperCapabilities = { sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest], yearFilter: true, openAccessFilter: true, authorFilter: true, maxDepth: 1_000, collections: [] };
 
 function index(id: string, papers: FoundPaper[] | Error, capabilities: PaperCapabilities = ALL): PaperProvider & { requests: PaperRequest[] } {
   const requests: PaperRequest[] = [];
@@ -59,6 +59,29 @@ describe("paper routing", () => {
     const { mcpy } = testMcpy({ papers: [p] });
     await mcpy.papers({ query: "q", max_results: 5, page: 2, year_from: 2019, year_to: 2021, open_access: true, sort: PaperSort.Newest });
     expect(p.requests[0]).toEqual({ query: "q", limit: 5, page: 2, yearFrom: 2019, yearTo: 2021, openAccess: true, sort: "newest", collection: undefined });
+  });
+
+  it("filters by author: routes only to indexes that can, and allows author-only searches", async () => {
+    const noAuthor = index("noauthor", [paper("N")], { ...ALL, authorFilter: false });
+    const withAuthor = index("withauthor", [paper("A")]);
+    const { mcpy } = testMcpy({ papers: [noAuthor, withAuthor] });
+    const r = await mcpy.papers({ author: "Elie Bursztein", sort: PaperSort.Citations });
+    expect(r).toMatchObject({ author: "Elie Bursztein", results: [{ title: "A" }] });
+    expect(r.query).toBeUndefined();
+    expect(noAuthor.requests).toHaveLength(0);
+    expect(withAuthor.requests[0]).toMatchObject({ author: "Elie Bursztein", query: undefined });
+    // Same query, different author: a different cache entry.
+    await mcpy.papers({ author: "Someone Else", sort: PaperSort.Citations });
+    expect(withAuthor.requests).toHaveLength(2);
+
+    const { mcpy: limited } = testMcpy({ papers: [noAuthor] });
+    const err = (await limited.papers({ query: "q", author: "X Y" }).catch((e) => e)) as McpyError;
+    expect(err.details).toEqual(["unsupported: author filter"]);
+  });
+
+  it("requires a query or an author", () => {
+    expect(PaperSearchInputSchema.safeParse({}).success).toBe(false);
+    expect(PaperSearchInputSchema.safeParse({ author: "Elie Bursztein" }).success).toBe(true);
   });
 
   it("validates the year range and has a publishable JSON Schema", () => {

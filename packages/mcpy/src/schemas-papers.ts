@@ -10,7 +10,8 @@ const year = z.number().int().min(1800).max(2100);
 
 export const PaperSearchInputSchema = z
   .object({
-    query: z.string().trim().min(1).max(500).describe("Topic, title or keywords"),
+    query: z.string().trim().min(1).max(500).optional().describe("Topic, title or keywords (optional when author is set)"),
+    author: z.string().trim().min(2).max(200).optional().describe("Only papers by this author, e.g. \"Elie Bursztein\""),
     max_results: z.number().int().min(1).max(MAX_PAPER_RESULTS).default(10),
     page: z.number().int().min(1).max(MAX_PAPER_PAGE).default(1).describe("Page of results, 1 is the first"),
     year_from: year.optional().describe("Only papers published in or after this year"),
@@ -21,6 +22,7 @@ export const PaperSearchInputSchema = z
     mode: SearchModeSchema.default(SearchMode.Fast).describe("fast: first index that answers; thorough: combine all indexes (slower)"),
     fresh: z.boolean().default(false).describe("Ignore the cache and search again"),
   })
+  .refine((p) => p.query !== undefined || p.author !== undefined, { message: "give a query, an author, or both", path: ["query"] })
   .refine((p) => p.year_from === undefined || p.year_to === undefined || p.year_from <= p.year_to, {
     message: "year_from must not be after year_to",
     path: ["year_from"],
@@ -47,7 +49,8 @@ export const PaperSchema = z.object({
 });
 
 export const PaperSearchResultSchema = z.object({
-  query: z.string(),
+  query: z.string().optional(),
+  author: z.string().optional(),
   page: z.number().int(),
   sort: PaperSortSchema,
   results: z.array(PaperSchema),

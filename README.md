@@ -33,12 +33,12 @@ which tool to use when, errors, and safety rules.
 
 ### Parameters
 
-| Tool | Parameters (all but the first are optional) |
+| Tool | Parameters (all but the first are optional; papers needs a query, an author, or both) |
 | --- | --- |
 | fetch | `url`, `format` (`markdown`\|`html`), `offset`, `max_chars`, `user_agent`, `fresh` |
 | grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `fresh` |
 | search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `fresh` |
-| papers | `query`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `fresh` |
+| papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `fresh` |
 
 - `user_agent`: `default` (honest mcpy agent), `chrome`, `safari`, `firefox`, `mobile`, `googlebot`.
 - `type`: `web`, `news`, `images`, `videos`, `shopping`, `jobs`, `places`.
@@ -131,7 +131,9 @@ is used when `SEMANTIC_SCHOLAR_API_KEY` is set. `collection: preprints` or
 directly; without it, every index is eligible. Dates are when a paper became
 available: an article published online in 2026 for a 2027 issue shows 2026. In `thorough` mode the same
 paper found in several indexes is merged by DOI, arXiv id or title, keeping
-the highest citation count. Sorting by citations or newest matches title and
+the highest citation count. `author` resolves the name to an OpenAlex author profile, and maps to arXiv
+`au:` terms and PubMed `[au]` (Semantic Scholar cannot filter by author); with
+no query, an author's papers rank by citations. Sorting by citations or newest matches title and
 abstract only (OpenAlex full-text matching ranked off-topic classics first).
 arXiv asks for one request every 3 s and throttles otherwise, so mcpy spaces
 its requests and retries patiently; its answers can take up to ~30 s.

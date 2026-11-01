@@ -21,17 +21,26 @@ export const ARXIV_CAPABILITIES: PaperCapabilities = {
   yearFilter: true,
   // Every arXiv paper is open access, so the filter is always satisfied.
   openAccessFilter: true,
+  authorFilter: true,
   maxDepth: MAX_DEPTH,
   collections: [PaperCollection.Preprints],
 };
 
-/** Terms ANDed across all fields, plus an optional submission-date range. */
-export function arxivQuery(req: PaperRequest): string {
-  const terms = req.query
-    .replace(/["()]/g, " ")
+/** Words of free text, safe to use as arXiv field terms. */
+function words(text: string | undefined): string[] {
+  return (text ?? "")
+    .replace(/["():,]/g, " ")
     .split(/\s+/)
-    .filter((t) => t && !/^(and|or|andnot)$/i.test(t))
-    .map((t) => `all:${t}`);
+    .filter((t) => t && !/^(and|or|andnot)$/i.test(t));
+}
+
+/**
+ * Terms ANDed across all fields, plus optional author and submission-date
+ * filters. Each author word is its own `au:` term: "Elie Bursztein" and
+ * "Bursztein, Elie" then match the same papers (verified live).
+ */
+export function arxivQuery(req: PaperRequest): string {
+  const terms = [...words(req.query).map((t) => `all:${t}`), ...words(req.author).map((t) => `au:${t}`)];
   const parts = [terms.join(" AND ") || "all:*"];
   if (req.yearFrom !== undefined || req.yearTo !== undefined) {
     const from = `${req.yearFrom ?? 1991}01010000`;

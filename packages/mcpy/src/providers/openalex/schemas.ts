@@ -32,6 +32,9 @@ export const WorksResponseSchema = z.object({
   meta: z.object({ count: z.number().nullish() }).partial().nullish(),
 });
 
+/** /authors search: only the id of the best match is used. */
+export const AuthorsResponseSchema = z.object({ results: z.array(z.object({ id: z.string() })).default([]) });
+
 export const SELECT_FIELDS = [
   "id",
   "doi",

@@ -86,6 +86,8 @@ such as `$5.00` or `C++`.
   coverage matters, not by default.
 
 **Need research literature?** `papers`.
+- `query` (topic) and/or `author` ("Elie Bursztein"): one is required.
+  An author alone lists their papers, most cited first
 - `sort`: `relevance` (default), `citations` (most cited first), `newest`
 - `year_from` / `year_to`, `open_access: true` for free full text only
 - `collection`: `preprints` (fresh, not yet peer-reviewed) or `biomedical`
@@ -95,6 +97,10 @@ such as `$5.00` or `C++`.
   paper's full text by fetching its `pdf_url` or `url`.
 
 ```bash
+# An author's most-cited papers (add query=... to narrow to a topic)
+curl -s "$MCPY_URL/v1/papers?author=Elie+Bursztein&sort=citations&max_results=10" \
+  -H "Authorization: Bearer $MCPY_KEY"
+
 # Most-cited open-access papers on a topic since 2020
 curl -s "$MCPY_URL/v1/papers?query=diffusion+models&sort=citations&year_from=2020&open_access=true&max_results=5" \
   -H "Authorization: Bearer $MCPY_KEY"

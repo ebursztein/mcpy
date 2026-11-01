@@ -41,13 +41,16 @@ export const SEMANTIC_SCHOLAR_CAPABILITIES: PaperCapabilities = {
   sorts: [PaperSort.Relevance],
   yearFilter: true,
   openAccessFilter: true,
+  // The paper search endpoint has no author filter.
+  authorFilter: false,
   maxDepth: MAX_DEPTH,
   collections: [],
 };
 
 export function semanticScholarUrl(req: PaperRequest): string {
   const url = new URL(API);
-  url.searchParams.set("query", req.query);
+  // Never routed without a query: author-only requests need authorFilter.
+  url.searchParams.set("query", req.query ?? "");
   url.searchParams.set("offset", String((req.page - 1) * req.limit));
   url.searchParams.set("limit", String(req.limit));
   url.searchParams.set("fields", FIELDS);

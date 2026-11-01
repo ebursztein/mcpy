@@ -4,7 +4,10 @@ import type { PaperCollection, PaperSort } from "../enums.js";
 import type { ProviderCall } from "./types.js";
 
 export interface PaperRequest {
-  query: string;
+  /** Topic or keywords. At least one of query and author is set. */
+  query?: string;
+  /** Only papers by this author (a name as a person would type it). */
+  author?: string;
   /** Unset: every index. Set: only indexes covering that collection. */
   collection?: PaperCollection;
   /** Results wanted on this page. */
@@ -41,6 +44,8 @@ export interface PaperCapabilities {
   sorts: readonly PaperSort[];
   yearFilter: boolean;
   openAccessFilter: boolean;
+  /** Can restrict results to one author. */
+  authorFilter: boolean;
   /** Deepest result reachable: page * limit must not exceed it. */
   maxDepth: number;
   /** Specialized collections this index covers (general indexes list none). */

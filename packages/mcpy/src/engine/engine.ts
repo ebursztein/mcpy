@@ -143,7 +143,7 @@ export class Engine {
   /** Paper search: same modes as web search, merged by DOI, arXiv id or title. */
   async papers(req: PaperRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPaper[]>> {
     const providers = capablePaperProviders(this.deps.paperProviders, req);
-    const identity = [mode, req.query.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort, req.collection];
+    const identity = [mode, req.query?.toLowerCase(), req.author?.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort, req.collection];
     const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
     const ttl = (hits: MergedPaper[]) => (hits.length ? this.deps.limits.paperTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
     const chain = (ps: PaperProvider[], deadlineAt: number) =>

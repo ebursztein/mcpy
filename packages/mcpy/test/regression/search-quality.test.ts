@@ -9,7 +9,7 @@ import type { FoundPaper, PaperCapabilities, PaperProvider } from "mcpy/provider
 import { worksUrl } from "../../src/providers/openalex/index.js";
 import { fakeSearch, testMcpy } from "../helpers.js";
 
-const ALL: PaperCapabilities = { sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest], yearFilter: true, openAccessFilter: true, maxDepth: 1_000, collections: [] };
+const ALL: PaperCapabilities = { sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest], yearFilter: true, openAccessFilter: true, authorFilter: true, maxDepth: 1_000, collections: [] };
 
 function paperIndex(id: string, papers: FoundPaper[]): PaperProvider & { calls: number } {
   const p = { id, costPerCall: 0, capabilities: ALL, calls: 0, async searchPapers() { p.calls++; return papers; } };

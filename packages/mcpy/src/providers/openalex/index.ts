@@ -1,8 +1,8 @@
 import { ErrorCode, PaperSort } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { bareArxivId, bareDoi, type FoundPaper, type PaperCapabilities, type PaperProvider, type PaperRequest } from "../paper-types.js";
-import { ProviderId } from "../types.js";
-import { SELECT_FIELDS, WorkSchema, WorksResponseSchema, type Work } from "./schemas.js";
+import { ProviderId, type ProviderCall } from "../types.js";
+import { AuthorsResponseSchema, SELECT_FIELDS, WorkSchema, WorksResponseSchema, type Work } from "./schemas.js";
 
 export interface OpenAlexOptions {
   /**
@@ -15,6 +15,7 @@ export interface OpenAlexOptions {
 }
 
 const API = "https://api.openalex.org/works";
+const AUTHORS_API = "https://api.openalex.org/authors";
 const MAX_DEPTH = 10_000;
 
 const SORT: Record<PaperSort, string> = {
@@ -27,6 +28,7 @@ export const OPENALEX_CAPABILITIES: PaperCapabilities = {
   sorts: [PaperSort.Relevance, PaperSort.Citations, PaperSort.Newest],
   yearFilter: true,
   openAccessFilter: true,
+  authorFilter: true,
   maxDepth: MAX_DEPTH,
   collections: [],
 };
@@ -63,20 +65,44 @@ export function titleAbstractQuery(query: string): string {
   return words >= 2 && words <= PHRASE_MAX_WORDS ? `"${clean}"` : clean;
 }
 
-export function worksUrl(req: PaperRequest, apiKey?: string, today = new Date().toISOString().slice(0, 10)): string {
+/** "," and "|" are filter syntax; strip them from free text used in a filter value. */
+const filterValue = (text: string) => text.replace(/[,|]/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Filter restricting works to one author. The name is resolved to the best
+ * matching OpenAlex author profile first: matching the raw name string found
+ * 120 of 139 works for a sample author (seen live). Without a profile, fall
+ * back to the raw name.
+ */
+export async function authorFilter(name: string, call: ProviderCall, apiKey?: string): Promise<string> {
+  const url = new URL(AUTHORS_API);
+  url.searchParams.set("search", filterValue(name));
+  url.searchParams.set("per-page", "1");
+  url.searchParams.set("select", "id");
+  if (apiKey) url.searchParams.set("api_key", apiKey);
+  const { response, data } = await call.http.json({ url: url.toString() }, AuthorsResponseSchema, call.context);
+  if (response.status >= 400) throw new ProviderFailure(ErrorCode.UpstreamFailed, `HTTP ${response.status} (author lookup)`, response.status);
+  const id = data.results[0]?.id.split("/").pop();
+  return id ? `authorships.author.id:${id}` : `raw_author_name.search:${filterValue(name)}`;
+}
+
+/** `author`: a filter from authorFilter(), when the request names an author. */
+export function worksUrl(req: PaperRequest, apiKey?: string, today = new Date().toISOString().slice(0, 10), author?: string): string {
   const url = new URL(API);
   const filters: string[] = [];
-  if (req.sort === PaperSort.Relevance) {
+  if (req.query && req.sort === PaperSort.Relevance) {
     url.searchParams.set("search", req.query);
-  } else {
+  } else if (req.query) {
     filters.push(`title_and_abstract.search:${titleAbstractQuery(req.query)}`);
   }
+  if (author) filters.push(author);
   // Retracted papers are never what a caller wants (seen live: one ranked #3 by citations).
   filters.push("is_retracted:false");
   url.searchParams.set("per-page", String(req.limit));
   url.searchParams.set("page", String(req.page));
   url.searchParams.set("select", SELECT_FIELDS);
-  url.searchParams.set("sort", SORT[req.sort]);
+  // Relevance needs a query to score against; an author's papers alone rank by citations.
+  url.searchParams.set("sort", req.query ? SORT[req.sort] : SORT[PaperSort.Citations]);
   if (req.yearFrom !== undefined) filters.push(`from_publication_date:${req.yearFrom}-01-01`);
   // Newest first must not surface future-dated records (embargoes, typos).
   const until = req.yearTo !== undefined ? `${req.yearTo}-12-31` : req.sort === PaperSort.Newest ? today : undefined;
@@ -114,7 +140,9 @@ export function openAlex(options: OpenAlexOptions = {}): PaperProvider {
     costPerCall: options.costPerCall ?? 0.001,
     capabilities: OPENALEX_CAPABILITIES,
     async searchPapers(req, call) {
-      const { response, data } = await call.http.json({ url: worksUrl(req, options.apiKey) }, WorksResponseSchema, call.context);
+      const author = req.author ? await authorFilter(req.author, call, options.apiKey) : undefined;
+      const url = worksUrl(req, options.apiKey, undefined, author);
+      const { response, data } = await call.http.json({ url }, WorksResponseSchema, call.context);
       if (response.status >= 400) throw new ProviderFailure(ErrorCode.UpstreamFailed, `HTTP ${response.status}`, response.status);
       return data.results.flatMap((raw) => {
         const work = WorkSchema.safeParse(raw);

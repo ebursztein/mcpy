@@ -21,6 +21,7 @@ export const PUBMED_CAPABILITIES: PaperCapabilities = {
   sorts: [PaperSort.Relevance, PaperSort.Newest],
   yearFilter: true,
   openAccessFilter: true,
+  authorFilter: true,
   maxDepth: MAX_DEPTH,
   collections: [PaperCollection.Biomedical],
 };
@@ -34,10 +35,20 @@ function eutils(path: string, params: Record<string, string>, options: PubMedOpt
   return url.toString();
 }
 
+/**
+ * PubMed query term. An unquoted "First Last[au]" maps to the author index
+ * (seen live: quoting the name finds nothing).
+ */
+export function pubmedTerm(req: PaperRequest): string {
+  const author = req.author?.replace(/[[\]"()]/g, " ").replace(/\s+/g, " ").trim();
+  const parts = [req.query ? `(${req.query})` : undefined, author ? `${author}[au]` : undefined, req.openAccess ? "free full text[sb]" : undefined];
+  return parts.filter(Boolean).join(" AND ");
+}
+
 export function esearchUrl(req: PaperRequest, options: PubMedOptions = {}, today = new Date().toISOString().slice(0, 10)): string {
   const params: Record<string, string> = {
     db: "pubmed",
-    term: req.openAccess ? `(${req.query}) AND free full text[sb]` : req.query,
+    term: pubmedTerm(req),
     retmax: String(req.limit),
     retstart: String((req.page - 1) * req.limit),
     retmode: "json",

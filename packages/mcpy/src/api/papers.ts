@@ -41,6 +41,7 @@ export async function papersOp(
   const served = await engine.papers(
     {
       query: input.query,
+      author: input.author,
       limit: input.max_results,
       page: input.page,
       yearFrom: input.year_from,
@@ -55,6 +56,7 @@ export async function papersOp(
   );
   const result = PaperSearchResultSchema.parse({
     query: input.query,
+    author: input.author,
     page: input.page,
     sort: input.sort,
     results: served.value.map(toPaper),

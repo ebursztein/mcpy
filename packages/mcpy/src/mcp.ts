@@ -91,7 +91,8 @@ export function renderPapers(r: PaperSearchResult): string {
     })
     .join("\n\n");
   const page = r.page > 1 ? `, page ${r.page}` : "";
-  return `Papers: ${r.query} (${r.sort}${page}; ${cacheNote(r.meta)})\n---\n${body || "No papers found."}`;
+  const about = [r.query, r.author ? `by ${r.author}` : undefined].filter(Boolean).join(" ");
+  return `Papers: ${about} (${r.sort}${page}; ${cacheNote(r.meta)})\n---\n${body || "No papers found."}`;
 }
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -141,7 +142,7 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
     {
       title: "Paper Search",
       description:
-        "Search scholarly papers (journals, conferences, arXiv preprints). Returns title, authors, year, venue, citations, abstract and links, including a free PDF when one exists. Filter by year range or open access; sort by relevance, citations or newest. mode=thorough combines several indexes.",
+        "Search scholarly papers (journals, conferences, arXiv preprints). Returns title, authors, year, venue, citations, abstract and links, including a free PDF when one exists. Filter by author, year range or open access (the query is optional when an author is given); sort by relevance, citations or newest. mode=thorough combines several indexes.",
       inputSchema: PaperSearchInputSchema,
       outputSchema: PaperSearchResultSchema,
       annotations: READ_ONLY,

@@ -18,6 +18,7 @@ function gap(provider: PaperProvider, req: PaperRequest): string | undefined {
   if (!caps.sorts.includes(req.sort)) return `sort ${req.sort}`;
   if ((req.yearFrom !== undefined || req.yearTo !== undefined) && !caps.yearFilter) return "year filter";
   if (req.openAccess && !caps.openAccessFilter) return "open access filter";
+  if (req.author !== undefined && !caps.authorFilter) return "author filter";
   if (req.page * req.limit > caps.maxDepth) return `results beyond ${caps.maxDepth}`;
   return undefined;
 }
