@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CacheStatus, ErrorCode, MAX_SNIPPET_CHARS, McpyError, PageFormat, UserAgentProfile } from "mcpy";
+import { CacheStatus, ErrorCode, LogLevel, MAX_SNIPPET_CHARS, McpyError, PageFormat, UserAgentProfile } from "mcpy";
 import { brightData, direct } from "mcpy/providers";
 import { Telemetry } from "mcpy/telemetry";
 import { HttpClient } from "../../src/http/client.js";
@@ -86,5 +86,15 @@ describe("regressions", () => {
     const { mcpy } = testMcpy({ pages: [fakePages("firecrawl", new Error("firecrawl exploded"))] });
     const err = (await mcpy.fetch({ url: "https://example.com/a" }).catch((e) => e)) as McpyError;
     expect(JSON.stringify(err.toJSON())).not.toMatch(/firecrawl/);
+  });
+
+  // Seen on tools.ly.tl: OpenAlex answered 429, but the reason lived only on
+  // spans, which do not leave the Worker without OTLP export.
+  it("#9 a failed attempt's reason reaches the operator logs", async () => {
+    const { mcpy, sink } = testMcpy({ pages: [fakePages("firecrawl", new Error("HTTP 429"))] });
+    await mcpy.fetch({ url: "https://example.com/a" }).catch(() => undefined);
+    const log = sink.logs.find((l) => l.message === "attempt failed");
+    expect(log?.level).toBe(LogLevel.Warn);
+    expect(log?.attributes).toMatchObject({ "mcpy.provider": "firecrawl", "mcpy.reason": expect.stringContaining("HTTP 429") });
   });
 });

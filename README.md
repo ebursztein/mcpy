@@ -110,7 +110,7 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 | `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run |
 | `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` | - | Firecrawl (URL for self-hosted) |
 | `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
-| `OPENALEX_API_KEY` | - | Optional, free at openalex.org/settings/api. Without it OpenAlex shares a ~100 requests/day budget per IP |
+| `OPENALEX_API_KEY` | - | Free at openalex.org/settings/api. Needed on Cloudflare: without it OpenAlex shares one small daily budget per IP, and Workers share IPs, so it answers 429 |
 | `SEMANTIC_SCHOLAR_API_KEY` | - | Enables Semantic Scholar (anonymous calls are rate-limited) |
 | `NCBI_API_KEY`, `NCBI_EMAIL` | - | Optional for PubMed: a free key raises the limit from 3 to 10 requests/s |
 | `PAPER_CACHE_TTL_SECONDS` | `86400` | Paper search cache TTL |
@@ -123,7 +123,9 @@ clear log line. A provider without credentials is skipped.
 
 OpenAlex (250M+ works with citations, venues and open-access links), arXiv
 (preprints, always free to read) and PubMed (37M+ biomedical citations, with
-free PubMed Central full text when available) need no key; Semantic Scholar
+free PubMed Central full text when available) work without a key, but on
+Cloudflare OpenAlex needs one in practice (see `OPENALEX_API_KEY`): it is the
+only keyless index that sorts by citations; Semantic Scholar
 is used when `SEMANTIC_SCHOLAR_API_KEY` is set. `collection: preprints` or
 `collection: biomedical` targets the indexes covering those collections
 directly; without it, every index is eligible. Dates are when a paper became

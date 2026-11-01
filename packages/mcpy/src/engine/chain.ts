@@ -1,4 +1,4 @@
-import { AttemptOutcome, ErrorCode, SpanName, SpanStatus } from "../enums.js";
+import { AttemptOutcome, ErrorCode, LogLevel, SpanName, SpanStatus } from "../enums.js";
 import { McpyError, ProviderFailure } from "../errors.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
@@ -136,6 +136,8 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
       span.recordError(err);
       span.setAttributes({ [Attr.Outcome]: AttemptOutcome.Error, [Attr.Reason]: `${code}: ${message}` });
       span.end(SpanStatus.Error, message);
+      // Spans only leave the Worker when OTLP export is set up; logs always do.
+      o.telemetry.log(LogLevel.Warn, "attempt failed", { [Attr.Provider]: provider.id, [Attr.Reason]: `${code}: ${message}`.slice(0, 500) }, span.context);
       const stop = definitive(err);
       if (stop) throw stop;
       if (provider.circuitBreaker !== false) o.breaker.recordFailure(provider.id);
