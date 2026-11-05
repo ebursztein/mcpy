@@ -56,7 +56,8 @@
         "PAPER_PROVIDERS": "openalex,arxiv,pubmed,semantic_scholar",
         "DAILY_BUDGET_USD": "1",
         // cardy drained the Firecrawl plan in early Nov 2026; keep it well under the Hobby plan.
-        "CLIENT_DAILY_BUDGETS_USD": "cardy:0.1",
+        // deepmine is our own mining operation: generous, but still capped.
+        "CLIENT_DAILY_BUDGETS_USD": "cardy:0.1,deepmine:3",
         "LOG_LEVEL": "info",
         "DEPLOYMENT_ENV": "lytl"
       }
