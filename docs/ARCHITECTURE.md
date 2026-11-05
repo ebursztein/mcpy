@@ -40,6 +40,7 @@ Rules, each enforced by tests where possible:
 | Concern | Mechanism |
 | --- | --- |
 | Provider down or blocked | Fallback chain: next provider on error, HTTP 401/403/429/5xx from the target, bot challenge (judged on page title, challenge markup on small pages, challenge wording on tiny pages), or an empty HTML shell |
+| Sites that block cheap providers | Site routes: once a later page provider serves a site (hostname + format), the next fetch starts with it, so a blocked direct fetch or browser attempt is not paid for on every call. The providers it skips move to the end of the chain, never out of it. Routes live in the cache for `siteRouteTtlSeconds` (default 1 day), then the cheap providers get another chance |
 | Definitive answers | 404/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
 | Thin but real pages | Short text, JSON or markdown is served as is. A short HTML page escalates; if no provider does better, the best one is returned and not cached |
 | Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After`; programming errors are never retried |

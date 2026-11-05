@@ -18,6 +18,7 @@ import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.j
 import { settleWithGrace } from "./fanout.js";
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
+import { routeOrder, siteOf, SiteRoutes } from "./routes.js";
 
 export const EngineLimitsSchema = z.object({
   /** Upper bound for a single provider attempt. */
@@ -29,6 +30,8 @@ export const EngineLimitsSchema = z.object({
   pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
   searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
   paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
+  /** How long a site's page provider is remembered before cheaper ones are tried first again. */
+  siteRouteTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
   /** Thorough mode: after the first provider answers, how long to wait for the others. */
   thoroughGraceMs: z.number().int().min(0).max(120_000).default(8_000),
 });
@@ -84,7 +87,11 @@ interface Cached<T> {
 
 /** Cache, fallback chain and provider plumbing behind every operation. */
 export class Engine {
-  constructor(private readonly deps: EngineDeps) {}
+  private readonly routes: SiteRoutes;
+
+  constructor(private readonly deps: EngineDeps) {
+    this.routes = new SiteRoutes(deps.cache, deps.limits.siteRouteTtlSeconds);
+  }
 
   get providerIds() {
     return {
@@ -96,16 +103,33 @@ export class Engine {
 
   async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
     const key = `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
+    const site = siteOf(req.url, req.format);
     // A salvaged thin page may be a JS shell nobody could render: never cache it.
-    return this.cached(key, (_page, salvaged) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds), fresh, scope, (deadlineAt) =>
-      runChain({
-        providers: this.deps.pageProviders,
+    return this.cached(key, (_page, salvaged) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds), fresh, scope, async (deadlineAt) => {
+      const preferred = site ? await this.routes.recall(site) : undefined;
+      const providers = routeOrder(this.deps.pageProviders, preferred);
+      if (providers[0] !== this.deps.pageProviders[0]) {
+        scope.telemetry.log(LogLevel.Debug, "site route", { [Attr.Provider]: providers[0].id }, scope.parent);
+      }
+      const result = await runChain({
+        providers,
         attempt: (p, signal, timeoutMs, parent) => p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
         judge: assessPage,
         describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
         ...this.chainCommon(deadlineAt, scope),
-      }),
-    );
+      });
+      if (site && !result.salvaged) await this.learnRoute(site, preferred, result.provider, scope);
+      return result;
+    });
+  }
+
+  /** Remember which provider served a site, when that changes what the next call tries first. */
+  private async learnRoute(site: string, preferred: string | undefined, served: string, scope: CallScope): Promise<void> {
+    const isDefault = served === this.deps.pageProviders[0]?.id;
+    if (served === preferred || (preferred === undefined && isDefault)) return;
+    const write = this.routes.remember(site, served).catch(() => undefined);
+    if (scope.defer) scope.defer(write);
+    else await write;
   }
 
   /**
