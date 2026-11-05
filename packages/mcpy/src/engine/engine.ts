@@ -19,6 +19,7 @@ import { settleWithGrace } from "./fanout.js";
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
 import { routeOrder, siteOf, SiteRoutes } from "./routes.js";
+import { PagePins, type Pinned } from "./pins.js";
 
 export const EngineLimitsSchema = z.object({
   /** Upper bound for a single provider attempt. */
@@ -88,9 +89,11 @@ interface Cached<T> {
 /** Cache, fallback chain and provider plumbing behind every operation. */
 export class Engine {
   private readonly routes: SiteRoutes;
+  private readonly pins: PagePins;
 
   constructor(private readonly deps: EngineDeps) {
     this.routes = new SiteRoutes(deps.cache, deps.limits.siteRouteTtlSeconds);
+    this.pins = new PagePins(deps.cache, deps.limits.pageTtlSeconds);
   }
 
   get providerIds() {
@@ -101,8 +104,22 @@ export class Engine {
     };
   }
 
+  private async pageKey(req: PageRequest): Promise<string> {
+    return `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
+  }
+
+  /** Keep this copy of a page so its later parts come from it; returns its version. */
+  async pinPage(req: PageRequest, served: Served<FetchedPage>): Promise<string> {
+    return this.pins.pin(await this.pageKey(req), served.value, served.provider);
+  }
+
+  /** The pinned copy of a page with this version, if it is still kept. */
+  async pinnedPage(req: PageRequest, version: string): Promise<Pinned | undefined> {
+    return this.pins.recall(await this.pageKey(req), version);
+  }
+
   async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
-    const key = `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
+    const key = await this.pageKey(req);
     const site = siteOf(req.url, req.format);
     // A salvaged thin page may be a JS shell nobody could render: never cache it.
     return this.cached(key, (_page, salvaged) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds), fresh, scope, async (deadlineAt) => {

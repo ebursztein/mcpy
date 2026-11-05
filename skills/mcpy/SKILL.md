@@ -65,7 +65,7 @@ claude mcp add --transport http mcpy "https://tools.ly.tl/mcp" --header "Authori
 
 **Know the URL and need the content?** `fetch`. Start with `max_chars`
 5000-10000. If the result has `next_offset`, there is more: call again with
-`offset` set to it. Stop as soon as you have what you need.
+`offset` set to it and the same `version`. Stop as soon as you have what you need.
 
 **Need data from a huge page (a shop, a catalogue)?** Pass `script`, a
 JavaScript module that runs on the whole page server-side; only what it

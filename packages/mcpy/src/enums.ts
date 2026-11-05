@@ -61,6 +61,8 @@ const errorCode = enumOf({
   TooLarge: "too_large",
   UnsupportedContent: "unsupported_content",
   BadResponse: "bad_response",
+  /** The copy of a page that earlier parts came from is no longer kept. */
+  VersionExpired: "version_expired",
   Internal: "internal",
 } as const);
 export const ErrorCode = errorCode.values;

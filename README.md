@@ -35,7 +35,7 @@ which tool to use when, errors, and safety rules.
 
 | Tool | Parameters (all but the first are optional; papers needs a query, an author, or both) |
 | --- | --- |
-| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `max_chars` (up to 50,000), `script`, `user_agent`, `fresh` |
+| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `version`, `max_chars` (up to 50,000), `script`, `user_agent`, `fresh` |
 | grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `fresh` |
 | search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `fresh` |
 | papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `fresh` |
@@ -46,7 +46,7 @@ which tool to use when, errors, and safety rules.
 - `country` / `language`: two-letter codes (`us`, `fr`, `en`). Hints: a source that cannot honor them still answers.
 - `sites` / `exclude_sites`: hostnames (comma-separated in GET query strings).
 - `mode`: `fast` (first source that answers) or `thorough` (every source that supports the request, merged; results carry `sources`, the number of sources that returned them).
-- Long pages: pass the returned `next_offset` as `offset` to read on, or pass a `script` (`export default (page) => value`) that runs on the whole page and returns only what it extracts, as JSON. Pages too long for one call come with a `tip` saying so.
+- Long pages: pass the returned `next_offset` as `offset`, with the returned `version`, to read on (every part then comes from the same copy of the page), or pass a `script` (`export default (page) => value`) that runs on the whole page and returns only what it extracts, as JSON. Pages too long for one call come with a `tip` saying so.
 
 Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
 (today's estimated spend and cap per client), admin clients only.

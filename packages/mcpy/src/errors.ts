@@ -15,6 +15,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   [ErrorCode.TooLarge]: 502,
   [ErrorCode.UnsupportedContent]: 415,
   [ErrorCode.BadResponse]: 502,
+  [ErrorCode.VersionExpired]: 410,
   [ErrorCode.Internal]: 500,
 };
 

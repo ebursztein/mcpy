@@ -39,6 +39,11 @@ export const FetchInputSchema = z.object({
   url,
   format,
   offset: z.number().int().min(0).default(0).describe("Character to start from; use next_offset from the previous call"),
+  version: z
+    .string()
+    .regex(/^[0-9a-f]{16}$/)
+    .optional()
+    .describe("With offset: the version from the first part, so every part comes from the same copy of the page"),
   max_chars: z.number().int().min(100).max(MAX_OUTPUT_CHARS).default(10_000).describe("Most characters to return"),
   script: z
     .string()
@@ -103,7 +108,8 @@ export const FetchResultSchema = z.object({
   content: z.string(),
   offset: z.number().int(),
   total_chars: z.number().int(),
-  next_offset: z.number().int().optional().describe("Pass as offset to read the next part; absent at the end"),
+  next_offset: z.number().int().optional().describe("Pass as offset, with version, to read the next part; absent at the end"),
+  version: z.string().optional().describe("Which copy of the page this is; set when it has more than one part"),
   tip: z.string().optional().describe("Set when the page is too long for one call"),
   meta: ResultMetaSchema,
 });
