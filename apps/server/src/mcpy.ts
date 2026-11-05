@@ -2,6 +2,7 @@ import { createMcpy, KvCache, MemoryCache, type Mcpy } from "mcpy";
 import type { Telemetry } from "mcpy/telemetry";
 import type { Env, ServerEnv } from "./env.js";
 import { buildProviders, type ProviderSetup } from "./providers.js";
+import { workerLoaderScripts } from "./scripts.js";
 
 // Per-isolate fallback cache when no KV namespace is bound (local dev).
 const isolateCache = new MemoryCache(500);
@@ -19,6 +20,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
       search: providers.search,
       papers: providers.papers,
       cache: env.CACHE ? new KvCache(env.CACHE) : isolateCache,
+      scripts: env.LOADER ? workerLoaderScripts(env.LOADER) : undefined,
       limits: {
         attemptTimeoutMs: config.ATTEMPT_TIMEOUT_MS,
         deadlineMs: config.DEADLINE_MS,

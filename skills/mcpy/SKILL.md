@@ -67,6 +67,18 @@ claude mcp add --transport http mcpy "https://tools.ly.tl/mcp" --header "Authori
 5000-10000. If the result has `next_offset`, there is more: call again with
 `offset` set to it. Stop as soon as you have what you need.
 
+**Need data from a huge page (a shop, a catalogue)?** Pass `script`, a
+JavaScript module that runs on the whole page server-side; only what it
+returns comes back, as JSON in `content` (`JSON.parse` it). Use
+`format: "html"` to work on the raw page. A result with `tip` means the page
+is too long for one call: read a part first to see its structure, then
+write the script.
+
+```js
+// page is { url, final_url, status, title, content }
+export default (page) => [...page.content.matchAll(/data-price="([\d.]+)"/g)].map((m) => Number(m[1]));
+```
+
 **Looking for something specific on a long page?** `grep` first. It returns
 only matching lines with `context` lines around them, which is far cheaper
 than reading the page. `pattern` is a case-insensitive regular expression

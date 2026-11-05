@@ -49,7 +49,8 @@ Rules, each enforced by tests where possible:
 | Unsafe targets (SSRF) | Only public http(s) URLs. Redirects are followed by hand and every hop is checked. Hosted providers (Firecrawl, Bright Data, Browser Run) follow redirects on their side, outside this guard |
 | Huge or binary pages | Content type checked before download; byte cap on every upstream body |
 | Grep patterns | RE2 (re2js): linear time, so no pattern can stall the server; `literal` mode for plain text |
-| LLM context | Hard caps on returned characters, pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
+| Large pages | Fetch `script`: the caller's JavaScript module runs on the whole page and only its JSON result is returned (still paginated). The server loads each script as its own module with the Worker Loader binding (Workers cannot eval a string), keyed by the script's hash so a warm isolate is reused. Pages longer than one call carry a `tip` pointing at it |
+| LLM context | Hard caps on returned characters (50,000 per call), pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
 | Search coverage | Search providers declare capabilities (types, recency, site filters, depth); requests go only to providers that can honor them. Country, language and device are hints. `thorough` mode asks every capable provider in parallel and merges with reciprocal rank fusion, deduplicating by normalized URL |
 | Repeat requests | Cache keyed by normalized URL / query; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
 

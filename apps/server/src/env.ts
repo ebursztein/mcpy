@@ -8,6 +8,7 @@ import { ProviderId, ProviderIdSchema } from "mcpy/providers";
 import type { AnalyticsDatasetLike } from "mcpy/telemetry";
 import { z } from "zod";
 import type { BudgetNamespaceLike } from "./budget.js";
+import type { WorkerLoaderLike } from "./scripts.js";
 
 export interface RateLimiterLike {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -22,6 +23,8 @@ export interface Env {
   AUTH_LIMITER?: RateLimiterLike;
   /** One Durable Object per client holding today's spend (see budget.ts). */
   BUDGET?: BudgetNamespaceLike;
+  /** Runs fetch scripts; without it, fetch rejects `script`. */
+  LOADER?: WorkerLoaderLike;
   [key: string]: unknown;
 }
 

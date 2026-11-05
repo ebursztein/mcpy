@@ -11,6 +11,7 @@
 export { createMcpy, Mcpy, McpyConfigSchema, type CallContext, type McpyConfig, type McpyOptions } from "./mcpy.js";
 export { RestRoute, ToolName } from "./api/routes.js";
 export { MAX_GREP_OUTPUT_CHARS, MAX_SNIPPET_CHARS } from "./api/operations.js";
+export type { ScriptPage, ScriptRunner } from "./api/script.js";
 export * from "./enums.js";
 export * from "./schemas.js";
 export { McpyError } from "./errors.js";

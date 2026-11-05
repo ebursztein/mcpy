@@ -24,6 +24,8 @@
   // Today's spend per client, one object per client name (DAILY_BUDGET_USD).
   "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
   "migrations": [{ "tag": "v1-budget", "new_sqlite_classes": ["ClientBudget"] }],
+  // Runs fetch scripts (Workers cannot eval a string). Workers Paid plan.
+  "worker_loaders": [{ "binding": "LOADER" }],
 
   // Non-secret settings; secrets (MCPY_CLIENTS, provider keys, OTLP headers)
   // go through `wrangler secret put`. See README for every option.
@@ -49,6 +51,7 @@
         { "name": "AUTH_LIMITER", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } }
       ],
       "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
+      "worker_loaders": [{ "binding": "LOADER" }],
       "vars": {
         "ALLOWED_HOSTNAMES": "tools.ly.tl",
         "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",

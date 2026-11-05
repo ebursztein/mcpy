@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fetchOp, grepOp, searchOp } from "./api/operations.js";
+import type { ScriptRunner } from "./api/script.js";
 import { papersOp } from "./api/papers.js";
 import { PaperSearchInputSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 import type { PaperProvider } from "./providers/paper-types.js";
@@ -56,6 +57,8 @@ export interface McpyOptions extends McpyConfig {
   telemetry?: Telemetry;
   /** Defaults to the global fetch. */
   fetch?: typeof fetch;
+  /** Runs fetch scripts; without one, fetch rejects `script`. */
+  scripts?: ScriptRunner;
 }
 
 /** Who is calling and how; lands on every span and log record. */
@@ -76,12 +79,13 @@ export class Mcpy implements McpyApi {
     private readonly engine: Engine,
     private readonly telemetry: Telemetry,
     private readonly defaultUserAgent: UserAgentProfile,
+    private readonly scripts: ScriptRunner | undefined,
     private readonly context: CallContext = {},
   ) {}
 
   /** A view of this instance bound to a caller (client name, request id, ...). */
   with(context: CallContext): Mcpy {
-    return new Mcpy(this.engine, this.telemetry, this.defaultUserAgent, { ...this.context, ...context });
+    return new Mcpy(this.engine, this.telemetry, this.defaultUserAgent, this.scripts, { ...this.context, ...context });
   }
 
   /**
@@ -89,11 +93,11 @@ export class Mcpy implements McpyApi {
    * per-request exporter on a server that flushes after each response.
    */
   withTelemetry(telemetry: Telemetry): Mcpy {
-    return new Mcpy(this.engine, telemetry, this.defaultUserAgent, this.context);
+    return new Mcpy(this.engine, telemetry, this.defaultUserAgent, this.scripts, this.context);
   }
 
   fetch(input: FetchInput): Promise<FetchResult> {
-    return this.run(Operation.Fetch, FetchInputSchema, input, (i, scope) => fetchOp(this.engine, i, this.defaultUserAgent, scope));
+    return this.run(Operation.Fetch, FetchInputSchema, input, (i, scope) => fetchOp(this.engine, i, this.defaultUserAgent, scope, this.scripts));
   }
 
   grep(input: GrepInput): Promise<GrepResult> {
@@ -203,5 +207,5 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
     limits: config.limits,
     userAgents: { defaultProfile: config.userAgent.default, customString: config.userAgent.custom },
   });
-  return new Mcpy(engine, options.telemetry ?? Telemetry.noop(), config.userAgent.default);
+  return new Mcpy(engine, options.telemetry ?? Telemetry.noop(), config.userAgent.default, options.scripts);
 }

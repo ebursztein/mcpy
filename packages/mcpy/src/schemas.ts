@@ -20,7 +20,7 @@ import {
 } from "./enums.js";
 
 /** Hard ceiling on characters returned by one call, whatever the caller asks. */
-export const MAX_OUTPUT_CHARS = 100_000;
+export const MAX_OUTPUT_CHARS = 50_000;
 export const MAX_SEARCH_RESULTS = 50;
 export const MAX_SEARCH_PAGE = 10;
 const MAX_SITES = 10;
@@ -40,6 +40,14 @@ export const FetchInputSchema = z.object({
   format,
   offset: z.number().int().min(0).default(0).describe("Character to start from; use next_offset from the previous call"),
   max_chars: z.number().int().min(100).max(MAX_OUTPUT_CHARS).default(10_000).describe("Most characters to return"),
+  script: z
+    .string()
+    .min(1)
+    .max(100_000)
+    .optional()
+    .describe(
+      "JavaScript module run on the whole page: `export default (page) => value`, page is { url, final_url, status, title, content }. Returns the value as JSON instead of the page; use format html to work on the raw page",
+    ),
   user_agent: userAgent,
   fresh,
 });
@@ -96,6 +104,7 @@ export const FetchResultSchema = z.object({
   offset: z.number().int(),
   total_chars: z.number().int(),
   next_offset: z.number().int().optional().describe("Pass as offset to read the next part; absent at the end"),
+  tip: z.string().optional().describe("Set when the page is too long for one call"),
   meta: ResultMetaSchema,
 });
 

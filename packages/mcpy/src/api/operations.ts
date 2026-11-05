@@ -20,6 +20,7 @@ import {
   type SearchResult,
 } from "../schemas.js";
 import { GrepMode, type UserAgentProfile } from "../enums.js";
+import { runScript, scriptTip, type ScriptRunner } from "./script.js";
 import type { MergedPage } from "../engine/merge.js";
 import type { SearchHit } from "../schemas.js";
 
@@ -37,12 +38,16 @@ export async function fetchOp(
   input: z.infer<typeof FetchInputSchema>,
   defaultUserAgent: UserAgentProfile,
   scope: CallScope,
+  scripts?: ScriptRunner,
 ): Promise<{ result: FetchResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
   const url = assertPublicHttpUrl(input.url).toString();
   const served = await engine.page({ url, format: input.format, userAgent: input.user_agent ?? defaultUserAgent }, input.fresh, scope);
   const page = served.value;
-  const { chunk, total, end, hasMore } = paginate(page.content, input.offset, input.max_chars);
+  const content = input.script
+    ? await runScript(scripts, input.script, { url: page.url, final_url: page.finalUrl, status: page.status, title: page.title, content: page.content })
+    : page.content;
+  const { chunk, total, end, hasMore } = paginate(content, input.offset, input.max_chars);
   const result = FetchResultSchema.parse({
     url: page.url,
     final_url: page.finalUrl,
@@ -53,6 +58,7 @@ export async function fetchOp(
     offset: input.offset,
     total_chars: total,
     next_offset: hasMore ? end : undefined,
+    tip: input.script ? undefined : scriptTip(total),
     meta: meta(served, startedAt),
   });
   return { result, served, outputChars: result.content.length };
