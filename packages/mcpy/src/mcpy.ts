@@ -6,6 +6,7 @@ import type { PaperProvider } from "./providers/paper-types.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
+import { SpendMeter, type SpendLimit } from "./engine/meter.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
 import { HttpClient } from "./http/client.js";
@@ -65,6 +66,8 @@ export interface CallContext {
   parent?: SpanContext;
   /** Background work after the response, e.g. a Worker's ctx.waitUntil (keeps cache writes off the request path). */
   defer?: (work: Promise<unknown>) => void;
+  /** Caps this caller's spending on paid sources; free sources and the cache stay available. */
+  spendLimit?: SpendLimit;
 }
 
 /** The SDK. Implements the same McpyApi as the REST client. */
@@ -119,6 +122,9 @@ export class Mcpy implements McpyApi {
       ...(this.context.requestId ? { [Attr.RequestId]: this.context.requestId } : {}),
     });
     const span = telemetry.startSpan(SpanName.Operation, {}, this.context.parent);
+    const meter = new SpendMeter(this.context.spendLimit, (err) =>
+      telemetry.log(LogLevel.Error, "spending limit unavailable, allowing paid sources", { [Attr.Reason]: err instanceof Error ? err.message : String(err) }, span.context),
+    );
     try {
       const parsed = schema.safeParse(raw);
       if (!parsed.success) {
@@ -127,12 +133,12 @@ export class Mcpy implements McpyApi {
       }
       const target = targetAttributes(parsed.data);
       span.setAttributes(target);
-      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer });
+      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer, meter });
       const facts = {
         [Attr.Cache]: served.cache,
         [Attr.Attempts]: served.attempts,
         [Attr.Provider]: served.provider,
-        [Attr.CostUsd]: served.costUsd,
+        [Attr.CostUsd]: meter.spentUsd,
         [Attr.OutputChars]: outputChars,
         ...target,
       };
@@ -148,9 +154,24 @@ export class Mcpy implements McpyApi {
       span.setAttributes({ [Attr.ErrorType]: error.code });
       span.end(SpanStatus.Error, detail);
       const level = error.httpStatus >= 500 ? LogLevel.Error : LogLevel.Warn;
-      telemetry.log(level, `${operation} failed`, { [Attr.ErrorType]: error.code, [Attr.Reason]: detail.slice(0, 500) }, span.context);
+      // Failed operations still cost what their attempts cost.
+      span.setAttributes({ [Attr.CostUsd]: meter.spentUsd });
+      telemetry.log(level, `${operation} failed`, { [Attr.ErrorType]: error.code, [Attr.CostUsd]: meter.spentUsd, [Attr.Reason]: detail.slice(0, 500) }, span.context);
       throw error;
+    } finally {
+      await this.recordSpend(meter, telemetry, span.context);
     }
+  }
+
+  /** Report what the operation spent to the caller's limit, off the request path when possible. */
+  private async recordSpend(meter: SpendMeter, telemetry: Telemetry, parent: SpanContext): Promise<void> {
+    const limit = this.context.spendLimit;
+    if (!limit || meter.spentUsd <= 0) return;
+    const write = limit.record(meter.spentUsd).catch((err: unknown) => {
+      telemetry.log(LogLevel.Error, "could not record spending", { [Attr.CostUsd]: meter.spentUsd, [Attr.Reason]: err instanceof Error ? err.message : String(err) }, parent);
+    });
+    if (this.context.defer) this.context.defer(write);
+    else await write;
   }
 }
 

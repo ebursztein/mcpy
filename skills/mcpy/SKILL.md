@@ -133,6 +133,7 @@ Errors are `{"error": {"code", "message", "details"?}}` with an HTTP status.
 | `unsupported_content` | 415 | Not a text page (e.g. an image or archive). Do not retry. |
 | `unauthorized` / `forbidden` | 401 / 403 | Missing or wrong key. Ask your user for a valid one. |
 | `rate_limited` | 429 | Wait for `Retry-After` seconds, then retry. |
+| `budget_exceeded` | 429 | Your key used up today's allowance for paid sources (resets at midnight UTC; `Retry-After` says when). Cached pages and some free sources still work, so carry on with what you have; do not retry in a loop. Tell your user if you need more. |
 | `upstream_failed` | 502 | Every source failed (site down or blocking). Retry later, or try a different page. |
 | `timeout` | 504 | Took too long. Retry once; for search try `mode: "fast"`. |
 | `no_providers` | 503 | No sources are enabled for this tool on the server. Tell your user. |
@@ -146,3 +147,6 @@ Errors are `{"error": {"code", "message", "details"?}}` with an HTTP status.
 - Prefer `grep` and small `max_chars` over reading whole pages.
 - Cite what you use: give the `url` (or `doi`) of each page or paper.
 - Do not loop: if two attempts at the same URL fail, move on.
+- Your key has a daily spending allowance. Reuse results instead of
+  re-asking, prefer `grep` and cached pages, and avoid near-duplicate
+  searches: each new search costs money.

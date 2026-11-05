@@ -62,10 +62,12 @@ describe("layering", () => {
     for (const d of dirs) expect(statSync(join(SDK_SRC, "providers", d, "index.ts")).isFile()).toBe(true);
   });
 
-  it("the Worker entry module exports only its default handler", () => {
+  // workerd treats every named export as an entrypoint; Durable Object classes must be exported here.
+  it("the Worker entry module exports only its default handler and its Durable Object classes", () => {
     const source = read(join(SERVER_SRC, "index.ts"));
-    const named = [...source.matchAll(/^export\s+(?!default\b)(const|function|class|let|var|async|\{)/gm)];
-    expect(named).toEqual([]);
+    const DURABLE_OBJECTS = ['export { ClientBudget } from "./budget.js";'];
+    const lines = source.split("\n").filter((l) => /^export\s+(?!default\b)/.test(l));
+    expect(lines).toEqual(DURABLE_OBJECTS);
   });
 });
 

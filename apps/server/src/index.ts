@@ -1,5 +1,5 @@
-// Worker entry point. Only the default handler may be exported from this
-// module: workerd rejects other named exports.
+// Worker entry point. Besides the default handler, only Durable Object
+// classes may be exported from this module: workerd rejects other named exports.
 
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
@@ -7,10 +7,13 @@ import { ErrorCode, LogLevel, McpyError, SpanName, SpanStatus, Transport } from 
 import { registerMcpyTools } from "mcpy/mcp";
 import { Attr, parseTraceparent } from "mcpy/telemetry";
 import { ANONYMOUS, extractKey, findClient, parseClients, stripUrlKey, type Client } from "./clients.js";
+import { capFor, dailySpendLimit, spendingReport } from "./budget.js";
 import { ConfigError, loadEnv, type Env, type ServerEnv } from "./env.js";
 import { sdkFor } from "./mcpy.js";
 import { errorResponse, handleRest, json } from "./rest.js";
 import { requestTelemetry, SERVICE_VERSION } from "./telemetry.js";
+
+export { ClientBudget } from "./budget.js";
 
 const Path = { Health: "/health", Mcp: "/mcp", ApiPrefix: "/v1/" } as const;
 
@@ -78,15 +81,24 @@ export default {
       }
 
       const { mcpy, providers } = sdkFor(env, config, telemetry);
+      const cap = capFor(client.name, config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD);
+      if (cap !== undefined && !env.BUDGET) telemetry.log(LogLevel.Error, "spending cap set but no BUDGET binding: not enforced", {}, span.context);
       const api = mcpy.with({
         client: client.name,
         requestId,
         transport: isMcp ? Transport.Mcp : Transport.Rest,
         parent: span.context,
         defer: (work) => ctx.waitUntil(work),
+        spendLimit: cap !== undefined && env.BUDGET ? dailySpendLimit(env.BUDGET, client.name, cap) : undefined,
       });
 
-      if (!isMcp) return finish(withHeaders(await handleRest(request, url, api, client, providers), ids));
+      if (!isMcp) {
+        const budget = env.BUDGET;
+        const spending = budget
+          ? () => spendingReport(budget, parseClients(config.MCPY_CLIENTS).map((c) => c.name), config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD)
+          : undefined;
+        return finish(withHeaders(await handleRest(request, url, api, client, { providers, spending }), ids));
+      }
       return finish(withHeaders(await mcpHandler(config, api)(stripUrlKey(request, url), env, ctx), ids));
     } catch (err) {
       span.recordError(err);

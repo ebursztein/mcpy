@@ -16,6 +16,7 @@ export * from "./schemas.js";
 export { McpyError } from "./errors.js";
 export { KvCache, MemoryCache, NoCache, type Cache, type KvLike } from "./engine/cache.js";
 export { EngineLimitsSchema, type EngineLimits } from "./engine/engine.js";
+export type { SpendLimit } from "./engine/meter.js";
 export { BreakerPolicySchema, type BreakerPolicy } from "./engine/breaker.js";
 export { RetryPolicySchema, type RetryPolicy } from "./http/retry.js";
 export { USER_AGENTS } from "./http/user-agents.js";

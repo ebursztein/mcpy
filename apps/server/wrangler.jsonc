@@ -21,6 +21,9 @@
     // Failed authentications per client IP.
     { "name": "AUTH_LIMITER", "namespace_id": "1003", "simple": { "limit": 20, "period": 60 } }
   ],
+  // Today's spend per client, one object per client name (DAILY_BUDGET_USD).
+  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
+  "migrations": [{ "tag": "v1-budget", "new_sqlite_classes": ["ClientBudget"] }],
 
   // Non-secret settings; secrets (MCPY_CLIENTS, provider keys, OTLP headers)
   // go through `wrangler secret put`. See README for every option.
@@ -28,6 +31,8 @@
     "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",
     "SEARCH_PROVIDERS": "firecrawl,brightdata",
     "PAPER_PROVIDERS": "openalex,arxiv,pubmed,semantic_scholar",
+    // Estimated USD each client may spend on paid sources per UTC day.
+    "DAILY_BUDGET_USD": "5",
     "LOG_LEVEL": "info",
     "DEPLOYMENT_ENV": "production"
   },
@@ -43,11 +48,13 @@
         { "name": "RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } },
         { "name": "AUTH_LIMITER", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } }
       ],
+      "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
       "vars": {
         "ALLOWED_HOSTNAMES": "tools.ly.tl",
         "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",
         "SEARCH_PROVIDERS": "firecrawl,brightdata",
         "PAPER_PROVIDERS": "openalex,arxiv,pubmed,semantic_scholar",
+        "DAILY_BUDGET_USD": "1",
         "LOG_LEVEL": "info",
         "DEPLOYMENT_ENV": "lytl"
       }

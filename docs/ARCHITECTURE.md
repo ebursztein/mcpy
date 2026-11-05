@@ -79,6 +79,15 @@ every request is rejected. Cloudflare invocation logs are off because they
 record full URLs, `?key=` included; mcpy's own logs never contain queries.
 Request ids are always generated server-side.
 
+Each client can also have a daily spending cap (`DAILY_BUDGET_USD`,
+overridden per client by `CLIENT_DAILY_BUDGETS_USD`). The SDK takes a
+`SpendLimit` in its call context: before an operation's first paid attempt
+it asks the limit once, and over the cap it skips paid providers (free ones
+and the cache still answer; if nothing does, `budget_exceeded`). Every
+operation reports what its attempts cost, failed ones included. The server's
+limit keeps each client's total for the UTC day in its own Durable Object
+(`ClientBudget`). Costs are the providers' per-call estimates.
+
 ## User agents
 
 Requests use a `UserAgentProfile` enum (`mcpy`, `chrome`,

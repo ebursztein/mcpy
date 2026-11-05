@@ -4,6 +4,7 @@
  *   GET|POST /v1/fetch   /v1/grep   /v1/search   /v1/papers    (same fields as the SDK)
  *   e.g. GET /v1/search?query=rust&type=news&recency=week&country=us&sites=github.com,lwn.net
  *   GET      /v1/admin/providers                   (admin clients only)
+ *   GET      /v1/admin/spending                    (admin clients only: today's spend per client)
  *
  * POST takes a JSON body; GET takes the same fields as query parameters so
  * URL-only agents can call it. Responses are JSON; errors use ErrorBody.
@@ -11,9 +12,17 @@
 
 import { ErrorCode, McpyError, RestRoute, type McpyApi } from "mcpy";
 import { ClientRole, type Client } from "./clients.js";
+import { secondsUntilReset } from "./budget.js";
 import type { ProviderSetup } from "./providers.js";
 
-export const AdminRoute = { Providers: "/v1/admin/providers" } as const;
+export const AdminRoute = { Providers: "/v1/admin/providers", Spending: "/v1/admin/spending" } as const;
+
+/** What the admin routes report on. */
+export interface AdminView {
+  providers: ProviderSetup;
+  /** Undefined when no BUDGET binding is configured. */
+  spending?: () => Promise<unknown>;
+}
 
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8", ...headers } });
@@ -55,9 +64,15 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.Papers]: (api, input) => api.papers(input as never),
 };
 
-export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, providers: ProviderSetup): Promise<Response> {
+export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView): Promise<Response> {
+  const isAdminRoute = Object.values(AdminRoute).includes(url.pathname as (typeof AdminRoute)[keyof typeof AdminRoute]);
+  if (isAdminRoute && client.role !== ClientRole.Admin) return errorResponse(new McpyError(ErrorCode.Forbidden, "admin only"));
+  if (url.pathname === AdminRoute.Spending) {
+    if (!admin.spending) return errorResponse(new McpyError(ErrorCode.NotFound, "spending caps are not configured (no BUDGET binding)"));
+    return json(await admin.spending());
+  }
   if (url.pathname === AdminRoute.Providers) {
-    if (client.role !== ClientRole.Admin) return errorResponse(new McpyError(ErrorCode.Forbidden, "admin only"));
+    const { providers } = admin;
     return json({
       pages: providers.pages.map((p) => p.id),
       search: providers.search.map((p) => p.id),
@@ -76,6 +91,9 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
   try {
     return json(await operation(api, await readInput(request, url)));
   } catch (err) {
-    return errorResponse(err instanceof McpyError ? err : new McpyError(ErrorCode.Internal, "internal error"));
+    const error = err instanceof McpyError ? err : new McpyError(ErrorCode.Internal, "internal error");
+    // Caps reset at midnight UTC: tell callers when retrying is worth it.
+    const headers: Record<string, string> = error.code === ErrorCode.BudgetExceeded ? { "Retry-After": String(secondsUntilReset(new Date())) } : {};
+    return errorResponse(error, headers);
   }
 }

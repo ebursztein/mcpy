@@ -17,6 +17,7 @@ import { capableProviders } from "./search-routing.js";
 import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
 import { settleWithGrace } from "./fanout.js";
 import { assessPage } from "./quality.js";
+import type { SpendMeter } from "./meter.js";
 
 export const EngineLimitsSchema = z.object({
   /** Upper bound for a single provider attempt. */
@@ -52,6 +53,8 @@ export interface CallScope {
   parent: SpanContext;
   /** Runs background work after the response (e.g. a Worker's ctx.waitUntil). */
   defer?: (work: Promise<unknown>) => void;
+  /** Totals what the operation spends and enforces the caller's spending limit. */
+  meter?: SpendMeter;
 }
 
 /**
@@ -66,13 +69,12 @@ function emptyMovesOn(hits: unknown[]): { outcome: AttemptOutcome; reason?: stri
 /** Empty search results may be a transient upstream hiccup: keep them briefly. */
 export const EMPTY_SEARCH_TTL_SECONDS = 60;
 
-/** Engine result. `provider` and `costUsd` are for telemetry only. */
+/** Engine result. `provider` is for telemetry only; cost is totalled by the scope's meter. */
 export interface Served<T> {
   value: T;
   cache: CacheStatus;
   attempts: number;
   provider: string;
-  costUsd: number;
 }
 
 interface Cached<T> {
@@ -176,8 +178,10 @@ export class Engine {
     const settled = await settleWithGrace(providers.map(run), this.deps.limits.thoroughGraceMs);
     const ok = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
     if (ok.length === 0) {
-      const failure = settled.find((s) => s.status === "rejected");
-      throw failure && failure.status === "rejected" ? failure.reason : new McpyError(ErrorCode.Timeout, "no source answered in time");
+      const reasons = settled.flatMap((s) => (s.status === "rejected" ? [s.reason] : []));
+      // A spending limit is the one failure the caller can act on: report it first.
+      const overBudget = reasons.find((r) => r instanceof McpyError && r.code === ErrorCode.BudgetExceeded);
+      throw overBudget ?? reasons[0] ?? new McpyError(ErrorCode.Timeout, "no source answered in time");
     }
     const attempts: AttemptRecord[] = settled.flatMap((s, i) =>
       s.status === "fulfilled"
@@ -195,6 +199,7 @@ export class Engine {
       breaker: this.deps.breaker,
       telemetry: scope.telemetry,
       parent: scope.parent,
+      meter: scope.meter,
     };
   }
 
@@ -223,7 +228,7 @@ export class Engine {
   ): Promise<Served<T>> {
     if (!fresh) {
       const hit = await this.deps.cache.get<Cached<T>>(key);
-      if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider, costUsd: 0 };
+      if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider };
     }
     const result = await run(Date.now() + this.deps.limits.deadlineMs);
     const seconds = ttl(result.value, result.salvaged);
@@ -238,7 +243,6 @@ export class Engine {
       cache: fresh ? CacheStatus.Bypass : CacheStatus.Miss,
       attempts: result.attempts.length,
       provider: result.provider,
-      costUsd: result.costUsd,
     };
   }
 }

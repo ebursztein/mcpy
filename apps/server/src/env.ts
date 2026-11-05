@@ -7,6 +7,7 @@ import { LogLevel, LogLevelSchema, UserAgentProfile, UserAgentProfileSchema, typ
 import { ProviderId, ProviderIdSchema } from "mcpy/providers";
 import type { AnalyticsDatasetLike } from "mcpy/telemetry";
 import { z } from "zod";
+import type { BudgetNamespaceLike } from "./budget.js";
 
 export interface RateLimiterLike {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -19,6 +20,8 @@ export interface Env {
   RATE_LIMITER?: RateLimiterLike;
   /** Counts failed authentications per client IP, to slow down key guessing. */
   AUTH_LIMITER?: RateLimiterLike;
+  /** One Durable Object per client holding today's spend (see budget.ts). */
+  BUDGET?: BudgetNamespaceLike;
   [key: string]: unknown;
 }
 
@@ -44,6 +47,30 @@ const boolVar = z
   .transform((v) => v === "true");
 
 const secret = z.string().min(1).optional();
+
+/** Estimated USD per UTC day; unset means no cap. */
+const usd = z.coerce.number().min(0).max(10_000);
+const UNLIMITED = "unlimited";
+
+/** `name:usd` overrides, comma separated; `name:unlimited` exempts a client. */
+const budgetOverrides = z
+  .string()
+  .optional()
+  .transform((v, ctx) => {
+    const out = new Map<string, number | undefined>();
+    for (const entry of (v ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
+      const at = entry.lastIndexOf(":");
+      const name = entry.slice(0, at).trim();
+      const value = entry.slice(at + 1).trim();
+      const cap = usd.safeParse(value);
+      if (at <= 0 || (value !== UNLIMITED && (!cap.success || value === ""))) {
+        ctx.addIssue({ code: "custom", message: `"${entry}" is not name:usd or name:${UNLIMITED}` });
+        continue;
+      }
+      out.set(name, value === UNLIMITED ? undefined : cap.data);
+    }
+    return out;
+  });
 
 /** OTel's standard `key=value,key2=value2` header list. */
 const otlpHeaders = z
@@ -84,6 +111,10 @@ export const EnvSchema = z.object({
   PAPER_CACHE_TTL_SECONDS: intVar(60, 30 * 86_400, 86_400),
   THOROUGH_GRACE_MS: intVar(0, 120_000, 8_000),
   RETRIES: intVar(0, 5, 2),
+
+  // Spending (estimated USD per client per UTC day; needs the BUDGET binding)
+  DAILY_BUDGET_USD: usd.optional(),
+  CLIENT_DAILY_BUDGETS_USD: budgetOverrides,
 
   // User agent
   DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Default),

@@ -4,6 +4,7 @@ import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
+import type { SpendMeter } from "./meter.js";
 
 export interface AttemptRecord {
   provider: string;
@@ -56,7 +57,12 @@ export interface ChainOptions<P extends ChainProvider, T> {
   breaker: CircuitBreaker;
   telemetry: Telemetry;
   parent: SpanContext;
+  /** Paid attempts are skipped once the caller's spending limit says no. */
+  meter?: SpendMeter;
 }
+
+/** Why a paid provider was not tried (also the public reason). */
+export const OVER_BUDGET = "spending limit reached";
 
 /** Failures that say something about the request itself: no other provider can help. */
 function definitive(err: unknown): McpyError | undefined {
@@ -91,6 +97,8 @@ function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
  *   errors (unsafe target, unsupported content) stop it without a fallback.
  * - Only thrown provider failures feed the circuit breaker: a blocked or
  *   JS-heavy target says nothing about the provider's health.
+ * - Paid providers are skipped once the meter's spending limit says no;
+ *   free ones still run. If that leaves no answer, the error says so.
  * - If nothing is Ok, the first salvageable result is returned.
  */
 export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>): Promise<ChainResult<T>> {
@@ -109,10 +117,16 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
       continue;
     }
 
+    if (provider.costPerCall > 0 && o.meter && !(await o.meter.mayPay())) {
+      attempts.push({ provider: provider.id, outcome: AttemptOutcome.Skipped, reason: OVER_BUDGET, publicReason: OVER_BUDGET, latencyMs: 0 });
+      continue;
+    }
+
     const timeoutMs = Math.min(Math.max(o.attemptTimeoutMs, provider.attemptTimeoutMs ?? 0), remaining);
     const started = Date.now();
     const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: provider.costPerCall }, o.parent);
     costUsd += provider.costPerCall;
+    o.meter?.spend(provider.costPerCall);
     try {
       const signal = AbortSignal.timeout(timeoutMs);
       const value = await bounded(o.attempt(provider, signal, timeoutMs, span.context), signal);
@@ -148,6 +162,9 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
 
   // Callers see outcomes and error codes only; raw messages stay in telemetry.
   const summary = attempts.map((a) => `${a.outcome}${a.publicReason ? ` (${a.publicReason})` : ""}`);
+  if (attempts.some((a) => a.publicReason === OVER_BUDGET)) {
+    throw new McpyError(ErrorCode.BudgetExceeded, "spending limit reached: paid sources are paused for this client, and the free ones could not answer", summary);
+  }
   const timedOut = Date.now() >= o.deadlineAt;
   throw new McpyError(
     timedOut ? ErrorCode.Timeout : ErrorCode.UpstreamFailed,

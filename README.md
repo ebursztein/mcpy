@@ -48,7 +48,8 @@ which tool to use when, errors, and safety rules.
 - `mode`: `fast` (first source that answers) or `thorough` (every source that supports the request, merged; results carry `sources`, the number of sources that returned them).
 - Long pages: pass the returned `next_offset` as `offset` to read on.
 
-Operators also get `GET /v1/admin/providers` (admin clients only).
+Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
+(today's estimated spend and cap per client), admin clients only.
 
 ```bash
 curl -s https://tools.example.com/v1/fetch \
@@ -72,7 +73,7 @@ npm run deploy
 ```
 
 Wrangler creates the KV namespace (cache), Analytics Engine dataset
-(metrics) and rate limiter on first deploy. The `lytl` environment in
+(metrics), rate limiter and spending Durable Object on first deploy. The `lytl` environment in
 `apps/server/wrangler.jsonc` is the maintainers' deployment at
 `tools.ly.tl`, a complete custom-domain example
 (`npm run deploy -- --env lytl`).
@@ -88,6 +89,17 @@ Each client is rate-limited separately and named in every log line, span and
 metric; failed authentications are rate-limited per IP. With no clients
 configured, everything is rejected. Non-admin calls to admin routes get 403.
 
+### Spending caps
+
+`DAILY_BUDGET_USD` caps what each client may spend on paid sources per UTC
+day, using mcpy's per-call cost estimates (Firecrawl, Bright Data, Cloudflare
+Browser Run, OpenAlex). `CLIENT_DAILY_BUDGETS_USD` overrides it per client:
+`cardy:0.5,ops:unlimited`. Over its cap a client still gets cached results
+and free sources (direct fetch, arXiv, PubMed); when those cannot answer it
+gets `budget_exceeded` (429) with `Retry-After` until midnight UTC. Totals
+live in the `BUDGET` Durable Object, one per client; requests already in
+flight when the cap is crossed still finish.
+
 ### Configuration
 
 | Var | Default | Purpose |
@@ -98,6 +110,8 @@ configured, everything is rejected. Non-admin calls to admin routes get 403.
 | `PAPER_PROVIDERS` | `openalex,arxiv,pubmed,semantic_scholar` | Paper index order |
 | `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `60000` | Per attempt / per call |
 | `RETRIES` | `2` | Retries per upstream request |
+| `DAILY_BUDGET_USD` | - (`5` in `wrangler.jsonc`) | Estimated USD each client may spend on paid sources per UTC day |
+| `CLIENT_DAILY_BUDGETS_USD` | - | Per-client caps: `name:usd` or `name:unlimited`, comma-separated |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
 | `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` | `3600` / `900` | Cache TTLs |
 | `DEFAULT_USER_AGENT` | `default` | `default`, `chrome`, `safari`, `firefox`, `mobile`, `googlebot` |

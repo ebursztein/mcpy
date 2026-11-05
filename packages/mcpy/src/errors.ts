@@ -8,6 +8,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   [ErrorCode.Unauthorized]: 401,
   [ErrorCode.Forbidden]: 403,
   [ErrorCode.RateLimited]: 429,
+  [ErrorCode.BudgetExceeded]: 429,
   [ErrorCode.NoProviders]: 503,
   [ErrorCode.UpstreamFailed]: 502,
   [ErrorCode.Timeout]: 504,

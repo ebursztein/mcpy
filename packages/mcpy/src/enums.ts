@@ -53,6 +53,8 @@ const errorCode = enumOf({
   Unauthorized: "unauthorized",
   Forbidden: "forbidden",
   RateLimited: "rate_limited",
+  /** The client used up its spending allowance; paid sources are paused until it resets. */
+  BudgetExceeded: "budget_exceeded",
   NoProviders: "no_providers",
   UpstreamFailed: "upstream_failed",
   Timeout: "timeout",
