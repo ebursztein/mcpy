@@ -98,3 +98,14 @@ describe("regressions", () => {
     expect(log?.attributes).toMatchObject({ "mcpy.provider": "firecrawl", "mcpy.reason": expect.stringContaining("HTTP 429") });
   });
 });
+
+// 2026-11-05: `npm run deploy -- --env lytl` reached wrangler as
+// `wrangler deploy lytl` (npm kept --env for itself), so the documented
+// deploy failed. The root script must end in "--" to forward arguments.
+describe("root deploy script", () => {
+  it("forwards its arguments to wrangler", async () => {
+    const { readFileSync } = await import("node:fs");
+    const pkg = JSON.parse(readFileSync(new URL("../../../../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> };
+    expect(pkg.scripts.deploy).toMatch(/ --$/);
+  });
+});

@@ -14,7 +14,7 @@
     "test:e2e": "npm run build && vitest run --project e2e",
     "test:live": "vitest run --project live",
     "dev": "npm run build && npm run dev -w @mcpy/server",
-    "deploy": "npm run build && npm run deploy -w @mcpy/server"
+    "deploy": "npm run build && npm run deploy -w @mcpy/server --"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
