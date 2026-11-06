@@ -53,7 +53,7 @@ Rules, each enforced by tests where possible:
 | Pages read in parts | A page longer than one part is also stored under its own version key (a hash of the copy), written before the first part returns; later parts pass `version` and read exactly that copy. The shared cache entry cannot promise this: it is written after the response, KV may serve an older copy for a while, and another call can replace it. A part whose copy is gone fails with `version_expired` |
 | LLM context | Hard caps on returned characters (50,000 per call), pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
 | Search coverage | Search providers declare capabilities (types, recency, site filters, depth); requests go only to providers that can honor them. Country, language and device are hints. `thorough` mode asks every capable provider in parallel and merges with reciprocal rank fusion, deduplicating by normalized URL |
-| Repeat requests | Cache keyed by normalized URL / query; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
+| Repeat requests | Cache keyed by normalized URL / query, storing the page as fetched (scripts run on it afterwards, so a new script never refetches); every call (fetch, grep, search, papers) says how old an answer it accepts with one shared `max_age` field, 0 skipping the cache; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
 
 ## Observability
 

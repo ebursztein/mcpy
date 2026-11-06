@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { PaperCollectionSchema, PaperSort, PaperSortSchema, SearchMode, SearchModeSchema } from "./enums.js";
-import { ResultMetaSchema } from "./schemas.js";
+import { DEFAULT_MAX_AGE_SECONDS, maxAgeField, ResultMetaSchema } from "./schemas.js";
 
 export const MAX_PAPER_RESULTS = 50;
 export const MAX_PAPER_PAGE = 10;
@@ -20,7 +20,7 @@ export const PaperSearchInputSchema = z
     sort: PaperSortSchema.default(PaperSort.Relevance).describe("relevance, citations (most cited first) or newest"),
     collection: PaperCollectionSchema.optional().describe("preprints (not yet peer-reviewed) or biomedical (life sciences and medicine); default: everything"),
     mode: SearchModeSchema.default(SearchMode.Fast).describe("fast: first index that answers; thorough: combine all indexes (slower)"),
-    fresh: z.boolean().default(false).describe("Ignore the cache and search again"),
+    max_age: maxAgeField(DEFAULT_MAX_AGE_SECONDS.papers),
   })
   .refine((p) => p.query !== undefined || p.author !== undefined, { message: "give a query, an author, or both", path: ["query"] })
   .refine((p) => p.year_from === undefined || p.year_to === undefined || p.year_from <= p.year_to, {

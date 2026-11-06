@@ -35,10 +35,10 @@ which tool to use when, errors, and safety rules.
 
 | Tool | Parameters (all but the first are optional; papers needs a query, an author, or both) |
 | --- | --- |
-| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `version`, `max_chars` (up to 50,000), `script`, `user_agent`, `fresh` |
-| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `fresh` |
-| search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `fresh` |
-| papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `fresh` |
+| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `version`, `max_chars` (up to 50,000), `script`, `user_agent`, `max_age` |
+| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `max_age` |
+| search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `max_age` |
+| papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `max_age` |
 
 - `user_agent`: `default` (honest mcpy agent), `chrome`, `safari`, `firefox`, `mobile`, `googlebot`.
 - `type`: `web`, `news`, `images`, `videos`, `shopping`, `jobs`, `places`.
@@ -113,7 +113,7 @@ flight when the cap is crossed still finish.
 | `DAILY_BUDGET_USD` | - (`5` in `wrangler.jsonc`) | Estimated USD each client may spend on paid sources per UTC day |
 | `CLIENT_DAILY_BUDGETS_USD` | - | Per-client caps: `name:usd` or `name:unlimited`, comma-separated |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
-| `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` | `3600` / `900` | Cache TTLs |
+| `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` / `PAPER_CACHE_TTL_SECONDS` | `3600` / `900` / `86400` | How long answers are kept. Each call reads only as old as its `max_age` allows, so keeping them longer only lets callers opt in to older copies |
 | `DEFAULT_USER_AGENT` | `default` | `default`, `chrome`, `safari`, `firefox`, `mobile`, `googlebot` |
 | `USER_AGENT_STRING` | - | Replace the `default` user-agent string |
 | `ALLOWED_HOSTNAMES` | - | Accepted Host headers (set on custom domains) |

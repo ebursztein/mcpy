@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ErrorCode, McpyError, SearchMode, type SpendLimit } from "mcpy";
 import { Attr } from "mcpy/telemetry";
+import { direct } from "mcpy/providers";
 import { fakePages, fakeSearch, LONG_TEXT, page, testMcpy } from "../helpers.js";
 
 const HIT = { url: "https://example.com/", title: "Hit", snippet: "" };
@@ -70,6 +71,22 @@ describe("spending limits", () => {
     await api.fetch({ url: "https://example.com/b" });
     expect(spend.asked).toBe(0);
     expect(spend.charges).toEqual([]);
+  });
+
+  it("charges only for sources other than the direct fetch, browser-profile retry included", async () => {
+    expect(direct().costPerCall).toBe(0);
+    const spend = limit(1);
+    const served = (status: number) => new Response(status === 200 ? `<html><head><title>T</title></head><body><p>${LONG_TEXT}</p></body></html>` : "no", { status, headers: { "content-type": "text/html" } });
+    let blocked = false;
+    const fetch = async () => served(blocked ? 403 : 200);
+    const paid = fakePages("paid", page({ content: LONG_TEXT }), 0.002);
+    const { mcpy } = testMcpy({ pages: [direct(), paid], fetch, retry: { retries: 0 } });
+    const api = mcpy.with({ spendLimit: spend });
+    await api.fetch({ url: "https://example.com/free" });
+    expect(spend.charges).toEqual([]);
+    blocked = true; // direct fails twice (honest, then browser profile), then the paid source serves
+    await api.fetch({ url: "https://example.com/blocked" });
+    expect(spend.charges).toEqual([0.002]);
   });
 
   it("asks at most once per operation, however many paid sources it tries", async () => {

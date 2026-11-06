@@ -10,7 +10,7 @@ import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
-import type { Cache } from "./cache.js";
+import { isYoungEnough, type Cache } from "./cache.js";
 import { runChain, type AttemptRecord, type ChainResult } from "./chain.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
@@ -28,6 +28,7 @@ export const EngineLimitsSchema = z.object({
   deadlineMs: z.number().int().min(1_000).max(600_000).default(60_000),
   /** Largest upstream body read. */
   maxResponseBytes: z.number().int().min(10_000).max(50_000_000).default(5_000_000),
+  /** How long pages are kept. */
   pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
   searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
   paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
@@ -84,6 +85,8 @@ export interface Served<T> {
 interface Cached<T> {
   value: T;
   provider: string;
+  /** Epoch ms of the write; absent on entries written before it was recorded. */
+  storedAt?: number;
 }
 
 /** Cache, fallback chain and provider plumbing behind every operation. */
@@ -118,11 +121,13 @@ export class Engine {
     return this.pins.recall(await this.pageKey(req), version);
   }
 
-  async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
+  /** `maxAgeSeconds` (every cached operation): oldest cached answer to serve; 0 skips the cache. */
+  async page(req: PageRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<FetchedPage>> {
     const key = await this.pageKey(req);
     const site = siteOf(req.url, req.format);
     // A salvaged thin page may be a JS shell nobody could render: never cache it.
-    return this.cached(key, (_page, salvaged) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds), fresh, scope, async (deadlineAt) => {
+    const ttl = (_page: FetchedPage, salvaged: boolean) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds);
+    return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       const preferred = site ? await this.routes.recall(site) : undefined;
       const providers = routeOrder(this.deps.pageProviders, preferred);
       if (providers[0] !== this.deps.pageProviders[0]) {
@@ -154,12 +159,12 @@ export class Engine {
    * every capable provider in parallel under the same deadline, results
    * merged by rank fusion. Every search parameter is part of the cache key.
    */
-  async search(req: SearchRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPage[]>> {
+  async search(req: SearchRequest, mode: SearchMode, scope: CallScope, maxAgeSeconds: number): Promise<Served<MergedPage[]>> {
     const providers = capableProviders(this.deps.searchProviders, req);
     const identity = [mode, req.query.toLowerCase(), req.type, req.limit, req.page, req.country, req.language, req.recency, req.device, req.sites, req.excludeSites];
     const key = `${CACHE_VERSION}:search:${await sha256Hex(JSON.stringify(identity))}`;
     const ttl = (hits: MergedPage[]) => (hits.length ? this.deps.limits.searchTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
-    return this.cached(key, ttl, fresh, scope, (deadlineAt) =>
+    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       mode === SearchMode.Thorough ? this.searchAll(providers, req, deadlineAt, scope) : this.searchFirst(providers, req, deadlineAt, scope),
     );
   }
@@ -184,7 +189,7 @@ export class Engine {
   }
 
   /** Paper search: same modes as web search, merged by DOI, arXiv id or title. */
-  async papers(req: PaperRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPaper[]>> {
+  async papers(req: PaperRequest, mode: SearchMode, scope: CallScope, maxAgeSeconds: number): Promise<Served<MergedPaper[]>> {
     const providers = capablePaperProviders(this.deps.paperProviders, req);
     const identity = [mode, req.query?.toLowerCase(), req.author?.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort, req.collection];
     const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
@@ -197,7 +202,7 @@ export class Engine {
         describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
         ...this.chainCommon(deadlineAt, scope),
       });
-    return this.cached(key, ttl, fresh, scope, async (deadlineAt) => {
+    return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       if (mode === SearchMode.Thorough) {
         return this.fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort));
       }
@@ -263,25 +268,27 @@ export class Engine {
     key: string,
     /** Seconds to cache the result, or undefined to not cache it. */
     ttl: (value: T, salvaged: boolean) => number | undefined,
-    fresh: boolean,
+    /** Oldest entry to serve; older ones are fetched again, and 0 skips the read. */
+    maxAgeSeconds: number,
     scope: CallScope,
     run: (deadlineAt: number) => Promise<ChainResult<T>>,
   ): Promise<Served<T>> {
-    if (!fresh) {
+    const skip = maxAgeSeconds === 0;
+    if (!skip) {
       const hit = await this.deps.cache.get<Cached<T>>(key);
-      if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider };
+      if (hit && isYoungEnough(hit, maxAgeSeconds)) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider };
     }
     const result = await run(Date.now() + this.deps.limits.deadlineMs);
     const seconds = ttl(result.value, result.salvaged);
     if (seconds !== undefined) {
-      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, seconds).catch(() => undefined);
+      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider, storedAt: Date.now() }, seconds).catch(() => undefined);
       if (scope.defer) scope.defer(write);
       else await write;
     }
     scope.telemetry.log(LogLevel.Debug, seconds === undefined ? "result not cached" : "cached result", { [Attr.Provider]: result.provider }, scope.parent);
     return {
       value: result.value,
-      cache: fresh ? CacheStatus.Bypass : CacheStatus.Miss,
+      cache: skip ? CacheStatus.Bypass : CacheStatus.Miss,
       attempts: result.attempts.length,
       provider: result.provider,
     };

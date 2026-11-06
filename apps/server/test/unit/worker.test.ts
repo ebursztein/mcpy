@@ -125,7 +125,7 @@ describe("REST operations", () => {
     const env = makeEnv();
     const url = articleUrl("get");
     await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}`, { env });
-    const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}&max_chars=150&offset=10&fresh=true`, { env });
+    const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}&max_chars=150&offset=10&max_age=0`, { env });
     expect(response.status).toBe(200);
     const result = FetchResultSchema.parse(await response.json());
     expect(result.content.length).toBeLessThanOrEqual(150);

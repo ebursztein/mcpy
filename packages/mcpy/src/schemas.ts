@@ -26,7 +26,24 @@ export const MAX_SEARCH_PAGE = 10;
 const MAX_SITES = 10;
 
 const url = z.string().url().max(4096).describe("Absolute http(s) URL");
-const fresh = z.boolean().default(false).describe("Ignore the cache and fetch again");
+
+/** Default `max_age` of each cached operation, in seconds. */
+export const DEFAULT_MAX_AGE_SECONDS = { page: 3_600, search: 900, papers: 86_400 } as const;
+
+/**
+ * How old a cached answer a call accepts, in seconds; 0 skips the cache.
+ * Every cached operation takes this one field, with its own default.
+ */
+export function maxAgeField(defaultSeconds: number) {
+  return z
+    .number()
+    .int()
+    .min(0)
+    .max(30 * 86_400)
+    .default(defaultSeconds)
+    .describe(`Oldest cached answer to accept, in seconds (default ${defaultSeconds}): 86400 for data that changes daily, 60 for live data, 0 to skip the cache`);
+}
+const pageMaxAge = maxAgeField(DEFAULT_MAX_AGE_SECONDS.page);
 const userAgent = UserAgentProfileSchema.optional().describe("Browser to present as (default: an honest mcpy user agent)");
 const format = PageFormatSchema.default(PageFormat.Markdown).describe("markdown (readable text) or html (raw page)");
 
@@ -54,7 +71,7 @@ export const FetchInputSchema = z.object({
       "JavaScript module run on the whole page: `export default (page) => value`, page is { url, final_url, status, title, content }. Returns the value as JSON instead of the page; use format html to work on the raw page",
     ),
   user_agent: userAgent,
-  fresh,
+  max_age: pageMaxAge,
 });
 
 export const GrepInputSchema = z.object({
@@ -65,7 +82,7 @@ export const GrepInputSchema = z.object({
   max_matches: z.number().int().min(1).max(200).default(20),
   format,
   user_agent: userAgent,
-  fresh,
+  max_age: pageMaxAge,
 });
 
 export const SearchInputSchema = z
@@ -89,7 +106,7 @@ export const SearchInputSchema = z
     sites: z.array(hostname).min(1).max(MAX_SITES).optional().describe("Only results from these sites"),
     exclude_sites: z.array(hostname).min(1).max(MAX_SITES).optional().describe("No results from these sites"),
     mode: SearchModeSchema.default(SearchMode.Fast).describe("fast: first source that answers; thorough: combine all sources (slower, costs more)"),
-    fresh,
+    max_age: maxAgeField(DEFAULT_MAX_AGE_SECONDS.search),
   })
   .refine((s) => !(s.sites && s.exclude_sites), { message: "use either sites or exclude_sites, not both", path: ["exclude_sites"] });
 

@@ -29,8 +29,8 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const errorResponse = (err: McpyError, headers: Record<string, string> = {}) => json(err.toJSON(), err.httpStatus, headers);
 
-const NUMERIC = new Set(["offset", "max_chars", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
-const BOOLEAN = new Set(["fresh", "literal", "open_access"]);
+const NUMERIC = new Set(["offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
+const BOOLEAN = new Set(["literal", "open_access"]);
 const LIST = new Set(["sites", "exclude_sites"]);
 
 /**

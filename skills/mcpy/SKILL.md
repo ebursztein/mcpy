@@ -131,8 +131,12 @@ curl -s "$MCPY_URL/v1/grep" -H "Authorization: Bearer $MCPY_KEY" -H "content-typ
 ```
 
 Every result has `meta`: `cache` (`hit`, `miss`, `bypass`), `latency_ms`,
-and `attempts`. Results are cached (pages 1 h, searches 15 min, papers 1 day);
-pass `fresh: true` only when you need a newer copy.
+and `attempts`. Every call takes `max_age`: the oldest cached answer it
+accepts, in seconds (defaults: pages 3600, searches 900, papers 86400).
+Pass 86400 for data that changes daily, a small value for live data, and
+0 to skip the cache. fetch, grep and scripts share the cached page of a
+URL (per `format` and `user_agent`), so a new script or grep does not
+fetch again.
 
 ## Errors
 

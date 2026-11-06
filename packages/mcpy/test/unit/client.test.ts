@@ -55,7 +55,7 @@ describe("McpyClient requests", () => {
       offset: 0,
       max_chars: 10_000,
       user_agent: UserAgentProfile.Chrome,
-      fresh: false,
+      max_age: 3_600,
     });
   });
 
@@ -65,8 +65,8 @@ describe("McpyClient requests", () => {
     expect(await c.grep({ url: "https://example.com/a", pattern: "hit" })).toEqual(grepResult);
     expect(await c.search({ query: "  q  ", max_results: 3 })).toEqual(searchResult);
     expect(calls.map((x) => x.url)).toEqual([`${BASE}${RestRoute.Grep}`, `${BASE}${RestRoute.Search}`]);
-    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", literal: false, context: 3, max_matches: 20, format: PageFormat.Markdown, fresh: false });
-    expect(calls[1].body).toEqual({ query: "q", type: "web", max_results: 3, page: 1, mode: "fast", fresh: false });
+    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", literal: false, context: 3, max_matches: 20, format: PageFormat.Markdown, max_age: 3_600 });
+    expect(calls[1].body).toEqual({ query: "q", type: "web", max_results: 3, page: 1, mode: "fast", max_age: 900 });
   });
 
   it("strips a trailing slash from the base URL", async () => {

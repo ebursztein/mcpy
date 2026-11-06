@@ -33,7 +33,7 @@ describe("page part regressions", () => {
     const { mcpy } = testMcpy({ pages: [fakePages("direct", () => current)], cache: laggingCache() });
     await mcpy.fetch({ url: URL, max_chars: 100 }); // the old copy lands in the cache
     current = NEW;
-    const first = await mcpy.fetch({ url: URL, fresh: true, max_chars: 100 });
+    const first = await mcpy.fetch({ url: URL, max_age: 0, max_chars: 100 });
     expect(first.total_chars).toBe(250);
     expect(first.version).toMatch(/^[0-9a-f]{16}$/);
     const second = await mcpy.fetch({ url: URL, offset: first.next_offset, version: first.version, max_chars: 100 });
