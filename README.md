@@ -110,8 +110,13 @@ owner a Pushover alert when:
   alerts at most once per `ALERT_COOLDOWN_SECONDS` (6 hours by default); the
   window is kept in the `CACHE` KV namespace. Calls keep falling back to the
   next source meanwhile.
-- a client reaches its daily cap: once per client per UTC day, sent by the
-  request whose spend crossed it.
+- a client is running low: its spend today passes `CAP_WARNING_PERCENT` of
+  its daily cap (80% by default), so you can raise the cap before it stops.
+- a client reaches its daily cap.
+
+Each cap alert is sent once per client per UTC day, by the request whose
+spend crossed the line; a single request that jumps both lines sends only the
+cap alert.
 
 A failing push is logged (`pushover alert failed`), never retried through
 Pushover itself.
@@ -129,6 +134,7 @@ Pushover itself.
 | `DAILY_BUDGET_USD` | - (`5` in `wrangler.jsonc`) | Estimated USD each client may spend on paid sources per UTC day |
 | `CLIENT_DAILY_BUDGETS_USD` | - | Per-client caps: `name:usd` or `name:unlimited`, comma-separated |
 | `PUSHOVER_TOKEN`, `PUSHOVER_USER` (secrets) | - | Pushover app token and user key; enables owner alerts |
+| `CAP_WARNING_PERCENT` | `80` | Share of a client's daily cap that triggers the "running low" alert; `100` sends only the cap alert |
 | `ALERT_COOLDOWN_SECONDS` | `21600` | Quiet time before the same provider quota alert repeats |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
 | `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` / `PAPER_CACHE_TTL_SECONDS` | `3600` / `900` / `86400` | How long answers are kept. Each call reads only as old as its `max_age` allows, so keeping them longer only lets callers opt in to older copies |

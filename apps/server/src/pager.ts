@@ -1,6 +1,7 @@
 import type { QuotaAlertSink } from "mcpy";
 import type { Telemetry } from "mcpy/telemetry";
 import { Pager, pageSafely } from "./alerts.js";
+import type { CapWatch } from "./budget.js";
 import type { Env, ServerEnv } from "./env.js";
 
 /** One pager per isolate, so its cooldowns persist across requests. */
@@ -19,9 +20,23 @@ export function pagerFor(env: Env, config: ServerEnv): Pager | undefined {
 }
 
 /** This request's alert hooks: quota alerts for the SDK, cap alerts for the budget. */
-export function alertHooks(pager: Pager | undefined, client: string, capUsd: number | undefined, telemetry: Telemetry) {
+export function alertHooks(
+  pager: Pager | undefined,
+  client: string,
+  capUsd: number | undefined,
+  warnPercent: number,
+  telemetry: Telemetry,
+): { onQuota?: QuotaAlertSink; capWatch?: CapWatch } {
   if (!pager) return {};
   const onQuota: QuotaAlertSink = (alert) => pageSafely(() => pager.quota(alert, client), telemetry);
-  const onCapReached = capUsd === undefined ? undefined : (spentUsd: number) => pageSafely(() => pager.capReached(client, capUsd, spentUsd), telemetry);
-  return { onQuota, onCapReached };
+  if (capUsd === undefined) return { onQuota };
+  return {
+    onQuota,
+    // At 100% the warning line is the cap itself, and only the cap alert is sent.
+    capWatch: {
+      warnAt: warnPercent / 100,
+      onCapNear: (spentUsd) => pageSafely(() => pager.capNear(client, capUsd, spentUsd), telemetry),
+      onCapReached: (spentUsd) => pageSafely(() => pager.capReached(client, capUsd, spentUsd), telemetry),
+    },
+  };
 }

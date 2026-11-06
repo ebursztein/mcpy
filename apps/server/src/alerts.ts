@@ -7,8 +7,9 @@
  *   window is held in this isolate and in KV, so most isolates stay quiet;
  *   KV is eventually consistent, so two isolates may both page within its
  *   first minute. That is accepted: a duplicate beats a missed page.
- * - A cap alert needs no window: the budget object adds spend one call at a
- *   time, so exactly one add crosses the cap each day (see budget.ts).
+ * - Cap alerts need no window: the budget object adds spend one call at a
+ *   time, so exactly one add crosses the warning line, and one the cap, each
+ *   day (see budget.ts).
  * - The pager failing is logged, never paged through itself.
  */
 
@@ -65,6 +66,14 @@ export function capPush(client: string, capUsd: number, spentUsd: number): Push 
   };
 }
 
+export function capNearPush(client: string, capUsd: number, spentUsd: number): Push {
+  return {
+    title: `mcpy: ${client} is running low on its daily cap`,
+    message: `${client} has spent ~$${spentUsd.toFixed(2)} of its $${capUsd.toFixed(2)} cap today (${Math.round((spentUsd / capUsd) * 100)}%). Paid sources pause for it at the cap, until 00:00 UTC.`,
+    priority: PushPriority.Normal,
+  };
+}
+
 export interface PagerOptions {
   keys: PushoverKeys;
   /** Holds the quota cooldown across isolates; without it, only this isolate remembers. */
@@ -100,6 +109,10 @@ export class Pager {
 
   capReached(client: string, capUsd: number, spentUsd: number): Promise<void> {
     return this.send(capPush(client, capUsd, spentUsd));
+  }
+
+  capNear(client: string, capUsd: number, spentUsd: number): Promise<void> {
+    return this.send(capNearPush(client, capUsd, spentUsd));
   }
 
   async send(push: Push): Promise<void> {

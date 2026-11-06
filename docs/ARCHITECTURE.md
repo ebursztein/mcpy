@@ -95,10 +95,11 @@ Owner alerts: the call context can also carry an `onQuota` sink. The chain
 calls it when a paid provider fails with 402 (`out_of_credits`) or 429
 (`rate_limited`); the alert names the provider, so it is for the host, never
 for callers. The server's sink (`apps/server/src/alerts.ts`) pushes to
-Pushover once per provider and kind per cooldown, and the budget pushes once
-when an add moves a client's day total from under its cap to over it (the
+Pushover once per provider and kind per cooldown. The budget pushes once
+when an add moves a client's day total past its warning line
+(`CAP_WARNING_PERCENT` of the cap) and once when it passes the cap (the
 budget object returns the exact total each add replaced, so float sums
-cannot fire it twice).
+cannot fire either twice).
 
 ## User agents
 

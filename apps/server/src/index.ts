@@ -86,14 +86,14 @@ export default {
       const { mcpy, providers } = sdkFor(env, config, telemetry);
       const cap = capFor(client.name, config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD);
       if (cap !== undefined && !env.BUDGET) telemetry.log(LogLevel.Error, "spending cap set but no BUDGET binding: not enforced", {}, span.context);
-      const alerts = alertHooks(pagerFor(env, config), client.name, cap, telemetry);
+      const alerts = alertHooks(pagerFor(env, config), client.name, cap, config.CAP_WARNING_PERCENT, telemetry);
       const api = mcpy.with({
         client: client.name,
         requestId,
         transport: isMcp ? Transport.Mcp : Transport.Rest,
         parent: span.context,
         defer: (work) => ctx.waitUntil(work),
-        spendLimit: cap !== undefined && env.BUDGET ? dailySpendLimit(env.BUDGET, client.name, cap, undefined, alerts.onCapReached) : undefined,
+        spendLimit: cap !== undefined && env.BUDGET ? dailySpendLimit(env.BUDGET, client.name, cap, undefined, alerts.capWatch) : undefined,
         onQuota: alerts.onQuota,
       });
 

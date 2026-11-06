@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuotaAlertKind, RestRoute, type KvLike, type QuotaAlert } from "mcpy";
 import { Pager, PUSHOVER_MESSAGES_URL, PushPriority } from "../../src/alerts.js";
-import { crossedCap, dailySpendLimit } from "../../src/budget.js";
+import { crossed, dailySpendLimit, type CapWatch } from "../../src/budget.js";
 import { budgetNamespace, call, makeEnv, stubNetwork } from "./harness.js";
 
 const KEYS = { token: "app-token", user: "user-key" };
@@ -53,24 +53,58 @@ describe("Pager", () => {
 });
 
 describe("cap alerts", () => {
-  it("only the add that reaches the cap counts as crossing it", () => {
-    expect(crossedCap(0.07, 0.09, 0.1)).toBe(false);
-    expect(crossedCap(0.09, 0.1, 0.1)).toBe(true);
+  it("only the add that reaches a line counts as crossing it", () => {
+    expect(crossed(0.07, 0.09, 0.1)).toBe(false);
+    expect(crossed(0.09, 0.1, 0.1)).toBe(true);
     // 0.12 - 0.02 is 0.0999…: subtracting the add back would fire twice.
-    expect(crossedCap(0.1, 0.12, 0.1)).toBe(false);
+    expect(crossed(0.1, 0.12, 0.1)).toBe(false);
   });
 
-  it("fires once per client per day, on the crossing add", async () => {
+  /** Records which line each add crossed. */
+  function watched(warnAt: number) {
+    const events: [string, number][] = [];
+    const watch: CapWatch = {
+      warnAt,
+      onCapNear: async (spent) => void events.push(["near", spent]),
+      onCapReached: async (spent) => void events.push(["reached", spent]),
+    };
+    return { events, watch };
+  }
+
+  it("warns once on passing the warning line, then once at the cap, each day", async () => {
     const ns = budgetNamespace();
     let now = new Date("2026-11-06T10:00:00Z");
-    const crossings: number[] = [];
-    const limit = dailySpendLimit(ns, "cardy", 0.01, () => now, async (spent) => void crossings.push(spent));
-    for (let i = 0; i < 5; i++) await limit.record(0.004);
-    expect(crossings).toHaveLength(1);
-    expect(crossings[0]).toBeCloseTo(0.012, 10);
+    const { events, watch } = watched(0.8);
+    const limit = dailySpendLimit(ns, "deepmine", 0.01, () => now, watch);
+    for (let i = 0; i < 6; i++) await limit.record(0.002);
+    expect(events.map(([kind]) => kind)).toEqual(["near", "reached"]);
+    expect(events[0][1]).toBeCloseTo(0.008, 10);
+    expect(events[1][1]).toBeCloseTo(0.01, 10);
     now = new Date("2026-11-07T10:00:00Z");
-    for (let i = 0; i < 3; i++) await limit.record(0.004);
-    expect(crossings).toHaveLength(2);
+    for (let i = 0; i < 6; i++) await limit.record(0.002);
+    expect(events.map(([kind]) => kind)).toEqual(["near", "reached", "near", "reached"]);
+  });
+
+  it("an add that jumps both lines reports only the cap", async () => {
+    const { events, watch } = watched(0.8);
+    const limit = dailySpendLimit(budgetNamespace(), "deepmine", 0.01, () => new Date("2026-11-06T10:00:00Z"), watch);
+    await limit.record(0.005);
+    await limit.record(0.006);
+    expect(events.map(([kind]) => kind)).toEqual(["reached"]);
+  });
+
+  it("a warning at 100% is the cap alert alone", async () => {
+    const { events, watch } = watched(1);
+    const limit = dailySpendLimit(budgetNamespace(), "deepmine", 0.01, () => new Date("2026-11-06T10:00:00Z"), watch);
+    for (let i = 0; i < 6; i++) await limit.record(0.002);
+    expect(events.map(([kind]) => kind)).toEqual(["reached"]);
+  });
+
+  it("the running-low push says how much of the cap is used", async () => {
+    const { posts, fetch } = pushover();
+    await new Pager({ keys: KEYS, cooldownSeconds: 60, fetch }).capNear("deepmine", 10, 8.03);
+    expect(posts[0].body).toMatchObject({ title: "mcpy: deepmine is running low on its daily cap", priority: PushPriority.Normal });
+    expect(String(posts[0].body.message)).toContain("~$8.03 of its $10.00 cap today (80%)");
   });
 });
 
@@ -105,6 +139,17 @@ describe("worker alerts", () => {
     expect((await call(`${RestRoute.Search}?query=two&max_age=0`, { env: e })).status).toBe(502);
     expect(pushes).toHaveLength(1);
     expect(pushes[0]).toMatchObject({ title: "mcpy: firecrawl is out of credits", priority: PushPriority.High });
+  });
+
+  it("warns a capped client is running low, then that it hit its cap", async () => {
+    // Each failed Firecrawl search still costs its $0.002 estimate: 0.004 is 80% of 0.005.
+    const e = env({ BUDGET: budgetNamespace(), DAILY_BUDGET_USD: "0.005" });
+    for (const q of ["a", "b", "c"]) await call(`${RestRoute.Search}?query=${q}&max_age=0`, { env: e });
+    expect(pushes.map((p) => p.title)).toEqual([
+      "mcpy: firecrawl is out of credits",
+      "mcpy: alice is running low on its daily cap",
+      "mcpy: alice reached its daily cap",
+    ]);
   });
 
   it("stays silent without Pushover keys", async () => {

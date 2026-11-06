@@ -124,6 +124,8 @@ export const EnvSchema = z.object({
   PUSHOVER_USER: secret,
   /** Quiet time after a quota alert before the same provider and kind alert again. */
   ALERT_COOLDOWN_SECONDS: intVar(60, 7 * 86_400, 21_600),
+  /** Percent of a client's daily cap at which it gets a "running low" alert (100 turns it off). */
+  CAP_WARNING_PERCENT: intVar(1, 100, 80),
 
   // User agent
   DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Default),

@@ -100,29 +100,34 @@ export function spentToday(ns: BudgetNamespaceLike, client: string, now = new Da
   return ask(stubFor(ns, client), `${BudgetPath.Spent}?day=${utcDay(now)}`).then((body) => SpentSchema.parse(body).usd);
 }
 
+/** Hooks for a client's day total passing its warning line and its cap. */
+export interface CapWatch {
+  /** Fraction of the cap that counts as running low, e.g. 0.8. */
+  warnAt: number;
+  onCapNear?: (spentUsd: number) => Promise<void>;
+  onCapReached?: (spentUsd: number) => Promise<void>;
+}
+
 /**
- * The SDK's view of one client's cap. `onCapReached` runs once per day: the
- * budget object applies adds one at a time and returns the exact total each
- * one replaced, so only one add moves the total from under the cap to over it.
+ * The SDK's view of one client's cap. Each hook in `watch` runs once per day:
+ * the budget object applies adds one at a time and returns the exact total
+ * each one replaced, so only one add crosses a given line. An add that jumps
+ * both lines reports only the cap.
  */
-export function dailySpendLimit(
-  ns: BudgetNamespaceLike,
-  client: string,
-  capUsd: number,
-  now: () => Date = () => new Date(),
-  onCapReached?: (spentUsd: number) => Promise<void>,
-): SpendLimit {
+export function dailySpendLimit(ns: BudgetNamespaceLike, client: string, capUsd: number, now: () => Date = () => new Date(), watch?: CapWatch): SpendLimit {
   return {
     allows: async () => (await spentToday(ns, client, now())) < capUsd,
     record: async (usd) => {
       const added = AddedSchema.parse(await ask(stubFor(ns, client), BudgetPath.Add, { day: utcDay(now()), usd }));
-      if (onCapReached && crossedCap(added.before, added.usd, capUsd)) await onCapReached(added.usd);
+      if (!watch) return;
+      if (crossed(added.before, added.usd, capUsd)) await watch.onCapReached?.(added.usd);
+      else if (crossed(added.before, added.usd, capUsd * watch.warnAt)) await watch.onCapNear?.(added.usd);
     },
   };
 }
 
-/** Whether the add that moved the day's total from `before` to `after` is the one that reached the cap. */
-export const crossedCap = (before: number, after: number, capUsd: number) => before < capUsd && after >= capUsd;
+/** Whether the add that moved the day's total from `before` to `after` is the one that reached `line`. */
+export const crossed = (before: number, after: number, line: number) => before < line && after >= line;
 
 /** A client's daily cap in USD, or undefined when it has none. */
 export function capFor(client: string, defaultCap: number | undefined, overrides: ReadonlyMap<string, number | undefined>): number | undefined {
