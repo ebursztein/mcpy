@@ -10,6 +10,7 @@ import { ANONYMOUS, extractKey, findClient, parseClients, stripUrlKey, type Clie
 import { capFor, dailySpendLimit, spendingReport } from "./budget.js";
 import { ConfigError, loadEnv, type Env, type ServerEnv } from "./env.js";
 import { sdkFor } from "./mcpy.js";
+import { rateLimited } from "./rate-limit.js";
 import { alertHooks, pagerFor } from "./pager.js";
 import { errorResponse, handleRest, json } from "./rest.js";
 import { requestTelemetry, SERVICE_VERSION } from "./telemetry.js";
@@ -78,7 +79,8 @@ export default {
 
       if (env.RATE_LIMITER && !(await env.RATE_LIMITER.limit({ key: client.name })).success) {
         telemetry.log(LogLevel.Warn, "rate limited", {}, span.context);
-        return finish(errorResponse(new McpyError(ErrorCode.RateLimited, "rate limit exceeded"), { ...ids, "Retry-After": "60" }));
+        const refusal = rateLimited();
+        return finish(errorResponse(refusal.error, { ...ids, ...refusal.headers }));
       }
 
       const { mcpy, providers } = sdkFor(env, config, telemetry);

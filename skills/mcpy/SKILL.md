@@ -148,7 +148,7 @@ Errors are `{"error": {"code", "message", "details"?}}` with an HTTP status.
 | `invalid_target` | 400 | The URL is not a public http(s) address (or redirects to one). Do not retry. |
 | `unsupported_content` | 415 | Not a text page (e.g. an image or archive). Do not retry. |
 | `unauthorized` / `forbidden` | 401 / 403 | Missing or wrong key. Ask your user for a valid one. |
-| `rate_limited` | 429 | Wait for `Retry-After` seconds, then retry. |
+| `rate_limited` | 429 | Over 120 requests per 60 s per API key (every call counts, page parts and cache hits included; the message and `RateLimit-Policy` header state the limit). Pace to it; wait `Retry-After` seconds, then retry. |
 | `budget_exceeded` | 429 | Your key used up today's allowance for paid sources (resets at midnight UTC; `Retry-After` says when). Cached pages and some free sources still work, so carry on with what you have; do not retry in a loop. Tell your user if you need more. |
 | `upstream_failed` | 502 | Every source failed (site down or blocking). Retry later, or try a different page. |
 | `timeout` | 504 | Took too long. Retry once; for search try `mode: "fast"`. |
