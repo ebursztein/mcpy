@@ -91,6 +91,15 @@ operation reports what its attempts cost, failed ones included. The server's
 limit keeps each client's total for the UTC day in its own Durable Object
 (`ClientBudget`). Costs are the providers' per-call estimates.
 
+Owner alerts: the call context can also carry an `onQuota` sink. The chain
+calls it when a paid provider fails with 402 (`out_of_credits`) or 429
+(`rate_limited`); the alert names the provider, so it is for the host, never
+for callers. The server's sink (`apps/server/src/alerts.ts`) pushes to
+Pushover once per provider and kind per cooldown, and the budget pushes once
+when an add moves a client's day total from under its cap to over it (the
+budget object returns the exact total each add replaced, so float sums
+cannot fire it twice).
+
 ## User agents
 
 Requests use a `UserAgentProfile` enum (`mcpy`, `chrome`,

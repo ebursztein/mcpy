@@ -69,6 +69,17 @@ export const ErrorCode = errorCode.values;
 export const ErrorCodeSchema = errorCode.schema;
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
+/** Why a paid source stopped answering: what a host may want to page its owner about. */
+const quotaAlertKind = enumOf({
+  /** HTTP 402: the account is out of credits or its plan does not cover the call. */
+  OutOfCredits: "out_of_credits",
+  /** HTTP 429 after retries: the account's rate limit or quota is used up for now. */
+  RateLimited: "rate_limited",
+} as const);
+export const QuotaAlertKind = quotaAlertKind.values;
+export const QuotaAlertKindSchema = quotaAlertKind.schema;
+export type QuotaAlertKind = z.infer<typeof QuotaAlertKindSchema>;
+
 const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers" } as const);
 export const Operation = operation.values;
 export const OperationSchema = operation.schema;

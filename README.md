@@ -100,6 +100,22 @@ gets `budget_exceeded` (429) with `Retry-After` until midnight UTC. Totals
 live in the `BUDGET` Durable Object, one per client; requests already in
 flight when the cap is crossed still finish.
 
+### Alerts
+
+With `PUSHOVER_TOKEN` and `PUSHOVER_USER` set (secrets), the server sends the
+owner a Pushover alert when:
+
+- a paid source answers 402 (out of credits, high priority) or 429 after
+  retries (rate limit or quota, normal priority). Each provider and kind
+  alerts at most once per `ALERT_COOLDOWN_SECONDS` (6 hours by default); the
+  window is kept in the `CACHE` KV namespace. Calls keep falling back to the
+  next source meanwhile.
+- a client reaches its daily cap: once per client per UTC day, sent by the
+  request whose spend crossed it.
+
+A failing push is logged (`pushover alert failed`), never retried through
+Pushover itself.
+
 ### Configuration
 
 | Var | Default | Purpose |
@@ -112,6 +128,8 @@ flight when the cap is crossed still finish.
 | `RETRIES` | `2` | Retries per upstream request |
 | `DAILY_BUDGET_USD` | - (`5` in `wrangler.jsonc`) | Estimated USD each client may spend on paid sources per UTC day |
 | `CLIENT_DAILY_BUDGETS_USD` | - | Per-client caps: `name:usd` or `name:unlimited`, comma-separated |
+| `PUSHOVER_TOKEN`, `PUSHOVER_USER` (secrets) | - | Pushover app token and user key; enables owner alerts |
+| `ALERT_COOLDOWN_SECONDS` | `21600` | Quiet time before the same provider quota alert repeats |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
 | `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` / `PAPER_CACHE_TTL_SECONDS` | `3600` / `900` / `86400` | How long answers are kept. Each call reads only as old as its `max_age` allows, so keeping them longer only lets callers opt in to older copies |
 | `DEFAULT_USER_AGENT` | `default` | `default`, `chrome`, `safari`, `firefox`, `mobile`, `googlebot` |

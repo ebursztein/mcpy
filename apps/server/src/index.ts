@@ -10,6 +10,7 @@ import { ANONYMOUS, extractKey, findClient, parseClients, stripUrlKey, type Clie
 import { capFor, dailySpendLimit, spendingReport } from "./budget.js";
 import { ConfigError, loadEnv, type Env, type ServerEnv } from "./env.js";
 import { sdkFor } from "./mcpy.js";
+import { alertHooks, pagerFor } from "./pager.js";
 import { errorResponse, handleRest, json } from "./rest.js";
 import { requestTelemetry, SERVICE_VERSION } from "./telemetry.js";
 
@@ -83,13 +84,15 @@ export default {
       const { mcpy, providers } = sdkFor(env, config, telemetry);
       const cap = capFor(client.name, config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD);
       if (cap !== undefined && !env.BUDGET) telemetry.log(LogLevel.Error, "spending cap set but no BUDGET binding: not enforced", {}, span.context);
+      const alerts = alertHooks(pagerFor(env, config), client.name, cap, telemetry);
       const api = mcpy.with({
         client: client.name,
         requestId,
         transport: isMcp ? Transport.Mcp : Transport.Rest,
         parent: span.context,
         defer: (work) => ctx.waitUntil(work),
-        spendLimit: cap !== undefined && env.BUDGET ? dailySpendLimit(env.BUDGET, client.name, cap) : undefined,
+        spendLimit: cap !== undefined && env.BUDGET ? dailySpendLimit(env.BUDGET, client.name, cap, undefined, alerts.onCapReached) : undefined,
+        onQuota: alerts.onQuota,
       });
 
       if (!isMcp) {

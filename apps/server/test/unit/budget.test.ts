@@ -1,28 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorBodySchema, ErrorCode, RestRoute } from "mcpy";
-import { capFor, ClientBudget, dailySpendLimit, secondsUntilReset, spentToday, type BudgetNamespaceLike } from "../../src/budget.js";
+import { capFor, dailySpendLimit, secondsUntilReset, spentToday, type BudgetNamespaceLike } from "../../src/budget.js";
 import { loadEnv } from "../../src/env.js";
 import { AdminRoute } from "../../src/rest.js";
 import { fixture } from "../../../../packages/mcpy/test/helpers.js";
-import { ADMIN_KEY, articleUrl, call, makeEnv, stubNetwork } from "./harness.js";
-
-/** Real ClientBudget objects over in-memory storage, one per client name. */
-function budgetNamespace(): BudgetNamespaceLike & { objects: Map<string, ClientBudget> } {
-  const objects = new Map<string, ClientBudget>();
-  return {
-    objects,
-    idFromName: (name) => name,
-    get(id) {
-      const name = id as unknown as string;
-      if (!objects.has(name)) {
-        const data = new Map<string, unknown>();
-        objects.set(name, new ClientBudget({ storage: { get: async <T>(k: string) => data.get(k) as T | undefined, put: async (k, v) => void data.set(k, v) } }));
-      }
-      const object = objects.get(name)!;
-      return { fetch: (request: Request) => object.fetch(request) };
-    },
-  };
-}
+import { ADMIN_KEY, articleUrl, budgetNamespace, call, makeEnv, stubNetwork } from "./harness.js";
 
 describe("ClientBudget", () => {
   it("adds up spending per day and starts at zero on a new day", async () => {

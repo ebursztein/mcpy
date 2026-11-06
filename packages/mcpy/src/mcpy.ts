@@ -8,6 +8,7 @@ import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
 import { SpendMeter, type SpendLimit } from "./engine/meter.js";
+import type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
 import { HttpClient } from "./http/client.js";
@@ -71,6 +72,8 @@ export interface CallContext {
   defer?: (work: Promise<unknown>) => void;
   /** Caps this caller's spending on paid sources; free sources and the cache stay available. */
   spendLimit?: SpendLimit;
+  /** Told when a paid source runs out of credits or quota; runs off the request path when `defer` is set. */
+  onQuota?: QuotaAlertSink;
 }
 
 /** The SDK. Implements the same McpyApi as the REST client. */
@@ -137,7 +140,7 @@ export class Mcpy implements McpyApi {
       }
       const target = targetAttributes(parsed.data);
       span.setAttributes(target);
-      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer, meter });
+      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer, meter, onQuota: this.quotaReporter(telemetry, span.context) });
       const facts = {
         [Attr.Cache]: served.cache,
         [Attr.Attempts]: served.attempts,
@@ -165,6 +168,20 @@ export class Mcpy implements McpyApi {
     } finally {
       await this.recordSpend(meter, telemetry, span.context);
     }
+  }
+
+  /** Hand quota alerts to the host's sink; a failing sink is logged, never seen by the caller. */
+  private quotaReporter(telemetry: Telemetry, parent: SpanContext): ((alert: QuotaAlert) => void) | undefined {
+    const sink = this.context.onQuota;
+    if (!sink) return undefined;
+    return (alert) => {
+      telemetry.log(LogLevel.Warn, "paid source quota", { [Attr.Provider]: alert.provider, [Attr.Reason]: `${alert.kind} (HTTP ${alert.status})` }, parent);
+      const work = Promise.resolve()
+        .then(() => sink(alert))
+        .catch((err: unknown) => telemetry.log(LogLevel.Error, "quota alert failed", { [Attr.Reason]: err instanceof Error ? err.message : String(err) }, parent));
+      if (this.context.defer) this.context.defer(work);
+      else void work;
+    };
   }
 
   /** Report what the operation spent to the caller's limit, off the request path when possible. */

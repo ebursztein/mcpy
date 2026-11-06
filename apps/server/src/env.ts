@@ -119,6 +119,12 @@ export const EnvSchema = z.object({
   DAILY_BUDGET_USD: usd.optional(),
   CLIENT_DAILY_BUDGETS_USD: budgetOverrides,
 
+  // Owner alerts by Pushover (paid source out of credits or quota; a client reaching its cap)
+  PUSHOVER_TOKEN: secret,
+  PUSHOVER_USER: secret,
+  /** Quiet time after a quota alert before the same provider and kind alert again. */
+  ALERT_COOLDOWN_SECONDS: intVar(60, 7 * 86_400, 21_600),
+
   // User agent
   DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Default),
   USER_AGENT_STRING: z.string().min(1).max(512).optional(),

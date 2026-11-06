@@ -18,6 +18,7 @@ import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.j
 import { settleWithGrace } from "./fanout.js";
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
+import type { QuotaAlert } from "./quota.js";
 import { routeOrder, siteOf, SiteRoutes } from "./routes.js";
 import { PagePins, type Pinned } from "./pins.js";
 
@@ -60,6 +61,7 @@ export interface CallScope {
   defer?: (work: Promise<unknown>) => void;
   /** Totals what the operation spends and enforces the caller's spending limit. */
   meter?: SpendMeter;
+  onQuota?: (alert: QuotaAlert) => void; // a paid source refused a call for account reasons
 }
 
 /**
@@ -246,6 +248,7 @@ export class Engine {
       telemetry: scope.telemetry,
       parent: scope.parent,
       meter: scope.meter,
+      onQuota: scope.onQuota,
     };
   }
 
