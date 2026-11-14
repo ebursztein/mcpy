@@ -59,8 +59,8 @@
         "PAPER_PROVIDERS": "openalex,arxiv,pubmed,semantic_scholar",
         "DAILY_BUDGET_USD": "1",
         // cardy drained the Firecrawl plan in early Nov 2026; keep it well under the Hobby plan.
-        // deepmine is our own mining operation: generous, but still capped.
-        "CLIENT_DAILY_BUDGETS_USD": "cardy:0.1,deepmine:10",
+        // deepmine is our own mining operation; its daily pricing runs cost well under $0.50 (Nov 2026).
+        "CLIENT_DAILY_BUDGETS_USD": "cardy:0.1,deepmine:0.5",
         // Answers are kept a day; each call says how old a copy it accepts (max_age).
         "PAGE_CACHE_TTL_SECONDS": "86400",
         "SEARCH_CACHE_TTL_SECONDS": "86400",
