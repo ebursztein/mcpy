@@ -7,6 +7,7 @@ import { LogLevel, LogLevelSchema, UserAgentProfile, UserAgentProfileSchema, typ
 import { ProviderId, ProviderIdSchema } from "mcpy/providers";
 import type { AnalyticsDatasetLike } from "mcpy/telemetry";
 import { z } from "zod";
+import type { BrowserBindingLike } from "./browser.js";
 import type { BudgetNamespaceLike } from "./budget.js";
 import type { WorkerLoaderLike } from "./scripts.js";
 
@@ -25,6 +26,8 @@ export interface Env {
   BUDGET?: BudgetNamespaceLike;
   /** Runs fetch scripts; without it, fetch rejects `script`. */
   LOADER?: WorkerLoaderLike;
+  /** Browser Rendering: enables the cloudflare_browser page provider with no API token. */
+  BROWSER?: BrowserBindingLike;
   [key: string]: unknown;
 }
 
@@ -144,6 +147,8 @@ export const EnvSchema = z.object({
   CF_BROWSER_API_BASE: z.string().url().optional(),
   FIRECRAWL_API_KEY: secret,
   FIRECRAWL_API_URL: z.string().url().optional(),
+  /** USD per Firecrawl credit on your plan, for cost estimates and caps (default: Hobby, $19 / 5,000). */
+  FIRECRAWL_USD_PER_CREDIT: z.coerce.number().positive().max(1).optional(),
   BRIGHTDATA_API_KEY: secret,
   BRIGHTDATA_UNLOCKER_ZONE: secret,
   BRIGHTDATA_SERP_ZONE: secret,

@@ -24,6 +24,7 @@ export function cloudflareBrowser(options: CloudflareBrowserOptions): PageProvid
   return {
     id: ProviderId.CloudflareBrowser,
     costPerCall: options.costPerCall ?? 0.0005,
+    capabilities: { render: true, headers: true },
     async fetchPage(req, call) {
       const endpoint = req.format === PageFormat.Html ? "content" : "markdown";
       const { response, data } = await call.http.json(
@@ -35,6 +36,8 @@ export function cloudflareBrowser(options: CloudflareBrowserOptions): PageProvid
             url: req.url,
             ...(forwardedUserAgent(req, call) ? { userAgent: forwardedUserAgent(req, call) } : {}),
             gotoOptions: { waitUntil: "networkidle2", timeout: Math.min(call.timeoutMs, MAX_GOTO_TIMEOUT_MS) },
+            ...(req.headers ? { setExtraHTTPHeaders: req.headers } : {}),
+            ...(req.waitMs ? { waitForTimeout: req.waitMs } : {}),
           },
         },
         BrowserRunResponseSchema,

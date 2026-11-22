@@ -9,6 +9,8 @@ import {
   CacheStatusSchema,
   DeviceSchema,
   ErrorCodeSchema,
+  HttpMethod,
+  HttpMethodSchema,
   PageFormat,
   PageFormatSchema,
   RecencySchema,
@@ -24,6 +26,12 @@ export const MAX_OUTPUT_CHARS = 50_000;
 export const MAX_SEARCH_RESULTS = 50;
 export const MAX_SEARCH_PAGE = 10;
 const MAX_SITES = 10;
+/** Largest request body a caller may send with a POST, in characters. */
+export const MAX_REQUEST_BODY_CHARS = 100_000;
+/** Most extra request headers per call. */
+export const MAX_REQUEST_HEADERS = 20;
+/** Longest wait a caller may ask for on a rendered page, in ms. */
+export const MAX_RENDER_WAIT_MS = 15_000;
 
 const url = z.string().url().max(4096).describe("Absolute http(s) URL");
 
@@ -46,6 +54,28 @@ export function maxAgeField(defaultSeconds: number) {
 const pageMaxAge = maxAgeField(DEFAULT_MAX_AGE_SECONDS.page);
 const userAgent = UserAgentProfileSchema.optional().describe("Browser to present as (default: an honest mcpy user agent)");
 const format = PageFormatSchema.default(PageFormat.Markdown).describe("markdown (readable text) or html (raw page)");
+
+/** An HTTP header name (RFC 9110 token). Which names are refused is checked by the operation. */
+const headerName = z.string().regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$/, "an HTTP header name");
+
+/** How the page is requested: shared by fetch and grep. */
+const pageRequestFields = {
+  render: z
+    .boolean()
+    .default(false)
+    .describe("Run the page's JavaScript in a real browser first, for pages that load their content with scripts (slower; GET only)"),
+  wait_ms: z.number().int().min(0).max(MAX_RENDER_WAIT_MS).optional().describe("With render: extra time to let the page finish loading, in ms"),
+  method: HttpMethodSchema.default(HttpMethod.Get).describe("GET, or POST to send a body (for APIs that take a JSON or form body)"),
+  body: z
+    .string()
+    .max(MAX_REQUEST_BODY_CHARS)
+    .optional()
+    .describe("With method POST: the request body, e.g. a JSON string. A JSON body without a content-type header is sent as application/json"),
+  headers: z
+    .record(headerName, z.string().max(2_000))
+    .optional()
+    .describe("Extra request headers, e.g. {\"Origin\": \"https://example.com\"}. Host, Content-Length and connection-level headers are refused"),
+};
 
 // Input schemas must stay representable as JSON Schema (MCP publishes them),
 // so no transforms here: values are validated case-insensitively and
@@ -71,6 +101,7 @@ export const FetchInputSchema = z.object({
       "JavaScript module run on the whole page: `export default (page) => value`, page is { url, final_url, status, title, content }. Returns the value as JSON instead of the page; use format html to work on the raw page",
     ),
   user_agent: userAgent,
+  ...pageRequestFields,
   max_age: pageMaxAge,
 });
 
@@ -82,6 +113,7 @@ export const GrepInputSchema = z.object({
   max_matches: z.number().int().min(1).max(200).default(20),
   format,
   user_agent: userAgent,
+  ...pageRequestFields,
   max_age: pageMaxAge,
 });
 

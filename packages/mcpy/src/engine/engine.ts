@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { AttemptOutcome, CacheStatus, ErrorCode, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
-import { McpyError } from "../errors.js";
+import { AttemptOutcome, CacheStatus, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
 import type { HttpClient } from "../http/client.js";
-import { normalizeUrl, sha256Hex } from "../http/url.js";
+import { sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
 import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
@@ -11,15 +10,16 @@ import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
 import { isYoungEnough, type Cache } from "./cache.js";
-import { runChain, type AttemptRecord, type ChainResult } from "./chain.js";
+import { runChain, type ChainResult } from "./chain.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
 import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
-import { settleWithGrace } from "./fanout.js";
+import { fanOut } from "./fanout.js";
+import { capablePageProviders, noCapableProvider, pageCacheKey, routeSite } from "./page-request.js";
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
 import type { QuotaAlert } from "./quota.js";
-import { routeOrder, siteOf, SiteRoutes } from "./routes.js";
+import { routeOrder, SiteRoutes } from "./routes.js";
 import { PagePins, type Pinned } from "./pins.js";
 
 export const EngineLimitsSchema = z.object({
@@ -73,6 +73,9 @@ function emptyMovesOn(hits: unknown[]): { outcome: AttemptOutcome; reason?: stri
   return hits.length ? { outcome: AttemptOutcome.Ok } : { outcome: AttemptOutcome.Escalate, reason: "no results", salvageable: true };
 }
 
+/** What one attempt at this search costs on a provider. */
+const searchCost = (req: SearchRequest) => (p: SearchProvider) => p.costOf?.(req) ?? p.costPerCall;
+
 /** Empty search results may be a transient upstream hiccup: keep them briefly. */
 export const EMPTY_SEARCH_TTL_SECONDS = 60;
 
@@ -109,8 +112,8 @@ export class Engine {
     };
   }
 
-  private async pageKey(req: PageRequest): Promise<string> {
-    return `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
+  private pageKey(req: PageRequest): Promise<string> {
+    return pageCacheKey(CACHE_VERSION, req);
   }
 
   /** Keep this copy of a page so its later parts come from it; returns its version. */
@@ -125,14 +128,16 @@ export class Engine {
 
   /** `maxAgeSeconds` (every cached operation): oldest cached answer to serve; 0 skips the cache. */
   async page(req: PageRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<FetchedPage>> {
+    const capable = capablePageProviders(this.deps.pageProviders, req);
+    if (capable.length === 0) throw noCapableProvider(req);
     const key = await this.pageKey(req);
-    const site = siteOf(req.url, req.format);
+    const site = routeSite(req);
     // A salvaged thin page may be a JS shell nobody could render: never cache it.
     const ttl = (_page: FetchedPage, salvaged: boolean) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds);
     return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       const preferred = site ? await this.routes.recall(site) : undefined;
-      const providers = routeOrder(this.deps.pageProviders, preferred);
-      if (providers[0] !== this.deps.pageProviders[0]) {
+      const providers = routeOrder(capable, preferred);
+      if (providers[0] !== capable[0]) {
         scope.telemetry.log(LogLevel.Debug, "site route", { [Attr.Provider]: providers[0].id }, scope.parent);
       }
       const result = await runChain({
@@ -142,14 +147,14 @@ export class Engine {
         describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
         ...this.chainCommon(deadlineAt, scope),
       });
-      if (site && !result.salvaged) await this.learnRoute(site, preferred, result.provider, scope);
+      if (site && !result.salvaged) await this.learnRoute(site, preferred, result.provider, capable[0].id, scope);
       return result;
     });
   }
 
-  /** Remember which provider served a site, when that changes what the next call tries first. */
-  private async learnRoute(site: string, preferred: string | undefined, served: string, scope: CallScope): Promise<void> {
-    const isDefault = served === this.deps.pageProviders[0]?.id;
+  /** Remember which provider served a site, when that changes what the next call tries first (`first`: the chain's own first). */
+  private async learnRoute(site: string, preferred: string | undefined, served: string, first: string, scope: CallScope): Promise<void> {
+    const isDefault = served === first;
     if (served === preferred || (preferred === undefined && isDefault)) return;
     const write = this.routes.remember(site, served).catch(() => undefined);
     if (scope.defer) scope.defer(write);
@@ -177,6 +182,7 @@ export class Engine {
       attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
       judge: emptyMovesOn,
       describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
+      cost: searchCost(req),
       ...this.chainCommon(deadlineAt, scope),
     });
   }
@@ -187,7 +193,8 @@ export class Engine {
   }
 
   private async searchAll(providers: SearchProvider[], req: SearchRequest, deadlineAt: number, scope: CallScope): Promise<ChainResult<MergedPage[]>> {
-    return this.fanOut(providers, (p) => this.searchChain([p], req, deadlineAt, scope), (lists) => mergeRanked(lists, req.limit));
+    const merge = (lists: FoundPage[][]) => mergeRanked(lists, req.limit);
+    return fanOut(providers, (p) => this.searchChain([p], req, deadlineAt, scope), merge, this.deps.limits.thoroughGraceMs, searchCost(req));
   }
 
   /** Paper search: same modes as web search, merged by DOI, arXiv id or title. */
@@ -206,38 +213,11 @@ export class Engine {
       });
     return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       if (mode === SearchMode.Thorough) {
-        return this.fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort));
+        return fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort), this.deps.limits.thoroughGraceMs);
       }
       const result = await chain(providers, deadlineAt);
       return { ...result, value: mergePapers([result.value], req.limit, req.sort) };
     });
-  }
-
-  /**
-   * Thorough mode: one chain per provider, in parallel, under the same
-   * deadline. Once one answers, the rest get `thoroughGraceMs`; succeeds if
-   * any provider answered, merging what came back.
-   */
-  private async fanOut<P extends { id: string; costPerCall: number }, T, V>(
-    providers: P[],
-    run: (provider: P) => Promise<ChainResult<T>>,
-    merge: (values: T[]) => V,
-  ): Promise<ChainResult<V>> {
-    const settled = await settleWithGrace(providers.map(run), this.deps.limits.thoroughGraceMs);
-    const ok = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-    if (ok.length === 0) {
-      const reasons = settled.flatMap((s) => (s.status === "rejected" ? [s.reason] : []));
-      // A spending limit is the one failure the caller can act on: report it first.
-      const overBudget = reasons.find((r) => r instanceof McpyError && r.code === ErrorCode.BudgetExceeded);
-      throw overBudget ?? reasons[0] ?? new McpyError(ErrorCode.Timeout, "no source answered in time");
-    }
-    const attempts: AttemptRecord[] = settled.flatMap((s, i) =>
-      s.status === "fulfilled"
-        ? s.value.attempts
-        : [{ provider: providers[i].id, outcome: AttemptOutcome.Error, reason: s.status, publicReason: s.status, latencyMs: 0 }],
-    );
-    const costUsd = settled.reduce((sum, s, i) => sum + (s.status === "fulfilled" ? s.value.costUsd : providers[i].costPerCall), 0);
-    return { value: merge(ok.map((r) => r.value)), provider: ok.map((r) => r.provider).join("+"), attempts, costUsd, salvaged: false };
   }
 
   private chainCommon(deadlineAt: number, scope: CallScope) {

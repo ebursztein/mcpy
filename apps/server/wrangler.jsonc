@@ -26,6 +26,8 @@
   "migrations": [{ "tag": "v1-budget", "new_sqlite_classes": ["ClientBudget"] }],
   // Runs fetch scripts (Workers cannot eval a string). Workers Paid plan.
   "worker_loaders": [{ "binding": "LOADER" }],
+  // Browser Rendering for JavaScript pages (the cloudflare_browser provider), no API token.
+  "browser": { "binding": "BROWSER" },
 
   // Non-secret settings; secrets (MCPY_CLIENTS, provider keys, OTLP headers)
   // go through `wrangler secret put`. See README for every option.
@@ -52,6 +54,7 @@
       ],
       "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
       "worker_loaders": [{ "binding": "LOADER" }],
+      "browser": { "binding": "BROWSER" },
       "vars": {
         "ALLOWED_HOSTNAMES": "tools.ly.tl",
         "PAGE_PROVIDERS": "direct,cloudflare_browser,firecrawl,brightdata",

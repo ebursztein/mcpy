@@ -41,7 +41,7 @@ Rules, each enforced by tests where possible:
 | --- | --- |
 | Provider down or blocked | Fallback chain: next provider on error, HTTP 401/403/429/5xx from the target, bot challenge (judged on page title, challenge markup on small pages, challenge wording on tiny pages), or an empty HTML shell |
 | Sites that block cheap providers | Site routes: once a later page provider serves a site (hostname + format), the next fetch starts with it, so a blocked direct fetch or browser attempt is not paid for on every call. The providers it skips move to the end of the chain, never out of it. Routes live in the cache for `siteRouteTtlSeconds` (default 1 day), then the cheap providers get another chance |
-| Definitive answers | 404/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
+| Definitive answers | 404/405/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
 | Thin but real pages | Short text, JSON or markdown is served as is. A short HTML page escalates; if no provider does better, the best one is returned and not cached |
 | Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After`; programming errors are never retried |
 | Slow providers | Per-attempt timeout enforced by the engine (even if a provider ignores its abort signal), capped by an overall deadline |
@@ -53,6 +53,9 @@ Rules, each enforced by tests where possible:
 | Pages read in parts | A page longer than one part is also stored under its own version key (a hash of the copy), written before the first part returns; later parts pass `version` and read exactly that copy. The shared cache entry cannot promise this: it is written after the response, KV may serve an older copy for a while, and another call can replace it. A part whose copy is gone fails with `version_expired` |
 | LLM context | Hard caps on returned characters (50,000 per call), pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
 | Search coverage | Search providers declare capabilities (types, recency, site filters, depth); requests go only to providers that can honor them. Country, language and device are hints. `thorough` mode asks every capable provider in parallel and merges with reciprocal rank fusion, deduplicating by normalized URL |
+| JavaScript pages | `render: true` sends a fetch only to providers that run a real browser (Cloudflare Browser Rendering through its Workers binding, then Firecrawl); `wait_ms` gives the page time to finish. Without it, a page that is a script shell but long enough to pass as content is served as is: detection cannot tell, so the caller asks |
+| Requests beyond a GET | `method`/`body`/`headers` go only to providers that declare they can send them (`PageCapabilities`); a POST reaches only a direct request, never a paid fallback. A caller's POST is retried only after 408, 425 or 429, never after a 5xx or a lost connection, and 301/302/303 turn it into a GET without its body. Caller headers cannot set `Host`, `Content-Length` or connection headers |
+| Cost estimates | Providers estimate per request where the bill depends on it (Firecrawl search: 2 credits per 10 results), so caps see what a call really costs |
 | Repeat requests | Cache keyed by normalized URL / query, storing the page as fetched (scripts run on it afterwards, so a new script never refetches); every call (fetch, grep, search, papers) says how old an answer it accepts with one shared `max_age` field, 0 skipping the cache; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
 
 ## Observability

@@ -35,8 +35,8 @@ which tool to use when, errors, and safety rules.
 
 | Tool | Parameters (all but the first are optional; papers needs a query, an author, or both) |
 | --- | --- |
-| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `version`, `max_chars` (up to 50,000), `script`, `user_agent`, `max_age` |
-| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `max_age` |
+| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `version`, `max_chars` (up to 50,000), `script`, `user_agent`, `render`, `wait_ms`, `method`, `body`, `headers`, `max_age` |
+| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `render`, `wait_ms`, `method`, `body`, `headers`, `max_age` |
 | search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `max_age` |
 | papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `max_age` |
 
@@ -46,6 +46,8 @@ which tool to use when, errors, and safety rules.
 - `country` / `language`: two-letter codes (`us`, `fr`, `en`). Hints: a source that cannot honor them still answers.
 - `sites` / `exclude_sites`: hostnames (comma-separated in GET query strings).
 - `mode`: `fast` (first source that answers) or `thorough` (every source that supports the request, merged; results carry `sources`, the number of sources that returned them).
+- `render: true`: run the page's JavaScript in a real browser first, for pages that fill in their content with scripts; `wait_ms` (up to 15,000) gives it extra time. Only sources that render are tried; `no_providers` when the server has none.
+- `method: "POST"` with a `body` (up to 100,000 characters) for APIs that take one; a JSON body without a `Content-Type` header is sent as `application/json`. Only a direct request sends a POST (no paid fallback), and it is never sent twice unless the target answers 408, 425 or 429. `headers`: up to 20 extra request headers (`Host`, `Content-Length` and connection headers are refused). Method, body, headers and `render` are all part of the cache key. These fields need POST /v1/fetch with a JSON body.
 - Long pages: pass the returned `next_offset` as `offset`, with the returned `version`, to read on (every part then comes from the same copy of the page), or pass a `script` (`export default (page) => value`) that runs on the whole page and returns only what it extracts, as JSON. Pages too long for one call come with a `tip` saying so.
 
 Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
@@ -145,8 +147,10 @@ Pushover itself.
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | - | Export traces + logs (OTLP/HTTP JSON) |
 | `OTEL_SERVICE_NAME` / `DEPLOYMENT_ENV` | `mcpy` / `production` | Resource attributes |
-| `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run |
+| `BROWSER` (binding) | bound in wrangler.jsonc | Cloudflare Browser Rendering with no API token; takes precedence over the REST settings below |
+| `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run over REST, for hosts without the binding |
 | `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` | - | Firecrawl (URL for self-hosted) |
+| `FIRECRAWL_USD_PER_CREDIT` | `0.0038` (Hobby) | What a Firecrawl credit costs on your plan; cost estimates and caps use it (a scrape is 1 credit, a search 2 per 10 results) |
 | `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
 | `OPENALEX_API_KEY` | - | Free at openalex.org/settings/api. Needed on Cloudflare: without it OpenAlex shares one small daily budget per IP, and Workers share IPs, so it answers 429 |
 | `SEMANTIC_SCHOLAR_API_KEY` | - | Enables Semantic Scholar (anonymous calls are rate-limited) |

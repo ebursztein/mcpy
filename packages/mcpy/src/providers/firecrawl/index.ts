@@ -9,15 +9,33 @@ export interface FirecrawlOptions {
   apiKey: string;
   /** Self-hosted Firecrawl base URL. */
   apiUrl?: string;
+  /** What one credit costs on your plan (default: Hobby, $19 for 5,000 credits). Costs below are estimated from it. */
+  usdPerCredit?: number;
+  /** Flat estimate per call, overriding the credit-based one. */
   costPerCall?: number;
 }
+
+/** Hobby plan: $19 a month for 5,000 credits (firecrawl.dev/pricing, Nov 2026). */
+export const FIRECRAWL_HOBBY_USD_PER_CREDIT = 19 / 5_000;
+
+/**
+ * Credits Firecrawl bills (firecrawl.dev billing docs; checked live
+ * 2026-11-21 from `creditsUsed`): a scrape is 1, a search is 2 per 10
+ * results asked for, rounded up (10 results: 2, 25: 6).
+ */
+const SCRAPE_CREDITS = 1;
+const searchCredits = (results: number) => Math.ceil(results / 10) * 2;
 
 const DEFAULT_API = "https://api.firecrawl.dev";
 const MIN_TIMEOUT_MS = 1_000;
 const MAX_TIMEOUT_MS = 300_000;
 const MAX_QUERY_CHARS = 500;
 
-const withUserAgent = (ua: string | undefined) => (ua ? { headers: { "User-Agent": ua } } : {});
+/** Headers for Firecrawl's browser to send: a forwarded user agent, then the caller's own. */
+function targetHeaders(ua: string | undefined, extra: Record<string, string> | undefined) {
+  const headers = { ...(ua ? { "User-Agent": ua } : {}), ...extra };
+  return Object.keys(headers).length ? { headers } : {};
+}
 
 function endpoint(options: FirecrawlOptions, path: string): string {
   return `${(options.apiUrl || DEFAULT_API).replace(/\/$/, "")}${path}`;
@@ -31,9 +49,12 @@ function check(response: HttpResponse, body: { success: boolean; error?: string;
 
 /** Firecrawl v2 scrape. */
 export function firecrawl(options: FirecrawlOptions): PageProvider {
+  const usdPerCredit = options.usdPerCredit ?? FIRECRAWL_HOBBY_USD_PER_CREDIT;
   return {
     id: ProviderId.Firecrawl,
-    costPerCall: options.costPerCall ?? 0.001,
+    costPerCall: options.costPerCall ?? SCRAPE_CREDITS * usdPerCredit,
+    // Every scrape runs in a browser.
+    capabilities: { render: true, headers: true },
     async fetchPage(req, call) {
       const html = req.format === PageFormat.Html;
       const { response, data } = await call.http.json(
@@ -46,7 +67,8 @@ export function firecrawl(options: FirecrawlOptions): PageProvider {
             formats: [html ? "rawHtml" : "markdown"],
             onlyMainContent: !html,
             timeout: Math.min(Math.max(call.timeoutMs, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS),
-            ...withUserAgent(forwardedUserAgent(req, call)),
+            ...(req.waitMs ? { waitFor: req.waitMs } : {}),
+            ...targetHeaders(forwardedUserAgent(req, call), req.headers),
             // The engine's cache owns freshness; never serve Firecrawl's stale copy.
             maxAge: 0,
           },
@@ -105,13 +127,16 @@ export const FIRECRAWL_SEARCH_CAPABILITIES: SearchCapabilities = {
  * page N asks for N * limit results and keeps the last `limit`.
  */
 export function firecrawlSearch(options: FirecrawlOptions): SearchProvider {
+  const usdPerCredit = options.usdPerCredit ?? FIRECRAWL_HOBBY_USD_PER_CREDIT;
+  const depthOf = (req: { page: number; limit: number }) => Math.min(req.page * req.limit, MAX_SEARCH_DEPTH);
   return {
     id: ProviderId.Firecrawl,
-    costPerCall: options.costPerCall ?? 0.002,
+    costPerCall: options.costPerCall ?? searchCredits(10) * usdPerCredit,
+    costOf: (req) => options.costPerCall ?? searchCredits(depthOf(req)) * usdPerCredit,
     capabilities: FIRECRAWL_SEARCH_CAPABILITIES,
     async search(req, call) {
       const source = SOURCE[req.type] ?? "web";
-      const depth = Math.min(req.page * req.limit, MAX_SEARCH_DEPTH);
+      const depth = depthOf(req);
       const { response, data } = await call.http.json(
         {
           url: endpoint(options, "/v2/search"),

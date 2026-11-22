@@ -70,7 +70,9 @@ describe("worker with a spending cap", () => {
     vi.restoreAllMocks();
   });
 
-  const capped = (ns: BudgetNamespaceLike, cap: string) => makeEnv({ BUDGET: ns, DAILY_BUDGET_USD: cap, FIRECRAWL_API_KEY: "fc-test" });
+  // $0.001 a credit: a 10-result Firecrawl search (2 credits) is estimated at $0.002.
+  const capped = (ns: BudgetNamespaceLike, cap: string) =>
+    makeEnv({ BUDGET: ns, DAILY_BUDGET_USD: cap, FIRECRAWL_API_KEY: "fc-test", FIRECRAWL_USD_PER_CREDIT: "0.001" });
 
   it("answers budget_exceeded with Retry-After once a client's cap is used up, and keeps free sources", async () => {
     const ns = budgetNamespace();

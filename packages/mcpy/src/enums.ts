@@ -15,6 +15,12 @@ export const PageFormat = pageFormat.values;
 export const PageFormatSchema = pageFormat.schema;
 export type PageFormat = z.infer<typeof PageFormatSchema>;
 
+/** HTTP method of a page request (and of mcpy's own calls to providers). */
+const httpMethod = enumOf({ Get: "GET", Post: "POST" } as const);
+export const HttpMethod = httpMethod.values;
+export const HttpMethodSchema = httpMethod.schema;
+export type HttpMethod = z.infer<typeof HttpMethodSchema>;
+
 const userAgentProfile = enumOf({
   /** Honest mcpy user agent (identifies the tool). */
   Default: "default",

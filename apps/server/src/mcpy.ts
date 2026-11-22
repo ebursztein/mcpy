@@ -14,7 +14,7 @@ const instances = new WeakMap<object, { mcpy: Mcpy; providers: ProviderSetup }>(
 export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcpy: Mcpy; providers: ProviderSetup } {
   let entry = instances.get(env);
   if (!entry) {
-    const providers = buildProviders(config);
+    const providers = buildProviders(config, { browser: env.BROWSER });
     const mcpy = createMcpy({
       pages: providers.pages,
       search: providers.search,

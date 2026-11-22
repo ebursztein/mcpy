@@ -79,6 +79,21 @@ write the script.
 export default (page) => [...page.content.matchAll(/data-price="([\d.]+)"/g)].map((m) => Number(m[1]));
 ```
 
+**Page comes back as an empty shell, or without the prices or listings you
+can see in a browser?** It loads them with JavaScript: fetch again with
+`render: true` (add `wait_ms`, e.g. 3000, if they still are not there). It
+is slower and costs more, so do not use it by default.
+
+**Data behind an API that takes a POST?** `fetch` with `method: "POST"`,
+`body` (a JSON string or a form), and `headers` if the API needs them, e.g.
+a browser `User-Agent` via `user_agent: "chrome"`. Find the call in the
+site's own page (format html) first. POSTs are cached by body too.
+
+```bash
+curl -s "$MCPY_URL/v1/fetch" -H "Authorization: Bearer $MCPY_KEY" -H "content-type: application/json" \
+  -d '{"url":"https://api.example.com/v2/search","method":"POST","body":"{\"q\":\"charizard\"}","user_agent":"chrome"}'
+```
+
 **Looking for something specific on a long page?** `grep` first. It returns
 only matching lines with `context` lines around them, which is far cheaper
 than reading the page. `pattern` is a case-insensitive regular expression
@@ -135,8 +150,8 @@ and `attempts`. Every call takes `max_age`: the oldest cached answer it
 accepts, in seconds (defaults: pages 3600, searches 900, papers 86400).
 Pass 86400 for data that changes daily, a small value for live data, and
 0 to skip the cache. fetch, grep and scripts share the cached page of a
-URL (per `format` and `user_agent`), so a new script or grep does not
-fetch again.
+URL (per `format` and `user_agent`, and per `render`, `method`, `body` and
+`headers` when set), so a new script or grep does not fetch again.
 
 ## Errors
 
@@ -152,7 +167,7 @@ Errors are `{"error": {"code", "message", "details"?}}` with an HTTP status.
 | `budget_exceeded` | 429 | Your key used up today's allowance for paid sources (resets at midnight UTC; `Retry-After` says when). Cached pages and some free sources still work, so carry on with what you have; do not retry in a loop. Tell your user if you need more. |
 | `upstream_failed` | 502 | Every source failed (site down or blocking). Retry later, or try a different page. |
 | `timeout` | 504 | Took too long. Retry once; for search try `mode: "fast"`. |
-| `no_providers` | 503 | No sources are enabled for this tool on the server. Tell your user. |
+| `no_providers` | 503 | No source on the server can do this (none enabled, or none that can `render`, POST or send `headers`). Retry without that option, or tell your user. |
 
 ## Rules
 

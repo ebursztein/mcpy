@@ -5,7 +5,6 @@
 
 import type { z } from "zod";
 import { clip, grepLines, paginate } from "../content/text.js";
-import { assertPublicHttpUrl } from "../http/url.js";
 import type { CallScope, Engine, Served } from "../engine/engine.js";
 import {
   FetchResultSchema,
@@ -21,6 +20,7 @@ import {
 } from "../schemas.js";
 import { CacheStatus, ErrorCode, GrepMode, type UserAgentProfile } from "../enums.js";
 import { McpyError } from "../errors.js";
+import { pageRequestOf } from "./page-input.js";
 import { runScript, scriptTip, type ScriptRunner } from "./script.js";
 import type { MergedPage } from "../engine/merge.js";
 import { pageVersion } from "../engine/pins.js";
@@ -44,8 +44,7 @@ export async function fetchOp(
   scripts?: ScriptRunner,
 ): Promise<{ result: FetchResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
-  const url = assertPublicHttpUrl(input.url).toString();
-  const req = { url, format: input.format, userAgent: input.user_agent ?? defaultUserAgent };
+  const req = pageRequestOf(input, defaultUserAgent);
   const served = input.version ? await servePinned(engine, req, input.version, scope) : await engine.page(req, scope, input.max_age);
   const page = served.value;
   const content = input.script
@@ -87,8 +86,7 @@ export async function grepOp(
   scope: CallScope,
 ): Promise<{ result: GrepResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
-  const url = assertPublicHttpUrl(input.url).toString();
-  const served = await engine.page({ url, format: input.format, userAgent: input.user_agent ?? defaultUserAgent }, scope, input.max_age);
+  const served = await engine.page(pageRequestOf(input, defaultUserAgent), scope, input.max_age);
   const lines = served.value.content.split("\n");
   const grep = grepLines(lines, input.pattern, input.context, input.max_matches, input.literal ? GrepMode.Literal : GrepMode.Regex);
   const truncated = grep.output.length > MAX_GREP_OUTPUT_CHARS;

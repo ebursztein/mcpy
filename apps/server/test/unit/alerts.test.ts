@@ -142,8 +142,8 @@ describe("worker alerts", () => {
   });
 
   it("warns a capped client is running low, then that it hit its cap", async () => {
-    // Each failed Firecrawl search still costs its $0.002 estimate: 0.004 is 80% of 0.005.
-    const e = env({ BUDGET: budgetNamespace(), DAILY_BUDGET_USD: "0.005" });
+    // At $0.001 a credit each failed Firecrawl search still costs its $0.002 estimate: 0.004 is 80% of 0.005.
+    const e = env({ BUDGET: budgetNamespace(), DAILY_BUDGET_USD: "0.005", FIRECRAWL_USD_PER_CREDIT: "0.001" });
     for (const q of ["a", "b", "c"]) await call(`${RestRoute.Search}?query=${q}&max_age=0`, { env: e });
     expect(pushes.map((p) => p.title)).toEqual([
       "mcpy: firecrawl is out of credits",

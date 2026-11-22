@@ -62,6 +62,8 @@ export interface ChainOptions<P extends ChainProvider, T> {
   meter?: SpendMeter;
   /** Hears when a paid source refuses a call for account reasons (out of credits, quota used up). */
   onQuota?: (alert: QuotaAlert) => void;
+  /** Estimated USD of one attempt at this request (default: the provider's flat `costPerCall`). */
+  cost?: (provider: P) => number;
 }
 
 /** Why a paid provider was not tried (also the public reason). */
@@ -120,16 +122,17 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
       continue;
     }
 
-    if (provider.costPerCall > 0 && o.meter && !(await o.meter.mayPay())) {
+    const cost = o.cost?.(provider) ?? provider.costPerCall;
+    if (cost > 0 && o.meter && !(await o.meter.mayPay())) {
       attempts.push({ provider: provider.id, outcome: AttemptOutcome.Skipped, reason: OVER_BUDGET, publicReason: OVER_BUDGET, latencyMs: 0 });
       continue;
     }
 
     const timeoutMs = Math.min(Math.max(o.attemptTimeoutMs, provider.attemptTimeoutMs ?? 0), remaining);
     const started = Date.now();
-    const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: provider.costPerCall }, o.parent);
-    costUsd += provider.costPerCall;
-    o.meter?.spend(provider.costPerCall);
+    const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: cost }, o.parent);
+    costUsd += cost;
+    o.meter?.spend(cost);
     try {
       const signal = AbortSignal.timeout(timeoutMs);
       const value = await bounded(o.attempt(provider, signal, timeoutMs, span.context), signal);

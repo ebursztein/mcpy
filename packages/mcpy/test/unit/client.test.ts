@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CacheStatus, ErrorCode, McpyError, PageFormat, RestRoute, UserAgentProfile, type FetchResult, type GrepResult, type SearchResult } from "mcpy";
+import { CacheStatus, ErrorCode, HttpMethod, McpyError, PageFormat, RestRoute, UserAgentProfile, type FetchResult, type GrepResult, type SearchResult } from "mcpy";
 import { McpyClient } from "mcpy/client";
 import { stubFetch } from "../helpers.js";
 
@@ -55,6 +55,8 @@ describe("McpyClient requests", () => {
       offset: 0,
       max_chars: 10_000,
       user_agent: UserAgentProfile.Chrome,
+      render: false,
+      method: HttpMethod.Get,
       max_age: 3_600,
     });
   });
@@ -65,7 +67,7 @@ describe("McpyClient requests", () => {
     expect(await c.grep({ url: "https://example.com/a", pattern: "hit" })).toEqual(grepResult);
     expect(await c.search({ query: "  q  ", max_results: 3 })).toEqual(searchResult);
     expect(calls.map((x) => x.url)).toEqual([`${BASE}${RestRoute.Grep}`, `${BASE}${RestRoute.Search}`]);
-    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", literal: false, context: 3, max_matches: 20, format: PageFormat.Markdown, max_age: 3_600 });
+    expect(calls[0].body).toEqual({ url: "https://example.com/a", pattern: "hit", literal: false, context: 3, max_matches: 20, format: PageFormat.Markdown, render: false, method: HttpMethod.Get, max_age: 3_600 });
     expect(calls[1].body).toEqual({ query: "q", type: "web", max_results: 3, page: 1, mode: "fast", max_age: 900 });
   });
 

@@ -4,7 +4,7 @@ import type { FetchedPage } from "../providers/types.js";
 /**
  * How the engine judges a page a provider returned:
  * - Ok:       usable page, stop here
- * - Final:    definitive answer (404/410); escalating would only burn money
+ * - Final:    definitive answer (404/405/410); escalating would only burn money
  * - Escalate: blocked, challenged or empty; try the next provider.
  *             `salvageable` marks a real but thin page (e.g. a short HTML
  *             page): if no provider does better, it is returned as is.
@@ -14,7 +14,12 @@ export type Verdict =
   | { outcome: typeof AttemptOutcome.Final; reason: string }
   | { outcome: typeof AttemptOutcome.Escalate; reason: string; salvageable: boolean };
 
-const DEFINITIVE_STATUS = new Set([404, 410]);
+/**
+ * Answers about the request itself, which every source would get too. 405:
+ * the URL does not take this method (seen live: a GET to TCGplayer's POST-only
+ * sales API paid two sources for the same 405).
+ */
+const DEFINITIVE_STATUS = new Set([404, 405, 410]);
 
 /** Titles of bot-wall and challenge pages (Cloudflare, Akamai, Imperva, DataDome, ...). */
 const CHALLENGE_TITLES = [

@@ -6,13 +6,21 @@
 
 export { brightData, brightDataSearch, BRIGHTDATA_SEARCH_CAPABILITIES, type BrightDataOptions } from "./brightdata/index.js";
 export { cloudflareBrowser, type CloudflareBrowserOptions } from "./cloudflare-browser/index.js";
+export {
+  cloudflareBrowserBinding,
+  type BrowserRender,
+  type BrowserRenderRequest,
+  type CloudflareBrowserBindingOptions,
+  type RenderedPage,
+} from "./cloudflare-browser/binding.js";
 export { direct, type DirectOptions } from "./direct/index.js";
-export { firecrawl, firecrawlSearch, FIRECRAWL_SEARCH_CAPABILITIES, type FirecrawlOptions } from "./firecrawl/index.js";
+export { firecrawl, firecrawlSearch, FIRECRAWL_HOBBY_USD_PER_CREDIT, FIRECRAWL_SEARCH_CAPABILITIES, type FirecrawlOptions } from "./firecrawl/index.js";
 export {
   ProviderId,
   ProviderIdSchema,
   type FetchedPage,
   type FoundPage,
+  type PageCapabilities,
   type PageProvider,
   type PageRequest,
   type ProviderCall,
