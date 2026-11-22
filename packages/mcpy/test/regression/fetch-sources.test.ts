@@ -3,11 +3,14 @@
  * sales API (HTTP 405) paid two sources for the same 405, and Firecrawl's
  * cost estimate ($0.001 a page, $0.002 a search) was a quarter of what the
  * Hobby plan bills, so daily caps let clients spend about 4x their cap on it.
+ * Rendering Goldin then showed markdown extraction dropping every row of a
+ * virtualized list (rows placed with inline position: absolute).
  * Never delete these.
  */
 
 import { describe, expect, it } from "vitest";
 import { type SpendLimit } from "mcpy";
+import { htmlToMarkdown } from "../../src/content/extract.js";
 import { FIRECRAWL_HOBBY_USD_PER_CREDIT, firecrawl, firecrawlSearch, type SearchRequest } from "mcpy/providers";
 import { fakePages, fakeSearch, page, testMcpy } from "../helpers.js";
 
@@ -46,5 +49,17 @@ describe("fetch source regressions", () => {
     await mcpy.with({ spendLimit }).search({ query: "q", max_results: 30 });
     expect(charges).toHaveLength(1);
     expect(charges[0]).toBeCloseTo(0.03, 10);
+  });
+
+  it("a virtualized list keeps its rows in markdown (rows placed with position: absolute)", () => {
+    const intro = `<p>${"Weekly auction of trading cards, comics and memorabilia. ".repeat(30)}</p>`;
+    const rows = Array.from(
+      { length: 12 },
+      (_, i) => `<div style="position: absolute; top: ${i * 300}px; left: 0px; width: 100%"><a href="/item/${i}">Charizard PSA ${i}</a><div>$${1_100 + i}</div><div>50 bids</div></div>`,
+    ).join("");
+    const html = `<html><head><title>Auctions</title></head><body><main><div style="position: relative; height: 3600px">${intro}${rows}</div></main></body></html>`;
+    const { markdown } = htmlToMarkdown(html, "https://auctions.example/buy");
+    expect(markdown.match(/\$11\d\d/g)).toHaveLength(12);
+    expect(markdown).toContain("[Charizard PSA 11](https://auctions.example/item/11)");
   });
 });

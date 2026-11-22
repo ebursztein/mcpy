@@ -6,6 +6,11 @@
  * and asides. It occasionally drops nearly everything (table layouts such as
  * Hacker News); then the full page is converted and the larger result wins.
  * Too much text beats silently missing content.
+ *
+ * `minimal` also drops every element with an inline `position: absolute`,
+ * which is how virtualized lists place each row: Goldin's auction listings
+ * lost all 12 prices (2026-11-21). Those styles are made static before it
+ * runs; pages without them convert exactly as before.
  */
 
 import { htmlToMarkdown as mdream } from "mdream";
@@ -22,6 +27,9 @@ export interface Extracted {
  */
 export const MIN_MAIN_WORDS = 200;
 
+/** Inline `position: absolute` declarations, which `minimal` treats as overlays to drop. */
+const ABSOLUTE_POSITION = /(\sstyle\s*=\s*["'][^"']*?)position\s*:\s*absolute/gi;
+
 function wordCount(text: string): number {
   return text.match(/\w+/g)?.length ?? 0;
 }
@@ -36,8 +44,9 @@ function baseOf(url: string): string | undefined {
 }
 
 function convert(html: string, url: string, minimal: boolean): string {
+  const source = minimal ? html.replace(ABSOLUTE_POSITION, "$1position: static") : html;
   // Frontmatter is off: the title comes from <title> and the body stays clean.
-  const markdown = mdream(html, { origin: baseOf(url), clean: true, minimal, frontmatter: false });
+  const markdown = mdream(source, { origin: baseOf(url), clean: true, minimal, frontmatter: false });
   return splitFrontmatter(markdown).body.trim();
 }
 

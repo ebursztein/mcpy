@@ -13,6 +13,8 @@ export type BrowserBindingLike = object;
 const MAX_LOAD_MS = 45_000;
 /** Kept back from the attempt for reading the page and closing the browser. */
 const READ_MARGIN_MS = 2_000;
+/** A common laptop window, so sites serve their full desktop layout. */
+const DESKTOP = { width: 1366, height: 900 };
 
 export function bindingRenderer(binding: BrowserBindingLike): BrowserRender {
   return async ({ url, userAgent, headers, waitMs, timeoutMs, signal }) => {
@@ -23,6 +25,8 @@ export function bindingRenderer(binding: BrowserBindingLike): BrowserRender {
     signal.addEventListener("abort", close, { once: true });
     try {
       const page = await browser.newPage();
+      // Puppeteer's default 800x600 window gets smaller layouts: Goldin showed 41 prices instead of 50 (2026-11-21).
+      await page.setViewport(DESKTOP);
       if (userAgent) await page.setUserAgent(userAgent);
       if (headers) await page.setExtraHTTPHeaders(headers);
       const loadMs = Math.max(1_000, Math.min(MAX_LOAD_MS, timeoutMs - waitMs - READ_MARGIN_MS));
