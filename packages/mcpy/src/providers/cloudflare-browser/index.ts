@@ -3,6 +3,7 @@ import { ContentKind, ErrorCode, PageFormat } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod } from "../../http/client.js";
 import { forwardedUserAgent, ProviderId, type PageProvider } from "../types.js";
+import { rawBody, rawPage } from "./binding.js";
 import { BrowserRunResponseSchema } from "./schemas.js";
 
 export interface CloudflareBrowserOptions {
@@ -50,6 +51,9 @@ export function cloudflareBrowser(options: CloudflareBrowserOptions): PageProvid
 
       const meta = data.meta ?? {};
       // Rendered from HTML by a real browser; status 0 when Browser Run does not report it.
+      // The HTML endpoint returns the rendered page only: unwrap Chrome's viewer around JSON or text.
+      const raw = req.format === PageFormat.Html ? rawBody({ html: data.result }) : undefined;
+      if (raw) return rawPage(req, { finalUrl: meta.finalUrl ?? req.url, status: meta.status ?? 0 }, raw);
       const common = { url: req.url, finalUrl: meta.finalUrl ?? req.url, status: meta.status ?? 0, kind: ContentKind.Html };
       if (req.format === PageFormat.Html) {
         return { ...common, contentType: "text/html", title: meta.title ?? htmlTitle(data.result), content: data.result, format: PageFormat.Html };

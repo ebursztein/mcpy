@@ -1,7 +1,10 @@
 import { htmlTitle, htmlToMarkdown } from "../../content/extract.js";
+import { contentKindOf } from "../../content/kind.js";
+import { unwrapBrowserViewer } from "../../content/viewer.js";
+import { isHtml } from "../../http/url.js";
 import { ContentKind, ErrorCode, PageFormat } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
-import { forwardedUserAgent, ProviderId, type PageProvider } from "../types.js";
+import { forwardedUserAgent, ProviderId, type FetchedPage, type PageProvider, type PageRequest } from "../types.js";
 
 /** One page for the host's browser to open. */
 export interface BrowserRenderRequest {
@@ -22,7 +25,27 @@ export interface RenderedPage {
   status: number;
   finalUrl: string;
   title?: string;
+  /** The rendered page (page.content()). */
   html: string;
+  /** The main document's Content-Type header, when the browser got one. */
+  contentType?: string;
+  /** The main document's body as the server sent it; set when it is not HTML. */
+  body?: string;
+}
+
+/**
+ * A response that is not HTML (JSON, text, XML), exactly as the server sent
+ * it: the renderer's raw body, or the text Chrome wrapped in its viewer page.
+ * Undefined for an HTML page, which is read as rendered.
+ */
+export function rawBody(page: { html: string; contentType?: string; body?: string }): { body: string; contentType: string } | undefined {
+  if (page.body !== undefined && page.contentType && !isHtml(page.contentType)) return { body: page.body, contentType: page.contentType };
+  return unwrapBrowserViewer(page.html);
+}
+
+/** A raw body as a page, in the caller's format, like the direct provider does. */
+export function rawPage(req: PageRequest, base: { finalUrl: string; status: number; title?: string }, raw: { body: string; contentType: string }): FetchedPage {
+  return { url: req.url, ...base, contentType: raw.contentType, kind: contentKindOf(raw.contentType), content: raw.body, format: req.format };
 }
 
 /**
@@ -63,6 +86,8 @@ export function cloudflareBrowserBinding(options: CloudflareBrowserBindingOption
         if (err instanceof ProviderFailure) throw err;
         throw new ProviderFailure(ErrorCode.UpstreamFailed, `browser: ${err instanceof Error ? err.message : String(err)}`);
       }
+      const raw = rawBody(page);
+      if (raw) return rawPage(req, { finalUrl: page.finalUrl || req.url, status: page.status }, raw);
       const base = { url: req.url, finalUrl: page.finalUrl || req.url, status: page.status, contentType: "text/html", kind: ContentKind.Html };
       if (req.format === PageFormat.Html) {
         return { ...base, title: page.title || htmlTitle(page.html), content: page.html, format: PageFormat.Html };

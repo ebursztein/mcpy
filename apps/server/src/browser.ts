@@ -38,7 +38,11 @@ export function bindingRenderer(binding: BrowserBindingLike): BrowserRender {
         if (!(err instanceof Error && err.name === "TimeoutError")) throw err;
       }
       if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-      return { status: response?.status() ?? 0, finalUrl: page.url(), title: await page.title(), html: await page.content() };
+      // A JSON, text or XML answer is returned as the server sent it: the rendered
+      // page is Chrome's viewer around it (Woyouminer's JSON, 2026-11-23).
+      const contentType = response?.headers()["content-type"];
+      const body = response && contentType && !/text\/html|application\/xhtml/i.test(contentType) ? await response.text().catch(() => undefined) : undefined;
+      return { status: response?.status() ?? 0, finalUrl: page.url(), title: await page.title(), html: await page.content(), contentType, body };
     } finally {
       signal.removeEventListener("abort", close);
       close();
