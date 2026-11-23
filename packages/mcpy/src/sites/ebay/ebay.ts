@@ -64,7 +64,7 @@ const LOCALES: readonly EbayLocale[] = [
     country: "us",
     currency: "USD",
     language: "en",
-    words: english(/^Located in (.+)$/i),
+    words: english(/^Located in (.+)$/i, /^United States$/i),
   },
   {
     key: "ebay_uk",
@@ -73,7 +73,7 @@ const LOCALES: readonly EbayLocale[] = [
     country: "gb",
     currency: "GBP",
     language: "en",
-    words: english(/^(?:from|Located in) (.+)$/i),
+    words: english(/^(?:from|Located in) (.+)$/i, /^United Kingdom$/i),
   },
   {
     key: "ebay_de",
@@ -88,6 +88,7 @@ const LOCALES: readonly EbayLocale[] = [
       buyNow: /Sofort-Kaufen/i,
       freeShipping: /^(?:Kostenlose[rn]?\s+(?:Versand|Lieferung)|Versand kostenlos|Lieferung kostenlos)/i,
       location: /^(?:aus|Artikelstandort:?)\s+(\D{2,40})$/i,
+      home: /^Deutschland$/i,
       listed: /^Eingestellt\b.*$/i,
       timeLeft: /^Noch\s.+$|^\d+\s*T\b.*$/i,
       seller: SELLER,
@@ -106,6 +107,7 @@ const LOCALES: readonly EbayLocale[] = [
       buyNow: /Achat immédiat/i,
       freeShipping: /^Livraison gratuite/i,
       location: /^(?:de|Provenance\s*:|Lieu où se trouve l'objet\s*:)\s*(\D{2,40})$/i,
+      home: /^France$/i,
       listed: /^(?:Mis en vente|Nouvelle annonce|Publié)\b.*$/i,
       timeLeft: /^Il reste\s.+$|^\d+\s*j\b.*restant.*$/i,
       seller: SELLER,
@@ -124,6 +126,7 @@ const LOCALES: readonly EbayLocale[] = [
       buyNow: /Compralo Subito/i,
       freeShipping: /^Spedizione gratuita/i,
       location: /^(?:da|Oggetto che si trova a:?)\s+(\D{2,40})$/i,
+      home: /^Italia$/i,
       listed: /^(?:Messo in vendita|Inserito)\b.*$/i,
       timeLeft: /^(?:Tempo rimanente|Mancano)\s.+$|^\d+\s*g\b.*$/i,
       seller: SELLER,
@@ -142,6 +145,7 @@ const LOCALES: readonly EbayLocale[] = [
       buyNow: /Cómpralo ya/i,
       freeShipping: /^Envío gratis/i,
       location: /^(?:de|desde|Ubicado en:?)\s+(\D{2,40})$/i,
+      home: /^España$/i,
       listed: /^(?:Publicado|Anunciado)\b.*$/i,
       timeLeft: /^Quedan?\s.+$|^\d+\s*d\b.*$/i,
       seller: SELLER,
@@ -149,8 +153,9 @@ const LOCALES: readonly EbayLocale[] = [
   },
 ];
 
-function english(location: RegExp): EbayWords {
+function english(location: RegExp, home: RegExp): EbayWords {
   return {
+    home,
     bids: /^(\d+)\s+bids?$/i,
     bestOffer: /or Best Offer/i,
     buyNow: /^Buy It Now$/i,
@@ -216,6 +221,8 @@ function site(l: EbayLocale): ShoppingSite {
     language: l.language,
     kind: SiteKind.Marketplace,
     listingId: ebayItemId,
+    // One item number is one listing on every eBay site, priced for each site's buyers.
+    listingPool: "ebay",
     search(sq) {
       const price = `${sq.minPrice !== undefined ? `&_udlo=${sq.minPrice}` : ""}${sq.maxPrice !== undefined ? `&_udhi=${sq.maxPrice}` : ""}`;
       return {

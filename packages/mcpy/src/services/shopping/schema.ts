@@ -67,6 +67,15 @@ export const ShoppingSort = shoppingSort.values;
 export const ShoppingSortSchema = shoppingSort.schema;
 export type ShoppingSort = z.infer<typeof ShoppingSortSchema>;
 
+/**
+ * How a row's title must state the query. auto: all_words on sites known to
+ * match loosely (any word, or the description), any elsewhere.
+ */
+const titleMatch = enumOf({ Auto: "auto", Any: "any", AllWords: "all_words", Phrase: "phrase" } as const);
+export const TitleMatch = titleMatch.values;
+export const TitleMatchSchema = titleMatch.schema;
+export type TitleMatch = z.infer<typeof TitleMatchSchema>;
+
 export const MAX_LISTINGS = 60;
 export const MAX_SEARCH_DETAILS = 10;
 
@@ -82,6 +91,9 @@ export const ShoppingSearchInputSchema = z
     card_condition: CardConditionSchema.optional().describe("Trading cards: this grade or better"),
     language: enumSet(LanguageSchema, 10).optional().describe("Trading cards: only cards printed in these languages"),
     format: enumSet(ListingFormatSchema, 4).optional(),
+    title_match: TitleMatchSchema.default(TitleMatch.Auto).describe(
+      "Rows whose title lacks the query are dropped: all_words (every word), phrase (the words together, in order), any (the site's own matching). auto: all_words on sites that match loosely, any elsewhere",
+    ),
     max_results: z.number().int().min(1).max(MAX_LISTINGS).default(MAX_LISTINGS).describe("Listings in total for this call"),
     max_products: z.number().int().min(1).max(10).default(3).describe("Card sites and shops: product pages to open for their sellers' listings (one fetch each)"),
     cursor: z.string().min(1).max(MAX_CURSOR_CHARS).optional().describe("next_cursor from the previous call, with the same other inputs. A site that failed or timed out on its first page is not in it: search again without a cursor to retry it"),
@@ -134,6 +146,10 @@ export const ListingSchema = z.object({
   country: CountrySchema.optional().describe("Where the item is"),
   seller: SellerSchema.optional(),
   promoted: z.boolean().optional(),
+  price_converted: z
+    .boolean()
+    .optional()
+    .describe("The store showed a listing from another country in its own currency or with its own taxes; the seller's own price may differ"),
   image: UrlSchema.optional(),
   details: SearchDetailsSchema.optional(),
 });
@@ -144,6 +160,8 @@ export const MarketplaceReportSchema = z.object({
   status: SiteStatusSchema,
   results: z.number().int().nonnegative(),
   total: z.number().int().nonnegative().optional(),
+  unmatched: z.number().int().positive().optional().describe("Rows this page returned whose title did not match the query (title_match); dropped"),
+  cost_usd: z.number().nonnegative().optional().describe("Estimated USD this store cost this call"),
   search_url: UrlSchema,
   observed_at: TimestampSchema,
   ignored: z.array(RequestPartSchema).optional().describe("Requested but not applied; results are still returned"),

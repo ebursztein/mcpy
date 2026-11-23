@@ -50,7 +50,15 @@ MCP / REST -> Mcpy facade -> services/shopping -> sites/<site> -> engine.page() 
   back to the site's reader, normalizes the rows, applies the filters the site
   could not, interleaves sites and reports per site (`ok`, `empty`, `failed`
   with `blocked`/`redesigned`/`redirected`/`truncated`/`timeout`/`upstream_failed`,
-  and `ignored` request parts). A failed site never fails the call.
+  `ignored` request parts, and `cost_usd` from a per-site part of the call's
+  `SpendMeter`). A failed site never fails the call.
+- **Title match** (`title-match.ts`): sites flagged `matchesLoosely` (any
+  word, descriptions, n-grams) have rows whose title lacks the query dropped
+  (`title_match` auto = all_words); the report counts them as `unmatched`.
+- **One listing, one row** (`merge.ts`): sites in one `listingPool` (the eBay
+  sites) show the same listing under the same id, priced per site. The merge
+  keeps the row not marked `price_converted` (eBay's price for a listing from
+  abroad), and counts dropped duplicates as consumed for the cursor.
 - **Sites** (`sites/<region>/`): one `ShoppingSite` per marketplace key
   (`ebay_de`, `cardmarket`, `leboncoin`...). A site knows its URLs, which
   filters its URL applies, and how to read its result page; it never fetches.

@@ -69,14 +69,3 @@ function sortRows(rows: Listing[], sort: ShoppingSearchQuery["sort"]): Listing[]
   const dir = sort === ShoppingSort.PriceHigh || sort === ShoppingSort.Newest ? -1 : 1;
   return [...rows].sort((a, b) => dir * (key(a)! - key(b)!));
 }
-
-/** Round-robin across sites, each in its own order, up to `limit` listings. */
-export function interleave(lists: Listing[][], limit: number): Listing[] {
-  const out: Listing[] = [];
-  for (let i = 0; out.length < limit && lists.some((l) => i < l.length); i++) {
-    for (const list of lists) {
-      if (i < list.length && out.length < limit) out.push(list[i]!);
-    }
-  }
-  return out;
-}

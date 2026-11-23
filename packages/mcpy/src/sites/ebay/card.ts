@@ -17,6 +17,8 @@ export interface EbayWords {
   buyNow: RegExp;
   freeShipping: RegExp;
   location: RegExp;
+  /** The site's own country as its cards name it; a card located elsewhere shows a converted price. */
+  home: RegExp;
   listed: RegExp;
   timeLeft: RegExp;
   seller: RegExp;
@@ -93,6 +95,7 @@ export function ebayCard(card: string, host: string, words: EbayWords, labels: M
   const bestOffer = has(words.bestOffer);
   const shipping = has(words.freeShipping) ? "free" : rows.map(([, t]) => t).find((t) => /^\+\s*\D{0,4}\s*\d/.test(t) && !t.includes("%"));
   const seller = match(words.seller);
+  const location = match(words.location)?.[1];
   const timeLeft = match(words.timeLeft)?.[0];
   const img = /<img\b[^>]*s-card__image[^>]*>/.exec(card)?.[0];
   const image = attr(img, "src") ?? attr(img, "data-defer-load");
@@ -108,7 +111,9 @@ export function ebayCard(card: string, host: string, words: EbayWords, labels: M
     shipping,
     condition: conditionOf(subtitle),
     postedText: match(words.listed)?.[0],
-    location: match(words.location)?.[1],
+    location,
+    // A card from abroad states where it is; its price is eBay's for this site's buyers.
+    priceConverted: location !== undefined && !words.home.test(location.trim()),
     seller: seller?.[1],
     sellerFeedbackPercent: seller?.[2],
     sellerFeedbackCount: seller?.[3],

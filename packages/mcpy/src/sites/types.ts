@@ -83,6 +83,8 @@ export interface RawListing {
   sellerFeedbackCount?: number | string | null;
   sellerFeedbackPercent?: number | string | null;
   promoted?: boolean | null;
+  /** The site showed a listing from abroad in its own currency or with its own taxes. */
+  priceConverted?: boolean | null;
   image?: string | null;
   /** Item pages only: every photo. */
   images?: string[];
@@ -120,6 +122,13 @@ export interface ShoppingSite {
   emptyStatuses?: readonly number[];
   /** Card sites: the games it sells, main one first. A request for another game is reported unsupported, not searched. */
   games?: readonly Game[];
+  /**
+   * Sites that show the same listings under the same ids (eBay's country
+   * sites) name one pool: a call returns each listing once, from its home site.
+   */
+  listingPool?: string;
+  /** The site matches a query loosely (any word, the description, n-grams): title_match auto filters its rows. */
+  matchesLoosely?: boolean;
   /** The site pages with its own token (ReadOutcome.nextCursor, SiteQuery.cursor) instead of page numbers. */
   pagesByCursor?: boolean;
   search(q: SiteQuery): SiteRequest;

@@ -129,6 +129,7 @@ export function normalize(site: ShoppingSite, row: RawListing, pageUrl: string):
       ? { name: str(row.seller, 200), feedback_count: count(row.sellerFeedbackCount), feedback_percent: percent(row.sellerFeedbackPercent) }
       : undefined,
     promoted: typeof row.promoted === "boolean" ? row.promoted : undefined,
+    price_converted: row.priceConverted === true && price ? true : undefined,
     image: absoluteUrl(row.image, pageUrl),
     details: details(row.details),
   };

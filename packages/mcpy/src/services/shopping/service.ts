@@ -8,12 +8,15 @@
 import { CacheStatus, ErrorCode } from "../../enums.js";
 import { McpyError } from "../../errors.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
+import { roundUsd } from "../../engine/meter.js";
 import { normalize, onSiteHost } from "../../sites/normalize.js";
 import { SITES } from "../../sites/registry.js";
 import type { ProductLink, RawListing, ShoppingSite, SiteQuery } from "../../sites/types.js";
 import { RequestPart, SiteStatus } from "../common.js";
 import { fetchAndRead, fetchFromApi, type SiteFetch } from "./fetch-site.js";
-import { applyFilters, interleave } from "./filters.js";
+import { applyFilters } from "./filters.js";
+import { mergeSites } from "./merge.js";
+import { titleMatcher, titleMatchFor } from "./title-match.js";
 import type { Marketplace } from "./marketplace.js";
 import { advance, encodeCursor, positionsOf, type Positions, type SitePosition, type SiteProgress } from "./paging.js";
 import { ShoppingSearchResultSchema, type Listing, type MarketplaceReport, type ShoppingSearchQuery, type ShoppingSearchResult } from "./schema.js";
@@ -154,7 +157,10 @@ async function searchSite(engine: Engine, key: Marketplace, at: SitePosition, qu
       rows.push(listing);
     }
   }
-  const { rows: kept, ignored } = applyFilters(rows, input, req);
+  const matches = titleMatcher(input.query, titleMatchFor(input.title_match, site));
+  const titled = matches ? rows.filter((l) => matches(l.title)) : rows;
+  const unmatched = rows.length - titled.length;
+  const { rows: kept, ignored } = applyFilters(titled, input, req);
   // A site that sells several games but cannot narrow to one: its rows are not filtered by game.
   if (input.game && !site.games) ignored.push(RequestPart.Game);
   const available = kept.slice(at.o);
@@ -163,7 +169,14 @@ async function searchSite(engine: Engine, key: Marketplace, at: SitePosition, qu
     key,
     rows: available,
     served,
-    report: { ...report, status: available.length ? SiteStatus.Ok : SiteStatus.Empty, ...(outcome.total !== undefined ? { total: outcome.total } : {}), ...(ignored.length ? { ignored } : {}) },
+    report: {
+      ...report,
+      status: available.length ? SiteStatus.Ok : SiteStatus.Empty,
+      // A loose site's count includes the rows that do not match: it is not stated then.
+      ...(outcome.total !== undefined && !unmatched ? { total: outcome.total } : {}),
+      ...(unmatched ? { unmatched } : {}),
+      ...(ignored.length ? { ignored } : {}),
+    },
     progress: { at, available: available.length, products, opened, hasMore, nextToken: site.pagesByCursor ? outcome.nextCursor : undefined, stop: false },
   };
 }
@@ -201,16 +214,24 @@ export async function shoppingSearchOp(engine: Engine, input: ShoppingSearchQuer
   const productSites = keys.filter((k) => SITES[k]?.product).length;
   const productBudget = Math.max(1, Math.floor(MAX_PRODUCT_PAGES_PER_CALL / Math.max(1, productSites)));
   const deadline = Date.now() + OPERATION_DEADLINE_MS;
-  const sites = await pool(keys, SITE_CONCURRENCY, (key) => withDeadline(() => searchSite(engine, key, positions[key]!, input, productBudget, scope), deadline, key, positions[key]!, input));
+  const sites = await pool(keys, SITE_CONCURRENCY, async (key) => {
+    // Each site meters its own spend, which also counts toward the call's.
+    const meter = scope.meter?.part();
+    const r = await withDeadline(() => searchSite(engine, key, positions[key]!, input, productBudget, { ...scope, meter }), deadline, key, positions[key]!, input);
+    if (meter) r.report.cost_usd = roundUsd(meter.spentUsd);
+    return r;
+  });
   const served = combined(sites.flatMap((s) => s.served));
-  const results = interleave(sites.map((s) => s.rows), input.max_results);
+  const { results, consumed } = mergeSites(
+    sites.map((s) => ({ key: s.key, pool: SITES[s.key]?.listingPool, rows: s.rows })),
+    input.max_results,
+  );
   const returned = new Map<string, number>();
   for (const l of results) returned.set(l.marketplace, (returned.get(l.marketplace) ?? 0) + 1);
   const next: Positions = {};
   for (const s of sites) {
-    const n = returned.get(s.key) ?? 0;
-    s.report.results = n;
-    const pos = advance({ ...s.progress, returned: n });
+    s.report.results = returned.get(s.key) ?? 0;
+    const pos = advance({ ...s.progress, returned: consumed.get(s.key) ?? 0 });
     if (pos) next[s.key] = pos;
   }
   const result = ShoppingSearchResultSchema.parse({
