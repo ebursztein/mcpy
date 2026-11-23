@@ -1,0 +1,109 @@
+# mcpy shopping tools: what cardy can use (2026-11-23)
+
+You reach mcpy at `https://tools.ly.tl/mcp` (MCP) or `https://tools.ly.tl/v1/*` (REST) with your
+cardy key. Six tools: `web_fetch`, `web_grep`, `web_search`, `paper_search`, and two new ones,
+`shopping_search` and `shopping_item`. Your paid spend is capped at **$0.10 a day**; free sources
+keep working after the cap, paid ones stop until midnight UTC (a site then reports `over_budget`).
+
+## shopping_search: one call, many stores, one listing format
+
+Every result is **one listing on one store**: a seller's asking price (or current bid) for one item.
+Nothing is merged across stores and nothing is guessed: a field the page does not state is absent.
+Card marketplaces (Cardmarket, TCGplayer, CardTrader) return **every seller's offer** on the
+product pages they open, each as its own listing.
+
+Input:
+
+| field | use |
+| --- | --- |
+| `marketplaces` | 1-10 store keys (list below). Each key is one domain with its own currency. |
+| `query` | Write it as a seller on that site would, **in the site's language**: `リザードン` on Japanese sites, `Glurak` on German ones, `리자몽` on Korean ones. Use one call per language. |
+| `sort` | `newest` (default), `relevance`, `price_low`, `price_high`, `ending_soon`. Use `relevance` to find a specific card; `newest` returns loosely related items first on eBay. |
+| `min_price` / `max_price` | In **each site's own currency**. Mixing USD and JPY sites in one call with one bound is usually wrong: split the call. |
+| `condition` | `new`, `open_box`, `refurbished`, `used`, `for_parts` (general goods). |
+| `game` | `pokemon`, `mtg`, `yugioh`, `one_piece`, `lorcana`. Card sites that do not sell it report `unsupported`. |
+| `card_condition` | This grade or better on Cardmarket's scale: `mint` > `near_mint` > `excellent` > `good` > `light_played` > `played` > `poor`. |
+| `language` | Cards printed in these languages (ISO codes: `en`, `ja`, `de`...). |
+| `format` | `fixed_price`, `auction`, `best_offer`, `wanted` (a buyer's post, never an ask). |
+| `max_results` | Listings in total for the call, up to 60 (spread across stores). |
+| `max_products` | Card marketplaces: product pages to open, 1-10 (default 3). **Each one is a fetch and costs money**; keep it at 1-3. |
+| `cursor` | `next_cursor` from the previous call, with **exactly the same other inputs**, for the next listings. |
+| `max_age` | Seconds of cache you accept (default 900). 0 forces a fresh fetch (and costs more). |
+
+Each listing can carry: `marketplace`, `id`, `url` (no tracking), `title` (as the seller wrote it,
+not translated), `price` `{amount, currency}`, `format`, `auction` `{bids, ends_at, buy_now}`
+(for an auction `price` is the current bid, not an ask), `shipping` (amount 0 = free),
+`condition`, `card_condition`, `language`, `quantity`, `product` (the product page an offer sits
+on), `status`, `posted_at` or `posted_text`, `location`, `country`, `seller` `{name,
+feedback_count, feedback_percent}`, `promoted`, `image`, and `details` (site-specific key/values).
+
+Each store gets a report in `marketplaces[]`: `status` is `ok`, `empty` (a real "no results"
+page), `unsupported`, `over_budget` or `failed` with a `failure`: `blocked`, `redesigned`,
+`redirected`, `timeout` or `upstream_failed`. **A failed store never fails the call.** `ignored`
+lists filters that store could not apply; when it lists `min_price`, `max_price` or `sort`,
+mcpy applied them itself on the rows it read, so they still hold for that page. `total` is the
+store's own result count when it states one.
+
+Prices are never converted. Compare across currencies yourself, and say so when you do.
+
+## shopping_item: one listing in full
+
+`{ "url": <a listing url from shopping_search> }` returns the same fields plus `description`,
+all `images` and a longer `details` map. It reads the listing page's JSON-LD. It refuses card
+marketplace URLs (their "listing" URL is a product page shared by every seller), and Mercari,
+Wallapop and Bunjang have no item reader yet.
+
+## Stores (74 keys): what works
+
+Working (66). Card-relevant ones first:
+
+| key | site | currency | notes |
+| --- | --- | --- | --- |
+| `cardmarket` | cardmarket.com | EUR | All five games; seller offers with card condition, language, seller. Product pages cost a rendered fetch each. Sort is ignored. |
+| `tcgplayer` | tcgplayer.com | USD | All five games; seller offers. Sort is ignored. |
+| `cardtrader` | cardtrader.com | EUR | All five games; seller offers. |
+| `cardkingdom`, `starcitygames` | | USD | Magic only. |
+| `hareruya` | hareruyamtg.com | JPY | Magic only. |
+| `yuyutei` | yuyu-tei.jp | JPY | Pokémon, Yu-Gi-Oh!, One Piece. |
+| `cardrush`, `dorasuta` | | JPY | Pokémon only. |
+| `magi`, `surugaya` | | JPY | Several games, no game filter (reports `game` ignored). |
+| `ebay_us`, `ebay_uk`, `ebay_de`, `ebay_fr`, `ebay_it`, `ebay_es` | | USD/GBP/EUR | Active listings only, no sold prices. When eBay blocks every page source, a listing API stands in; its rows then lack bids, format, location and seller, and can take 30-45 s. ebay_de is the flakiest. |
+| `yahoo_auctions` | auctions.yahoo.co.jp | JPY | Auctions with bids and end times. |
+| `mercari_jp`, `paypay_flea`, `rakuma` | | JPY | Japanese flea markets. |
+| `bunjang`, `joongna`, `daangn` | | KRW | Korean marketplaces. |
+| `catawiki` | catawiki.com | EUR | Auctions with bids and end times. |
+| `todocoleccion` | todocoleccion.net | EUR | Spanish collectibles. |
+| `vinted_fr`, `leboncoin` | | EUR | France. |
+| `kleinanzeigen`, `willhaben`, `ricardo`, `tutti`, `anibis` | | EUR/CHF | Germany, Austria, Switzerland. |
+| `marktplaats`, `2dehands`, `subito`, `wallapop`, `milanuncios` | | EUR | Netherlands, Belgium, Italy, Spain. |
+| `gumtree`, `shpock`, `adverts_ie`, `locanto_gb` | | GBP/EUR | UK, Ireland. |
+| `olx_pl`, `olx_pt`, `olx_ro`, `olx_bg`, `olx_ua`, `olx_br`, `allegro_lokalnie` | | local | OLX countries, Poland. |
+| `blocket`, `finn`, `dba`, `tori` | | SEK/NOK/DKK/EUR | Nordics. |
+| `aukro`, `bazos_cz`, `bazos_sk`, `sbazar`, `jofogas`, `njuskalo`, `bolha`, `skelbiu`, `kupujemprodajem` | | local | Central and Eastern Europe. |
+| `locanto_de`, `locanto_fr`, `locanto_es`, `dubizzle_ae` | | EUR/AED | Thin for cards. |
+
+Not working, do not use (each reports `failed`): `mercadolivre_br`, `mercadolibre_ar`,
+`mercadolibre_mx`, `mercadolibre_cl`, `mercadolibre_co` (blocked), `coolstuffinc` (empty pages),
+`sahibinden` (login wall), `locanto_it` (the site's TLS is broken).
+
+## Sold prices (not in shopping_search)
+
+shopping_search returns active listings only. For **Japanese sold prices**, fetch Yahoo Auctions'
+closed search with `web_fetch` (free, no render): 
+`https://auctions.yahoo.co.jp/closedsearch/closedsearch?p=<query>&n=50` with `user_agent: "chrome"`,
+and a `script` that reads the page's `__NEXT_DATA__` sale records (final price in JPY, bids, end
+time, condition `NEW` / `USED20`-`USED60`, auction id). Deduplicate by auction id. eBay sold
+prices are not available from any source mcpy has.
+
+## Using it well
+
+- Pick the stores for the card and market: Japanese cards → `yahoo_auctions`, `mercari_jp`,
+  `cardrush`, `yuyutei`, `dorasuta` with a Japanese query; European → `cardmarket`, `ebay_de`,
+  `ebay_fr`, `kleinanzeigen`, `vinted_fr`; US → `tcgplayer`, `ebay_us`.
+- One currency (and one language) per call. Use `game` on card sites.
+- Keep `max_products` low and `max_age` at its default: cached reads are free, and your cap is small.
+- Page with `next_cursor` instead of raising `max_results`. A store that failed on its first page
+  is not in the cursor: search it again without a cursor to retry.
+- Read `marketplaces[]` before concluding "no listings": `failed` means the store was not read.
+- `web_search` now runs on a cheap source first; use it to find price guides (PriceCharting,
+  PSA) and then `web_fetch` the page.
