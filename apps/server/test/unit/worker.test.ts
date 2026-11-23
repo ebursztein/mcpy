@@ -208,10 +208,12 @@ describe("admin", () => {
       pages: [ProviderId.Direct],
       search: [],
       papers: [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed],
+      listings: [],
       skipped: {
         pages: [],
         search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }],
         papers: [{ id: ProviderId.SemanticScholar, reason: SkipReason.MissingCredentials }],
+        listings: [{ id: ProviderId.Serpent, reason: SkipReason.MissingCredentials }],
       },
     });
   });

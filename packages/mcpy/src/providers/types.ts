@@ -13,6 +13,7 @@ export const ProviderId = {
   CloudflareBrowser: "cloudflare_browser",
   Firecrawl: "firecrawl",
   BrightData: "brightdata",
+  Serpent: "serpent",
   OpenAlex: "openalex",
   Arxiv: "arxiv",
   SemanticScholar: "semantic_scholar",
@@ -23,6 +24,7 @@ export const ProviderIdSchema = z.enum([
   ProviderId.CloudflareBrowser,
   ProviderId.Firecrawl,
   ProviderId.BrightData,
+  ProviderId.Serpent,
   ProviderId.OpenAlex,
   ProviderId.Arxiv,
   ProviderId.SemanticScholar,
@@ -44,6 +46,12 @@ export interface PageRequest {
   render?: boolean;
   /** With `render`: extra time to let the page finish loading, in ms. */
   waitMs?: number;
+  /**
+   * Fetch as a visitor from this country (lowercase ISO 3166-1 alpha-2), for
+   * sites that localize prices by IP. A hint: providers that cannot choose
+   * their exit country ignore it.
+   */
+  country?: string;
 }
 
 /** What a page provider can do beyond a plain GET. Absent fields are false. */

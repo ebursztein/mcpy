@@ -11,7 +11,10 @@ import {
   direct,
   firecrawl,
   firecrawlSearch,
+  serpentListings,
+  serpentSearch,
   ProviderId,
+  type ListingProvider,
   type PageProvider,
   type SearchProvider,
 } from "mcpy/providers";
@@ -35,7 +38,8 @@ export interface ProviderSetup {
   pages: PageProvider[];
   search: SearchProvider[];
   papers: PaperProvider[];
-  skipped: { pages: Skipped[]; search: Skipped[]; papers: Skipped[] };
+  listings: ListingProvider[];
+  skipped: { pages: Skipped[]; search: Skipped[]; papers: Skipped[]; listings: Skipped[] };
 }
 
 type Build<P> = (env: ServerEnv, bindings: ProviderBindings) => P | null | typeof UNSUPPORTED;
@@ -53,6 +57,7 @@ const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
   [ProviderId.Firecrawl]: (e) => (e.FIRECRAWL_API_KEY ? firecrawl(firecrawlOptions(e, e.FIRECRAWL_API_KEY)) : null),
   [ProviderId.BrightData]: (e) =>
     e.BRIGHTDATA_API_KEY && e.BRIGHTDATA_UNLOCKER_ZONE ? brightData({ apiKey: e.BRIGHTDATA_API_KEY, zone: e.BRIGHTDATA_UNLOCKER_ZONE }) : null,
+  [ProviderId.Serpent]: () => UNSUPPORTED,
   [ProviderId.OpenAlex]: () => UNSUPPORTED,
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
@@ -65,6 +70,7 @@ const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
   [ProviderId.Firecrawl]: (e) => (e.FIRECRAWL_API_KEY ? firecrawlSearch(firecrawlOptions(e, e.FIRECRAWL_API_KEY)) : null),
   [ProviderId.BrightData]: (e) =>
     e.BRIGHTDATA_API_KEY && e.BRIGHTDATA_SERP_ZONE ? brightDataSearch({ apiKey: e.BRIGHTDATA_API_KEY, zone: e.BRIGHTDATA_SERP_ZONE }) : null,
+  [ProviderId.Serpent]: (e) => (e.SERPENT_API_KEY ? serpentSearch({ apiKey: e.SERPENT_API_KEY }) : null),
   [ProviderId.OpenAlex]: () => UNSUPPORTED,
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
@@ -76,11 +82,24 @@ const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
   [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
   [ProviderId.Firecrawl]: () => UNSUPPORTED,
   [ProviderId.BrightData]: () => UNSUPPORTED,
+  [ProviderId.Serpent]: () => UNSUPPORTED,
   // Works keyless on a small shared budget; a free key raises it.
   [ProviderId.OpenAlex]: (e) => openAlex({ apiKey: e.OPENALEX_API_KEY }),
   [ProviderId.Arxiv]: () => arxiv(),
   [ProviderId.SemanticScholar]: (e) => (e.SEMANTIC_SCHOLAR_API_KEY ? semanticScholar({ apiKey: e.SEMANTIC_SCHOLAR_API_KEY }) : null),
   [ProviderId.PubMed]: (e) => pubmed({ apiKey: e.NCBI_API_KEY, email: e.NCBI_EMAIL }),
+};
+
+const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
+  [ProviderId.Direct]: () => UNSUPPORTED,
+  [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
+  [ProviderId.Firecrawl]: () => UNSUPPORTED,
+  [ProviderId.BrightData]: () => UNSUPPORTED,
+  [ProviderId.Serpent]: (e) => (e.SERPENT_API_KEY ? serpentListings({ apiKey: e.SERPENT_API_KEY }) : null),
+  [ProviderId.OpenAlex]: () => UNSUPPORTED,
+  [ProviderId.Arxiv]: () => UNSUPPORTED,
+  [ProviderId.SemanticScholar]: () => UNSUPPORTED,
+  [ProviderId.PubMed]: () => UNSUPPORTED,
 };
 
 const firecrawlOptions = (e: ServerEnv, apiKey: string) => ({ apiKey, apiUrl: e.FIRECRAWL_API_URL, usdPerCredit: e.FIRECRAWL_USD_PER_CREDIT });
@@ -107,10 +126,12 @@ export function buildProviders(env: ServerEnv, bindings: ProviderBindings = {}):
   const pages = resolve(env.PAGE_PROVIDERS, PAGE_BUILDERS, env, bindings);
   const search = resolve(env.SEARCH_PROVIDERS, SEARCH_BUILDERS, env, bindings);
   const papers = resolve(env.PAPER_PROVIDERS, PAPER_BUILDERS, env, bindings);
+  const listings = resolve(env.LISTING_PROVIDERS, LISTING_BUILDERS, env, bindings);
   return {
     pages: pages.chain,
     search: search.chain,
     papers: papers.chain,
-    skipped: { pages: pages.skipped, search: search.skipped, papers: papers.skipped },
+    listings: listings.chain,
+    skipped: { pages: pages.skipped, search: search.skipped, papers: papers.skipped, listings: listings.skipped },
   };
 }

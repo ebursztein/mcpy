@@ -35,6 +35,50 @@ Rules, each enforced by tests where possible:
 5. **Modules stay under 300 lines.** A test fails the build otherwise.
 6. **One folder per provider**: `providers/<name>/{index,schemas,...}.ts`.
 
+## Shopping: services, sites, fetcher
+
+`shopping_search` and `shopping_item` add a layer between the API and the engine:
+
+```
+MCP / REST -> Mcpy facade -> services/shopping -> sites/<site> -> engine.page() -> providers -> HttpClient
+                              (input, merge,     (URLs, filters,  (cache, fallback,
+                               reports, cursor)   page readers)    render, breaker)
+```
+
+- **Service** (`services/shopping/`): validates the input, asks each requested
+  site for its search request, fetches it through the engine, hands the page
+  back to the site's reader, normalizes the rows, applies the filters the site
+  could not, interleaves sites and reports per site (`ok`, `empty`, `failed`
+  with `blocked`/`redesigned`/`redirected`/`truncated`/`timeout`/`upstream_failed`,
+  and `ignored` request parts). A failed site never fails the call.
+- **Sites** (`sites/<region>/`): one `ShoppingSite` per marketplace key
+  (`ebay_de`, `cardmarket`, `leboncoin`...). A site knows its URLs, which
+  filters its URL applies, and how to read its result page; it never fetches.
+  Card marketplaces return product links; the service opens up to
+  `max_products` product pages and every seller's offer becomes a listing.
+  Shared readers: `sites/readers/` (embedded JSON, JSON-LD, HTML cards, values).
+- **Normalize** (`sites/normalize.ts`): a row is a listing only if its URL is
+  on the site's host(s) with a listing id and a title; every other field is
+  validated and dropped on its own if bad, never the row.
+- **Fetcher**: the engine's page path, unchanged: the universal cache
+  (`max_age`), site routes, fallback chain, render providers. Sites prefer
+  their own JSON APIs and embedded state (free) over rendering (paid).
+- **Listing APIs** (last resort): a site may declare an `api` read (today the
+  six eBay sites). When every page source failed for its search page
+  (`blocked`, `timeout`, `upstream_failed`; not `redesigned` or `redirected`,
+  and not over budget), the service asks the engine's listing sources
+  (`createMcpy({ listings })`, the server's `LISTING_PROVIDERS`) for the same
+  market, sort, bounds and page. Their rows are thinner than the page's, so
+  the page reader stays the main path. Contract: `providers/listing-types.ts`.
+- **Paging**: `next_cursor` holds one position per site (search page or the
+  site's own token, rows already returned, product pages already opened, retries).
+  Continuation calls reread the cached page (up to the page cache TTL, 1 h by
+  default), so offsets point at the same rows; a transient failure past page 1
+  keeps the site's place for up to two retries.
+- **Bounds**: 4 sites fetched at once, at most 20 product pages per call, a 90 s
+  whole-call deadline (a site still running is reported as timed out).
+- Every store's chosen path and live verdict is recorded in `docs/shopping/`.
+
 ## Reliability
 
 | Concern | Mechanism |

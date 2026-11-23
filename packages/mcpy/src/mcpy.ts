@@ -2,8 +2,19 @@ import { z } from "zod";
 import { fetchOp, grepOp, searchOp } from "./api/operations.js";
 import type { ScriptRunner } from "./api/script.js";
 import { papersOp } from "./api/papers.js";
+import { shoppingItemOp } from "./services/shopping/item.js";
+import { shoppingSearchOp } from "./services/shopping/service.js";
+import {
+  ShoppingItemInputSchema,
+  ShoppingSearchInputSchema,
+  type ShoppingItemInput,
+  type ShoppingItemResult,
+  type ShoppingSearchInput,
+  type ShoppingSearchResult,
+} from "./services/shopping/schema.js";
 import { PaperSearchInputSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 import type { PaperProvider } from "./providers/paper-types.js";
+import type { ListingProvider } from "./providers/listing-types.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
@@ -52,6 +63,8 @@ export interface McpyOptions extends McpyConfig {
   search?: SearchProvider[];
   /** Paper indexes, tried in order. */
   papers?: PaperProvider[];
+  /** Marketplace listing APIs, the last resort for shopping sites whose pages no page source could fetch. */
+  listings?: ListingProvider[];
   /** Defaults to an in-memory cache. */
   cache?: Cache;
   /** Defaults to no telemetry. */
@@ -113,6 +126,14 @@ export class Mcpy implements McpyApi {
 
   papers(input: PaperSearchInput): Promise<PaperSearchResult> {
     return this.run(Operation.Papers, PaperSearchInputSchema, input, (i, scope) => papersOp(this.engine, i, scope));
+  }
+
+  shopping(input: ShoppingSearchInput): Promise<ShoppingSearchResult> {
+    return this.run(Operation.Shopping, ShoppingSearchInputSchema, input, (i, scope) => shoppingSearchOp(this.engine, i, scope));
+  }
+
+  shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult> {
+    return this.run(Operation.ShoppingItem, ShoppingItemInputSchema, input, (i, scope) => shoppingItemOp(this.engine, i, scope));
   }
 
   /** Validation, span, structured log line and error mapping for every operation. */
@@ -218,6 +239,7 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
     pageProviders: options.pages ?? [],
     searchProviders: options.search ?? [],
     paperProviders: options.papers ?? [],
+    listingProviders: options.listings ?? [],
     cache: options.cache ?? new MemoryCache(),
     http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
     breaker: new CircuitBreaker(config.breaker),

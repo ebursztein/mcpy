@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-function enumOf<const T extends Record<string, string>>(values: T) {
+export function enumOf<const T extends Record<string, string>>(values: T) {
   const schema = z.enum(Object.values(values) as [T[keyof T], ...T[keyof T][]]);
   return { values, schema };
 }
@@ -86,7 +86,7 @@ export const QuotaAlertKind = quotaAlertKind.values;
 export const QuotaAlertKindSchema = quotaAlertKind.schema;
 export type QuotaAlertKind = z.infer<typeof QuotaAlertKindSchema>;
 
-const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers" } as const);
+const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers", Shopping: "shopping", ShoppingItem: "shopping_item" } as const);
 export const Operation = operation.values;
 export const OperationSchema = operation.schema;
 export type Operation = z.infer<typeof OperationSchema>;

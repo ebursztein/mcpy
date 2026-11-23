@@ -16,7 +16,7 @@ const hasHeaders = (req: PageRequest) => Object.keys(req.headers ?? {}).length >
 
 /** A GET with nothing extra: what every page provider can serve. */
 function isPlain(req: PageRequest): boolean {
-  return !req.render && !isPost(req) && req.body === undefined && !hasHeaders(req);
+  return !req.render && !isPost(req) && req.body === undefined && !hasHeaders(req) && !req.country;
 }
 
 /** Cache key of a page request. Every field that can change the answer is part of it. */
@@ -28,7 +28,7 @@ export async function pageCacheKey(version: string, req: PageRequest): Promise<s
   const headers = Object.entries(req.headers ?? {})
     .map(([name, value]) => [name.toLowerCase(), value])
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  const identity = [url, req.method ?? HttpMethod.Get, req.body ?? null, headers, req.render ?? false, req.waitMs ?? 0];
+  const identity = [url, req.method ?? HttpMethod.Get, req.body ?? null, headers, req.render ?? false, req.waitMs ?? 0, ...(req.country ? [req.country] : [])];
   return `${base}:req:${await sha256Hex(JSON.stringify(identity))}`;
 }
 

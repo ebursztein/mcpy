@@ -128,10 +128,11 @@ export function fixtureJson<T = unknown>(name: string): T {
   return JSON.parse(fixture(name)) as T;
 }
 
-export const PROVIDER_IDS = ["direct", "cloudflare_browser", "firecrawl", "brightdata"];
+export const PROVIDER_IDS = ["direct", "cloudflare_browser", "firecrawl", "brightdata", "serpent"];
 
 /** True when serialized output mentions any built-in provider id. */
 export function mentionsProvider(value: unknown): boolean {
   const text = JSON.stringify(value);
-  return PROVIDER_IDS.some((id) => text.includes(id));
+  // Whole words: "redirected" is not the direct provider.
+  return PROVIDER_IDS.some((id) => new RegExp(`(^|[^a-z_])${id}([^a-z_]|$)`, "i").test(text));
 }

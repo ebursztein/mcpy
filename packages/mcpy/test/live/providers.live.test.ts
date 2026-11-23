@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CacheStatus, createMcpy, MemoryCache, PageFormat, PaperCollection, PaperSort, Recency, SearchType } from "mcpy";
-import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, openAlex, pubmed } from "mcpy/providers";
+import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, openAlex, pubmed, serpentSearch } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
 const DEV_VARS = new URL("../../../../apps/server/.dev.vars", import.meta.url);
@@ -131,6 +131,28 @@ describe.skipIf(!has("BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE"))("bright data
       max_age: 0,
     });
     expect(result.results.length).toBeGreaterThan(0);
+  });
+});
+
+describe.skipIf(!has("SERPENT_API_KEY"))("serpent (live)", () => {
+  const search = () => sdk({ search: [serpentSearch({ apiKey: k.SERPENT_API_KEY })] });
+
+  it("searches the web with real publisher links", async () => {
+    const result = await search().search({ query: "Elie Bursztein", max_results: 5, max_age: 0 });
+    expect(result.results.length).toBeGreaterThan(0);
+    for (const hit of result.results) expect(hit.url).toMatch(/^https:\/\/(?!www\.google\.)/);
+  });
+
+  it("restricts results to the given sites", async () => {
+    const result = await search().search({ query: "workers", sites: ["developers.cloudflare.com"], max_results: 5, max_age: 0 });
+    expect(result.results.length).toBeGreaterThan(0);
+    for (const hit of result.results) expect(new URL(hit.url).hostname).toBe("developers.cloudflare.com");
+  });
+
+  it("searches news from the past week, linking to publishers", async () => {
+    const result = await search().search({ query: "Cloudflare", type: SearchType.News, recency: Recency.Week, max_results: 3, max_age: 0 });
+    expect(result.results.length).toBeGreaterThan(0);
+    for (const hit of result.results) expect(new URL(hit.url).hostname).not.toBe("news.google.com");
   });
 });
 

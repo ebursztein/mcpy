@@ -1,0 +1,63 @@
+{
+ "success": true,
+ "query": "pokemon tcg",
+ "type": "news",
+ "engine": "bing",
+ "country": "us",
+ "pagesScraped": 1,
+ "results": {
+  "articles": [
+   {
+    "position": 1,
+    "title": "Pokémon TCG 30th Celebration Ultra-Premium Collections restock retailers: Where...",
+    "url": "https://mashable.com/life/pokemon-30th-celebration-ultra-premium-collection-retailer-restock-where",
+    "source": "Mashable",
+    "publishedTime": "2026-11-21",
+    "snippet": "There's still stock to buy, if you know where to look.",
+    "image": null
+   },
+   {
+    "position": 2,
+    "title": "Pokémon TCG Mega Evolution Flowing Fists: Release date, Z Mega Evolution cards,...",
+    "url": "https://mashable.com/life/pokemon-tcg-mega-evolution-flowing-fists-expansion-release-date",
+    "source": "Mashable",
+    "publishedTime": "2026-11-19",
+    "snippet": "Mega Lucario Z and Mega Garchomp Z are officially invading the Pokémon TCG.",
+    "image": null
+   },
+   {
+    "position": 3,
+    "title": "Pokémon TCG: 30th Celebration Booster Bundle Is at an All-Time Low Price on Walm...",
+    "url": "https://sea.ign.com/pokemon-trading-card-game-tabletop/252241/pokemon-tcg-30th-celebration-booster-bundle-is-at-an-all-time-low-price-on-walmart-saving-you-over-2",
+    "source": "IGN Videogames",
+    "publishedTime": "2026-11-20",
+    "snippet": "You can save a couple of extra dollars at TCGplayer, too",
+    "image": null
+   },
+   {
+    "position": 4,
+    "title": "This Pokémon TCG: 30th Celebration Knock Out Collection Deal Nets You A Promo...",
+    "url": "https://www.ign.com/articles/pokmon-tcg-30th-celebration-knock-out-collection-is-back-in-stock-at-amazon-with-a-price-drop",
+    "source": "IGN Videogames",
+    "publishedTime": "2026-11-20",
+    "snippet": "Save on this Pokémon TCG bundle and get an Eevee promo card included, too - what's not to love?",
+    "image": null
+   },
+   {
+    "position": 5,
+    "title": "Pokémon TCG: Delta Reign Booster Bundles Are Back In Stock at Amazon and Now Way...",
+    "url": "https://www.ign.com/articles/pokemon-tcg-delta-reign-booster-bundles-under-market-price-at-amazon",
+    "source": "IGN Videogames",
+    "publishedTime": "2026-11-17",
+    "snippet": "Pokémon TCG: Delta reign booster bundles are back in stock at Amazon and now way below the current...",
+    "image": null
+   }
+  ],
+  "totalResults": 5
+ },
+ "meta": {
+  "totalArticles": 5,
+  "elapsed": "1558ms",
+  "timestamp": "2026-11-23T03:05:00.256Z"
+ }
+}

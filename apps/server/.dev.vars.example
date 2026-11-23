@@ -16,6 +16,9 @@ MCPY_CLIENTS=dev:replace-with-a-long-random-key-000000:admin
 # BRIGHTDATA_UNLOCKER_ZONE=
 # BRIGHTDATA_SERP_ZONE=
 
+# Serpent API (search)
+# SERPENT_API_KEY=
+
 # OpenTelemetry export (optional)
 # OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.example.com
 # OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20xxx

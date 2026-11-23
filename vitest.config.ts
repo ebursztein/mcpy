@@ -22,7 +22,7 @@ export default defineConfig({
         test: {
           name: "unit",
           include: [
-            "packages/mcpy/test/{unit,contract,regression,structure,perf}/**/*.test.ts",
+            "packages/mcpy/test/{unit,contract,regression,structure,perf,shopping}/**/*.test.ts",
             "apps/server/test/unit/**/*.test.ts",
           ],
         },

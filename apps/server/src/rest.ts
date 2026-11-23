@@ -62,6 +62,8 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.Grep]: (api, input) => api.grep(input as never),
   [RestRoute.Search]: (api, input) => api.search(input as never),
   [RestRoute.Papers]: (api, input) => api.papers(input as never),
+  [RestRoute.Shopping]: (api, input) => api.shopping(input as never),
+  [RestRoute.ShoppingItem]: (api, input) => api.shoppingItem(input as never),
 };
 
 export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView): Promise<Response> {
@@ -77,6 +79,7 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
       pages: providers.pages.map((p) => p.id),
       search: providers.search.map((p) => p.id),
       papers: providers.papers.map((p) => p.id),
+      listings: providers.listings.map((p) => p.id),
       skipped: providers.skipped,
     });
   }

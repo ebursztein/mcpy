@@ -21,6 +21,15 @@ import {
   type SearchResult,
 } from "./schemas.js";
 import { PaperSearchInputSchema, PaperSearchResultSchema, type PaperSearchResult } from "./schemas-papers.js";
+import {
+  ShoppingItemInputSchema,
+  ShoppingItemResultSchema,
+  ShoppingSearchInputSchema,
+  ShoppingSearchResultSchema,
+  type Listing,
+  type ShoppingItemResult,
+  type ShoppingSearchResult,
+} from "./services/shopping/schema.js";
 
 type ToolResult = {
   content: { type: "text"; text: string }[];
@@ -78,6 +87,38 @@ export function renderSearch(r: SearchResult): string {
   const body = r.results.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}${facts(h)}${h.snippet ? `\n   ${h.snippet}` : ""}`).join("\n\n");
   const page = r.page > 1 ? `, page ${r.page}` : "";
   return `Query: ${r.query} (${r.type}${page}; ${cacheNote(r.meta)})\n---\n${body || "No results."}`;
+}
+
+function listingLine(l: Listing): string {
+  const price = l.price ? `${l.price.amount} ${l.price.currency}` : "no price";
+  const facts = [
+    l.marketplace,
+    price,
+    l.format,
+    l.auction?.bids !== undefined ? `${l.auction.bids} bids` : undefined,
+    l.card_condition ?? l.condition,
+    l.language,
+    l.seller?.name,
+    l.posted_at ?? l.posted_text,
+    l.status && l.status !== "available" ? l.status : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return `${l.title}\n   ${facts}\n   ${l.url}`;
+}
+
+export function renderShopping(r: ShoppingSearchResult): string {
+  const body = r.results.map((l, i) => `${i + 1}. ${listingLine(l)}`).join("\n\n");
+  const sites = r.marketplaces
+    .map((m) => `${m.marketplace}: ${m.status}${m.failure ? ` (${m.failure})` : ""}${m.results ? `, ${m.results}` : ""}${m.ignored?.length ? `, ignored ${m.ignored.join("/")}` : ""}`)
+    .join("; ");
+  const more = r.next_cursor ? "\nMore: pass next_cursor as cursor." : "";
+  return `Shopping: ${r.query} (${cacheNote(r.meta)})\nSites: ${sites}\n---\n${body || "No listings."}${more}`;
+}
+
+export function renderShoppingItem(r: ShoppingItemResult): string {
+  const details = r.details ? Object.entries(r.details).map(([k, v]) => `${k}: ${v}`).join("\n") : "";
+  return `${listingLine(r as Listing)}${r.description ? `\n---\n${r.description}` : ""}${details ? `\n---\n${details}` : ""}`;
 }
 
 export function renderPapers(r: PaperSearchResult): string {
@@ -149,5 +190,30 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
       annotations: READ_ONLY,
     },
     async (input) => api.papers(input).then((r) => ok(r, renderPapers(r)), fail),
+  );
+
+  server.registerTool(
+    ToolName.Shopping,
+    {
+      title: "Shopping Search",
+      description:
+        "Search marketplaces, classifieds, auction sites and trading-card shops (eBay by country, Cardmarket, TCGplayer, Yahoo Auctions, Leboncoin, OLX, Vinted and more) and get one listing per row: price and currency as stated, format (fixed price, auction with bids and end time, wanted), condition or card grade, seller, shipping, location, posting time. Card marketplaces return every seller's offer, not the product. Each site reports ok, empty or failed (blocked, redesigned...) and which filters it ignored. Default sort is newest first; min_price is in each site's currency.",
+      inputSchema: ShoppingSearchInputSchema,
+      outputSchema: ShoppingSearchResultSchema,
+      annotations: READ_ONLY,
+    },
+    async (input) => api.shopping(input).then((r) => ok(r, renderShopping(r)), fail),
+  );
+
+  server.registerTool(
+    ToolName.ShoppingItem,
+    {
+      title: "Shopping Item",
+      description: "Read one listing from a shopping_search result URL: the same fields plus the full description, all photos and the item specifics, from the listing page's structured data. Not for card marketplaces (Cardmarket, TCGplayer, CardTrader), where shopping_search already returns each seller's offer; sites whose listing pages are app shells may fail.",
+      inputSchema: ShoppingItemInputSchema,
+      outputSchema: ShoppingItemResultSchema,
+      annotations: READ_ONLY,
+    },
+    async (input) => api.shoppingItem(input).then((r) => ok(r, renderShoppingItem(r)), fail),
   );
 }

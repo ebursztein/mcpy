@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import type { PaperSearchInput, PaperSearchResult } from "./schemas-papers.js";
+import type { ShoppingItemInput, ShoppingItemResult, ShoppingSearchInput, ShoppingSearchResult } from "./services/shopping/schema.js";
 import {
   CacheStatusSchema,
   DeviceSchema,
@@ -226,4 +227,6 @@ export interface McpyApi {
   grep(input: GrepInput): Promise<GrepResult>;
   search(input: SearchInput): Promise<SearchResult>;
   papers(input: PaperSearchInput): Promise<PaperSearchResult>;
+  shopping(input: ShoppingSearchInput): Promise<ShoppingSearchResult>;
+  shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult>;
 }

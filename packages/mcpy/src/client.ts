@@ -24,6 +24,16 @@ import {
   type SearchResult,
 } from "./schemas.js";
 import { PaperSearchInputSchema, PaperSearchResultSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
+import {
+  ShoppingItemInputSchema,
+  ShoppingItemResultSchema,
+  ShoppingSearchInputSchema,
+  ShoppingSearchResultSchema,
+  type ShoppingItemInput,
+  type ShoppingItemResult,
+  type ShoppingSearchInput,
+  type ShoppingSearchResult,
+} from "./services/shopping/schema.js";
 
 export interface McpyClientOptions {
   /** e.g. https://tools.example.com */
@@ -59,6 +69,14 @@ export class McpyClient implements McpyApi {
 
   papers(input: PaperSearchInput): Promise<PaperSearchResult> {
     return this.post(RestRoute.Papers, PaperSearchInputSchema, PaperSearchResultSchema, input);
+  }
+
+  shopping(input: ShoppingSearchInput): Promise<ShoppingSearchResult> {
+    return this.post(RestRoute.Shopping, ShoppingSearchInputSchema, ShoppingSearchResultSchema, input);
+  }
+
+  shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult> {
+    return this.post(RestRoute.ShoppingItem, ShoppingItemInputSchema, ShoppingItemResultSchema, input);
   }
 
   private async post<I extends z.ZodType, O extends z.ZodType>(route: RestRoute, inSchema: I, outSchema: O, input: unknown): Promise<z.infer<O>> {

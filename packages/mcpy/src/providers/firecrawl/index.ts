@@ -1,8 +1,8 @@
 import { contentKindOf } from "../../content/kind.js";
-import { ErrorCode, PageFormat, Recency, SearchType } from "../../enums.js";
+import { ErrorCode, PageFormat, Recency, SearchType, UserAgentProfile } from "../../enums.js";
 import { ProviderFailure } from "../../errors.js";
 import { HttpMethod, type HttpResponse } from "../../http/client.js";
-import { forwardedUserAgent, ProviderId, type PageProvider, type SearchCapabilities, type SearchProvider } from "../types.js";
+import { forwardedUserAgent, ProviderId, type PageProvider, type PageRequest, type ProviderCall, type SearchCapabilities, type SearchProvider } from "../types.js";
 import { ScrapeResponseSchema, SearchResponseSchema } from "./schemas.js";
 
 export interface FirecrawlOptions {
@@ -37,6 +37,20 @@ function targetHeaders(ua: string | undefined, extra: Record<string, string> | u
   return Object.keys(headers).length ? { headers } : {};
 }
 
+/**
+ * Firecrawl runs its own fingerprinted browser: a desktop browser agent sent
+ * on top of it no longer matches the fingerprint. Forwarding chrome made
+ * Cardmarket time out past 20 s; without it the same page came back in 13 s
+ * (2026-11-22). So desktop profiles are not forwarded, mobile is asked for
+ * with Firecrawl's own mobile emulation, and only a crawler identity
+ * (googlebot) is sent as a header.
+ */
+function agentOptions(req: PageRequest, call: ProviderCall): { mobile?: true; ua?: string } {
+  if (req.userAgent === UserAgentProfile.Mobile) return { mobile: true };
+  if (req.userAgent === UserAgentProfile.Googlebot) return { ua: forwardedUserAgent(req, call) };
+  return {};
+}
+
 function endpoint(options: FirecrawlOptions, path: string): string {
   return `${(options.apiUrl || DEFAULT_API).replace(/\/$/, "")}${path}`;
 }
@@ -68,7 +82,9 @@ export function firecrawl(options: FirecrawlOptions): PageProvider {
             onlyMainContent: !html,
             timeout: Math.min(Math.max(call.timeoutMs, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS),
             ...(req.waitMs ? { waitFor: req.waitMs } : {}),
-            ...targetHeaders(forwardedUserAgent(req, call), req.headers),
+            ...(agentOptions(req, call).mobile ? { mobile: true } : {}),
+            ...(req.country ? { location: { country: req.country.toUpperCase() } } : {}),
+            ...targetHeaders(agentOptions(req, call).ua, req.headers),
             // The engine's cache owns freshness; never serve Firecrawl's stale copy.
             maxAge: 0,
           },

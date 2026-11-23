@@ -41,7 +41,7 @@ export interface PageInput {
 
 const invalid = (message: string) => new McpyError(ErrorCode.InvalidInput, message);
 
-function isJson(text: string): boolean {
+export function isJson(text: string): boolean {
   try {
     JSON.parse(text);
     return true;

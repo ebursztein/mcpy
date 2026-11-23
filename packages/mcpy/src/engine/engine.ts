@@ -1,14 +1,16 @@
-import { z } from "zod";
-import { AttemptOutcome, CacheStatus, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
+import { AttemptOutcome, CacheStatus, ErrorCode, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
+import { McpyError } from "../errors.js";
 import type { HttpClient } from "../http/client.js";
 import { sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
 import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
+import type { ListingPage, ListingProvider, ListingRequest } from "../providers/listing-types.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
+import type { EngineLimits } from "./limits.js";
 import { isYoungEnough, type Cache } from "./cache.js";
 import { runChain, type ChainResult } from "./chain.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
@@ -22,23 +24,7 @@ import type { QuotaAlert } from "./quota.js";
 import { routeOrder, SiteRoutes } from "./routes.js";
 import { PagePins, type Pinned } from "./pins.js";
 
-export const EngineLimitsSchema = z.object({
-  /** Upper bound for a single provider attempt. */
-  attemptTimeoutMs: z.number().int().min(1_000).max(300_000).default(20_000),
-  /** Upper bound for a whole operation, fallbacks and retries included. */
-  deadlineMs: z.number().int().min(1_000).max(600_000).default(60_000),
-  /** Largest upstream body read. */
-  maxResponseBytes: z.number().int().min(10_000).max(50_000_000).default(5_000_000),
-  /** How long pages are kept. */
-  pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
-  searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
-  paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
-  /** How long a site's page provider is remembered before cheaper ones are tried first again. */
-  siteRouteTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
-  /** Thorough mode: after the first provider answers, how long to wait for the others. */
-  thoroughGraceMs: z.number().int().min(0).max(120_000).default(8_000),
-});
-export type EngineLimits = z.infer<typeof EngineLimitsSchema>;
+export { EngineLimitsSchema, type EngineLimits } from "./limits.js";
 
 const CACHE_VERSION = "v2";
 
@@ -46,6 +32,8 @@ export interface EngineDeps {
   pageProviders: PageProvider[];
   searchProviders: SearchProvider[];
   paperProviders: PaperProvider[];
+  /** Marketplace listing APIs: the last resort for sites whose pages no source could fetch. */
+  listingProviders?: ListingProvider[];
   cache: Cache;
   http: HttpClient;
   breaker: CircuitBreaker;
@@ -109,6 +97,7 @@ export class Engine {
       pages: this.deps.pageProviders.map((p) => p.id),
       search: this.deps.searchProviders.map((p) => p.id),
       papers: this.deps.paperProviders.map((p) => p.id),
+      listings: (this.deps.listingProviders ?? []).map((p) => p.id),
     };
   }
 
@@ -218,6 +207,27 @@ export class Engine {
       const result = await chain(providers, deadlineAt);
       return { ...result, value: mergePapers([result.value], req.limit, req.sort) };
     });
+  }
+
+  /** Whether some listing source can search this market. */
+  servesListings(market: ListingRequest["market"]): boolean {
+    return (this.deps.listingProviders ?? []).some((p) => p.markets.includes(market));
+  }
+
+  /** A marketplace's results from listing APIs, cached like the page they replace (continuations reread it). */
+  async listings(req: ListingRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<ListingPage>> {
+    const providers = (this.deps.listingProviders ?? []).filter((p) => p.markets.includes(req.market));
+    if (!providers.length) throw new McpyError(ErrorCode.NoProviders, "no listing source serves this marketplace");
+    const key = `${CACHE_VERSION}:listings:${await sha256Hex(JSON.stringify([req.market, req.query.toLowerCase(), req.sort, req.minPrice, req.maxPrice, req.page]))}`;
+    const ttl = (p: ListingPage) => (p.rows.length ? this.deps.limits.pageTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
+    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
+      runChain({
+        providers,
+        attempt: (p, signal, timeoutMs, parent) => p.searchListings(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
+        judge: (p) => emptyMovesOn(p.rows),
+        ...this.chainCommon(deadlineAt, scope),
+      }),
+    );
   }
 
   private chainCommon(deadlineAt: number, scope: CallScope) {

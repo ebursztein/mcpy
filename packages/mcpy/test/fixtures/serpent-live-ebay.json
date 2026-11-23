@@ -1,0 +1,143 @@
+{
+ "success": true,
+ "marketplace": "EBAY_US",
+ "results": [
+  {
+   "item_id": "840111465672",
+   "title": "OVER 36+ Rare Pokemon Cards! Holo EX GX Full Art Ultra Rare Vintage Modern Mix",
+   "url": "https://www.ebay.com/itm/840111465672",
+   "price": {
+    "value": 11.99,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "+$4.64 delivery in 2-4 days",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/oygAAeSwHQVqNXVA/s-l500.webp"
+   ],
+   "position": 3
+  },
+  {
+   "item_id": "236906660647",
+   "title": "2023 Near Mint Pokemon Raichu 009/032 Pokemon TCG Classic Charizard Japanese",
+   "url": "https://www.ebay.com/itm/236906660647",
+   "price": {
+    "value": 12.98,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "Free delivery",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/hW8AAeSwrmRqQyYC/s-l500.webp"
+   ],
+   "position": 4
+  },
+  {
+   "item_id": "920173049609",
+   "title": "Charizard VSTAR SWSH262 SWSH: Sword & Shield Promo Cards Holo",
+   "url": "https://www.ebay.com/itm/920173049609",
+   "price": {
+    "value": 60,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "+$6.67 delivery",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/lCAAAeSwj4prA3KE/s-l140.webp"
+   ],
+   "position": 5
+  },
+  {
+   "item_id": "860118886727",
+   "title": "Pokemon Charizard 19/113 Holo Rare Legendary Treasures Pokemon Near Mint",
+   "url": "https://www.ebay.com/itm/860118886727",
+   "price": {
+    "value": 73,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "+$6.25 delivery",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/UNwAAeSwWutq7c1R/s-l140.webp"
+   ],
+   "position": 6
+  },
+  {
+   "item_id": "366831286216",
+   "title": "Charizard 4/102 Holo Rare Base Set Unlimited 1999 WOTC Pokemon Card HP",
+   "url": "https://www.ebay.com/itm/366831286216",
+   "price": {
+    "value": 269,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "Free delivery",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/rXcAAeSwN-9rA5Ml/s-l140.webp"
+   ],
+   "position": 7
+  },
+  {
+   "item_id": "840086712891",
+   "title": "Charizard 1st edition Gold Metal Pokemon Card Collectible - Custom",
+   "url": "https://www.ebay.com/itm/840086712891",
+   "price": {
+    "value": 9.15,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "Free delivery in 2-4 days",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/95UAAeSwaFJq6TjR/s-l140.webp"
+   ],
+   "position": 8
+  },
+  {
+   "item_id": "145273576132",
+   "title": "1999 Pokemon Base Set: Choose Your Card! All Cards Available - 100% Authentic",
+   "url": "https://www.ebay.com/itm/145273576132",
+   "price": {
+    "value": 1.75,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "Free delivery",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/VvAAAOSwaZNkfk2q/s-l140.webp"
+   ],
+   "position": 9
+  },
+  {
+   "item_id": "820359826565",
+   "title": "Pokemon Company Charizard EX XY121 Black Star Promo Holo Full Art EN 2016",
+   "url": "https://www.ebay.com/itm/820359826565",
+   "price": {
+    "value": 71,
+    "currency": "USD"
+   },
+   "condition": "Pre-Owned",
+   "shipping": "+$6.67 delivery",
+   "seller": null,
+   "images": [
+    "https://i.ebayimg.com/images/g/lxEAAeSwUUNq-oEU/s-l140.webp"
+   ],
+   "position": 10
+  }
+ ],
+ "total_results": null,
+ "total_results_lower_bound": 240000,
+ "next_page_url": "https://www.ebay.com/sch/i.html?_nkw=charizard&_pgn=2",
+ "query": "charizard",
+ "meta": {
+  "elapsed": "29971ms",
+  "timestamp": "2026-11-23T03:42:17.223Z",
+  "async_endpoint": null
+ }
+}

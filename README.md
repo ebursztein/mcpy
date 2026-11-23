@@ -129,8 +129,9 @@ Pushover itself.
 | --- | --- | --- |
 | `MCPY_CLIENTS` (secret) | - | API clients |
 | `PAGE_PROVIDERS` | `direct,cloudflare_browser,firecrawl,brightdata` | Page fallback order |
-| `SEARCH_PROVIDERS` | `firecrawl,brightdata` | Search fallback order |
+| `SEARCH_PROVIDERS` | `serpent,firecrawl,brightdata` | Search fallback order (cheapest first) |
 | `PAPER_PROVIDERS` | `openalex,arxiv,pubmed,semantic_scholar` | Paper index order |
+| `LISTING_PROVIDERS` | `serpent` | Marketplace listing APIs, used only when no page source could fetch a shopping site's search page (today: the eBay sites) |
 | `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `60000` | Per attempt / per call |
 | `RETRIES` | `2` | Retries per upstream request |
 | `DAILY_BUDGET_USD` | - (`5` in `wrangler.jsonc`) | Estimated USD each client may spend on paid sources per UTC day |
@@ -152,6 +153,7 @@ Pushover itself.
 | `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` | - | Firecrawl (URL for self-hosted) |
 | `FIRECRAWL_USD_PER_CREDIT` | `0.0038` (Hobby) | What a Firecrawl credit costs on your plan; cost estimates and caps use it (a scrape is 1 credit, a search 2 per 10 results) |
 | `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
+| `SERPENT_API_KEY` | - | Serpent (apiserpent.com): web, news and image search ($0.60 per 1,000 calls on the default tier) and the eBay listing fallback ($0.40 per 1,000). Prepaid credit; a 402 means it ran out and search falls back to the next source |
 | `OPENALEX_API_KEY` | - | Free at openalex.org/settings/api. Needed on Cloudflare: without it OpenAlex shares one small daily budget per IP, and Workers share IPs, so it answers 429 |
 | `SEMANTIC_SCHOLAR_API_KEY` | - | Enables Semantic Scholar (anonymous calls are rate-limited) |
 | `NCBI_API_KEY`, `NCBI_EMAIL` | - | Optional for PubMed: a free key raises the limit from 3 to 10 requests/s |

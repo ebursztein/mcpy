@@ -105,8 +105,10 @@ export const EnvSchema = z.object({
 
   // Routing between providers
   PAGE_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]),
-  SEARCH_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Firecrawl, ProviderId.BrightData]),
+  SEARCH_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent, ProviderId.Firecrawl, ProviderId.BrightData]),
   PAPER_PROVIDERS: csv(ProviderIdSchema, [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed, ProviderId.SemanticScholar]),
+  /** Marketplace listing APIs, the last resort for shopping sites no page source could fetch. */
+  LISTING_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
@@ -152,6 +154,8 @@ export const EnvSchema = z.object({
   BRIGHTDATA_API_KEY: secret,
   BRIGHTDATA_UNLOCKER_ZONE: secret,
   BRIGHTDATA_SERP_ZONE: secret,
+  /** Serpent API (apiserpent.com): web, news and image search at $0.60 per 1,000 calls. */
+  SERPENT_API_KEY: secret,
   /** Optional: OpenAlex works without it, on a small budget shared per IP. */
   OPENALEX_API_KEY: secret,
   /** Semantic Scholar is enabled only with a key (anonymous calls are rate-limited). */

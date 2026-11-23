@@ -109,11 +109,20 @@ async function fetchSerpOnce(options: BrightDataOptions, url: string, call: Prov
   return serp.data;
 }
 
+/** Google result pages one search needs: about 10 results each, at most MAX_REQUESTS_PER_SEARCH. */
+const serpRequests = (limit: number) => Math.min(MAX_REQUESTS_PER_SEARCH, Math.ceil(limit / GOOGLE_PAGE_SIZE));
+
+/** Bright Data SERP pay-as-you-go: $1.50 per 1,000 successful requests (one Google page each). */
+const USD_PER_SERP_REQUEST = 0.0015;
+
 /** Bright Data SERP API (Google), parsed to JSON, every search type. */
 export function brightDataSearch(options: BrightDataOptions): SearchProvider {
+  const perRequest = options.costPerCall ?? USD_PER_SERP_REQUEST;
   return {
     id: ProviderId.BrightData,
-    costPerCall: options.costPerCall ?? 0.0015,
+    costPerCall: perRequest,
+    // Billed per Google page fetched: a 25-result search is 3 requests.
+    costOf: (req) => serpRequests(req.limit) * perRequest,
     capabilities: BRIGHTDATA_SEARCH_CAPABILITIES,
     // Measured live: 4-26 s per SERP request.
     attemptTimeoutMs: 50_000,
@@ -126,7 +135,7 @@ export function brightDataSearch(options: BrightDataOptions): SearchProvider {
       // Google serves about 10 results per page and SERP calls take seconds,
       // so the pages needed are fetched in parallel, then merged in order.
       const skip = (req.page - 1) * req.limit;
-      const requests = Math.min(MAX_REQUESTS_PER_SEARCH, Math.ceil(req.limit / GOOGLE_PAGE_SIZE));
+      const requests = serpRequests(req.limit);
       const pages = await Promise.all(
         Array.from({ length: requests }, (_, i) => fetchSerp(options, googleUrl(located, skip + i * GOOGLE_PAGE_SIZE), call)),
       );
