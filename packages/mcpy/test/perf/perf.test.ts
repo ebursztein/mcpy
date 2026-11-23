@@ -62,7 +62,7 @@ describe("latency budgets", () => {
 });
 
 describe("response-size budgets (context protection)", () => {
-  it.each([500, 2_000, 10_000, 100_000])("fetch result for max_chars=%i stays within max_chars + 2 KB", async (max) => {
+  it.each([500, 2_000, 10_000, 50_000])("fetch result for max_chars=%i stays within max_chars + 2 KB", async (max) => {
     const { mcpy } = testMcpy({ pages: [fakePages("p", BIG_PAGE)] });
     const result = await mcpy.fetch({ url: "https://example.com/a", max_chars: max });
     expect(result.content.length).toBeLessThanOrEqual(max);

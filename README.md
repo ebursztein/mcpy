@@ -35,10 +35,10 @@ which tool to use when, errors, and safety rules.
 
 | Tool | Parameters (all but the first are optional; papers needs a query, an author, or both) |
 | --- | --- |
-| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `max_chars`, `user_agent`, `fresh` |
-| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `fresh` |
-| search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `fresh` |
-| papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `fresh` |
+| fetch | `url`, `format` (`markdown`\|`html`), `offset`, `version`, `max_chars` (up to 50,000), `script`, `user_agent`, `render`, `wait_ms`, `method`, `body`, `headers`, `max_age` |
+| grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `render`, `wait_ms`, `method`, `body`, `headers`, `max_age` |
+| search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `max_age` |
+| papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `max_age` |
 
 - `user_agent`: `default` (honest mcpy agent), `chrome`, `safari`, `firefox`, `mobile`, `googlebot`.
 - `type`: `web`, `news`, `images`, `videos`, `shopping`, `jobs`, `places`.
@@ -46,7 +46,9 @@ which tool to use when, errors, and safety rules.
 - `country` / `language`: two-letter codes (`us`, `fr`, `en`). Hints: a source that cannot honor them still answers.
 - `sites` / `exclude_sites`: hostnames (comma-separated in GET query strings).
 - `mode`: `fast` (first source that answers) or `thorough` (every source that supports the request, merged; results carry `sources`, the number of sources that returned them).
-- Long pages: pass the returned `next_offset` as `offset` to read on.
+- `render: true`: run the page's JavaScript in a real browser first, for pages that fill in their content with scripts; `wait_ms` (up to 15,000) gives it extra time. Only sources that render are tried; `no_providers` when the server has none.
+- `method: "POST"` with a `body` (up to 100,000 characters) for APIs that take one; a JSON body without a `Content-Type` header is sent as `application/json`. Only a direct request sends a POST (no paid fallback), and it is never sent twice unless the target answers 408, 425 or 429. `headers`: up to 20 extra request headers (`Host`, `Content-Length` and connection headers are refused). Method, body, headers and `render` are all part of the cache key. These fields need POST /v1/fetch with a JSON body.
+- Long pages: pass the returned `next_offset` as `offset`, with the returned `version`, to read on (every part then comes from the same copy of the page), or pass a `script` (`export default (page) => value`) that runs on the whole page and returns only what it extracts, as JSON. Pages too long for one call come with a `tip` saying so.
 
 Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
 (today's estimated spend and cap per client), admin clients only.
@@ -100,20 +102,45 @@ gets `budget_exceeded` (429) with `Retry-After` until midnight UTC. Totals
 live in the `BUDGET` Durable Object, one per client; requests already in
 flight when the cap is crossed still finish.
 
+### Alerts
+
+With `PUSHOVER_TOKEN` and `PUSHOVER_USER` set (secrets), the server sends the
+owner a Pushover alert when:
+
+- a paid source answers 402 (out of credits, high priority) or 429 after
+  retries (rate limit or quota, normal priority). Each provider and kind
+  alerts at most once per `ALERT_COOLDOWN_SECONDS` (6 hours by default); the
+  window is kept in the `CACHE` KV namespace. Calls keep falling back to the
+  next source meanwhile.
+- a client is running low: its spend today passes `CAP_WARNING_PERCENT` of
+  its daily cap (80% by default), so you can raise the cap before it stops.
+- a client reaches its daily cap.
+
+Each cap alert is sent once per client per UTC day, by the request whose
+spend crossed the line; a single request that jumps both lines sends only the
+cap alert.
+
+A failing push is logged (`pushover alert failed`), never retried through
+Pushover itself.
+
 ### Configuration
 
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `MCPY_CLIENTS` (secret) | - | API clients |
 | `PAGE_PROVIDERS` | `direct,cloudflare_browser,firecrawl,brightdata` | Page fallback order |
-| `SEARCH_PROVIDERS` | `firecrawl,brightdata` | Search fallback order |
+| `SEARCH_PROVIDERS` | `serpent,firecrawl,brightdata` | Search fallback order (cheapest first) |
 | `PAPER_PROVIDERS` | `openalex,arxiv,pubmed,semantic_scholar` | Paper index order |
+| `LISTING_PROVIDERS` | `serpent` | Marketplace listing APIs, used only when no page source could fetch a shopping site's search page (today: the eBay sites) |
 | `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `60000` | Per attempt / per call |
 | `RETRIES` | `2` | Retries per upstream request |
 | `DAILY_BUDGET_USD` | - (`5` in `wrangler.jsonc`) | Estimated USD each client may spend on paid sources per UTC day |
 | `CLIENT_DAILY_BUDGETS_USD` | - | Per-client caps: `name:usd` or `name:unlimited`, comma-separated |
+| `PUSHOVER_TOKEN`, `PUSHOVER_USER` (secrets) | - | Pushover app token and user key; enables owner alerts |
+| `CAP_WARNING_PERCENT` | `80` | Share of a client's daily cap that triggers the "running low" alert; `100` sends only the cap alert |
+| `ALERT_COOLDOWN_SECONDS` | `21600` | Quiet time before the same provider quota alert repeats |
 | `MAX_RESPONSE_BYTES` | `5000000` | Largest upstream body |
-| `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` | `3600` / `900` | Cache TTLs |
+| `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` / `PAPER_CACHE_TTL_SECONDS` | `3600` / `900` / `86400` | How long answers are kept. Each call reads only as old as its `max_age` allows, so keeping them longer only lets callers opt in to older copies |
 | `DEFAULT_USER_AGENT` | `default` | `default`, `chrome`, `safari`, `firefox`, `mobile`, `googlebot` |
 | `USER_AGENT_STRING` | - | Replace the `default` user-agent string |
 | `ALLOWED_HOSTNAMES` | - | Accepted Host headers (set on custom domains) |
@@ -121,9 +148,12 @@ flight when the cap is crossed still finish.
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` | - | Export traces + logs (OTLP/HTTP JSON) |
 | `OTEL_SERVICE_NAME` / `DEPLOYMENT_ENV` | `mcpy` / `production` | Resource attributes |
-| `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run |
+| `BROWSER` (binding) | bound in wrangler.jsonc | Cloudflare Browser Rendering with no API token; takes precedence over the REST settings below |
+| `CF_ACCOUNT_ID`, `CF_BROWSER_API_TOKEN` | - | Cloudflare Browser Run over REST, for hosts without the binding |
 | `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL` | - | Firecrawl (URL for self-hosted) |
+| `FIRECRAWL_USD_PER_CREDIT` | `0.0038` (Hobby) | What a Firecrawl credit costs on your plan; cost estimates and caps use it (a scrape is 1 credit, a search 2 per 10 results) |
 | `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
+| `SERPENT_API_KEY` | - | Serpent (apiserpent.com): web, news and image search ($0.60 per 1,000 calls on the default tier) and the eBay listing fallback ($0.40 per 1,000). Prepaid credit; a 402 means it ran out and search falls back to the next source |
 | `OPENALEX_API_KEY` | - | Free at openalex.org/settings/api. Needed on Cloudflare: without it OpenAlex shares one small daily budget per IP, and Workers share IPs, so it answers 429 |
 | `SEMANTIC_SCHOLAR_API_KEY` | - | Enables Semantic Scholar (anonymous calls are rate-limited) |
 | `NCBI_API_KEY`, `NCBI_EMAIL` | - | Optional for PubMed: a free key raises the limit from 3 to 10 requests/s |

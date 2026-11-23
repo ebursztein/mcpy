@@ -51,8 +51,8 @@ export async function papersOp(
       collection: input.collection,
     },
     input.mode,
-    input.fresh,
     scope,
+    input.max_age,
   );
   const result = PaperSearchResultSchema.parse({
     query: input.query,

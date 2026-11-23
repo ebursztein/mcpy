@@ -1,41 +1,30 @@
-import { z } from "zod";
 import { AttemptOutcome, CacheStatus, ErrorCode, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
 import { McpyError } from "../errors.js";
 import type { HttpClient } from "../http/client.js";
-import { normalizeUrl, sha256Hex } from "../http/url.js";
+import { sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
 import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
+import type { ListingPage, ListingProvider, ListingRequest } from "../providers/listing-types.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
-import type { Cache } from "./cache.js";
-import { runChain, type AttemptRecord, type ChainResult } from "./chain.js";
+import type { EngineLimits } from "./limits.js";
+import { isYoungEnough, type Cache } from "./cache.js";
+import { runChain, type ChainResult } from "./chain.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
 import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
-import { settleWithGrace } from "./fanout.js";
+import { fanOut } from "./fanout.js";
+import { capablePageProviders, noCapableProvider, pageCacheKey, routeSite } from "./page-request.js";
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
-import { routeOrder, siteOf, SiteRoutes } from "./routes.js";
+import type { QuotaAlert } from "./quota.js";
+import { routeOrder, SiteRoutes } from "./routes.js";
+import { PagePins, type Pinned } from "./pins.js";
 
-export const EngineLimitsSchema = z.object({
-  /** Upper bound for a single provider attempt. */
-  attemptTimeoutMs: z.number().int().min(1_000).max(300_000).default(20_000),
-  /** Upper bound for a whole operation, fallbacks and retries included. */
-  deadlineMs: z.number().int().min(1_000).max(600_000).default(60_000),
-  /** Largest upstream body read. */
-  maxResponseBytes: z.number().int().min(10_000).max(50_000_000).default(5_000_000),
-  pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
-  searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
-  paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
-  /** How long a site's page provider is remembered before cheaper ones are tried first again. */
-  siteRouteTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
-  /** Thorough mode: after the first provider answers, how long to wait for the others. */
-  thoroughGraceMs: z.number().int().min(0).max(120_000).default(8_000),
-});
-export type EngineLimits = z.infer<typeof EngineLimitsSchema>;
+export { EngineLimitsSchema, type EngineLimits } from "./limits.js";
 
 const CACHE_VERSION = "v2";
 
@@ -43,6 +32,8 @@ export interface EngineDeps {
   pageProviders: PageProvider[];
   searchProviders: SearchProvider[];
   paperProviders: PaperProvider[];
+  /** Marketplace listing APIs: the last resort for sites whose pages no source could fetch. */
+  listingProviders?: ListingProvider[];
   cache: Cache;
   http: HttpClient;
   breaker: CircuitBreaker;
@@ -58,6 +49,7 @@ export interface CallScope {
   defer?: (work: Promise<unknown>) => void;
   /** Totals what the operation spends and enforces the caller's spending limit. */
   meter?: SpendMeter;
+  onQuota?: (alert: QuotaAlert) => void; // a paid source refused a call for account reasons
 }
 
 /**
@@ -68,6 +60,9 @@ export interface CallScope {
 function emptyMovesOn(hits: unknown[]): { outcome: AttemptOutcome; reason?: string; salvageable?: boolean } {
   return hits.length ? { outcome: AttemptOutcome.Ok } : { outcome: AttemptOutcome.Escalate, reason: "no results", salvageable: true };
 }
+
+/** What one attempt at this search costs on a provider. */
+const searchCost = (req: SearchRequest) => (p: SearchProvider) => p.costOf?.(req) ?? p.costPerCall;
 
 /** Empty search results may be a transient upstream hiccup: keep them briefly. */
 export const EMPTY_SEARCH_TTL_SECONDS = 60;
@@ -83,14 +78,18 @@ export interface Served<T> {
 interface Cached<T> {
   value: T;
   provider: string;
+  /** Epoch ms of the write; absent on entries written before it was recorded. */
+  storedAt?: number;
 }
 
 /** Cache, fallback chain and provider plumbing behind every operation. */
 export class Engine {
   private readonly routes: SiteRoutes;
+  private readonly pins: PagePins;
 
   constructor(private readonly deps: EngineDeps) {
     this.routes = new SiteRoutes(deps.cache, deps.limits.siteRouteTtlSeconds);
+    this.pins = new PagePins(deps.cache, deps.limits.pageTtlSeconds);
   }
 
   get providerIds() {
@@ -98,17 +97,36 @@ export class Engine {
       pages: this.deps.pageProviders.map((p) => p.id),
       search: this.deps.searchProviders.map((p) => p.id),
       papers: this.deps.paperProviders.map((p) => p.id),
+      listings: (this.deps.listingProviders ?? []).map((p) => p.id),
     };
   }
 
-  async page(req: PageRequest, fresh: boolean, scope: CallScope): Promise<Served<FetchedPage>> {
-    const key = `${CACHE_VERSION}:page:${req.format}:${req.userAgent}:${await sha256Hex(normalizeUrl(req.url))}`;
-    const site = siteOf(req.url, req.format);
+  private pageKey(req: PageRequest): Promise<string> {
+    return pageCacheKey(CACHE_VERSION, req);
+  }
+
+  /** Keep this copy of a page so its later parts come from it; returns its version. */
+  async pinPage(req: PageRequest, served: Served<FetchedPage>): Promise<string> {
+    return this.pins.pin(await this.pageKey(req), served.value, served.provider);
+  }
+
+  /** The pinned copy of a page with this version, if it is still kept. */
+  async pinnedPage(req: PageRequest, version: string): Promise<Pinned | undefined> {
+    return this.pins.recall(await this.pageKey(req), version);
+  }
+
+  /** `maxAgeSeconds` (every cached operation): oldest cached answer to serve; 0 skips the cache. */
+  async page(req: PageRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<FetchedPage>> {
+    const capable = capablePageProviders(this.deps.pageProviders, req);
+    if (capable.length === 0) throw noCapableProvider(req);
+    const key = await this.pageKey(req);
+    const site = routeSite(req);
     // A salvaged thin page may be a JS shell nobody could render: never cache it.
-    return this.cached(key, (_page, salvaged) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds), fresh, scope, async (deadlineAt) => {
+    const ttl = (_page: FetchedPage, salvaged: boolean) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds);
+    return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       const preferred = site ? await this.routes.recall(site) : undefined;
-      const providers = routeOrder(this.deps.pageProviders, preferred);
-      if (providers[0] !== this.deps.pageProviders[0]) {
+      const providers = routeOrder(capable, preferred);
+      if (providers[0] !== capable[0]) {
         scope.telemetry.log(LogLevel.Debug, "site route", { [Attr.Provider]: providers[0].id }, scope.parent);
       }
       const result = await runChain({
@@ -118,14 +136,14 @@ export class Engine {
         describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
         ...this.chainCommon(deadlineAt, scope),
       });
-      if (site && !result.salvaged) await this.learnRoute(site, preferred, result.provider, scope);
+      if (site && !result.salvaged) await this.learnRoute(site, preferred, result.provider, capable[0].id, scope);
       return result;
     });
   }
 
-  /** Remember which provider served a site, when that changes what the next call tries first. */
-  private async learnRoute(site: string, preferred: string | undefined, served: string, scope: CallScope): Promise<void> {
-    const isDefault = served === this.deps.pageProviders[0]?.id;
+  /** Remember which provider served a site, when that changes what the next call tries first (`first`: the chain's own first). */
+  private async learnRoute(site: string, preferred: string | undefined, served: string, first: string, scope: CallScope): Promise<void> {
+    const isDefault = served === first;
     if (served === preferred || (preferred === undefined && isDefault)) return;
     const write = this.routes.remember(site, served).catch(() => undefined);
     if (scope.defer) scope.defer(write);
@@ -137,12 +155,12 @@ export class Engine {
    * every capable provider in parallel under the same deadline, results
    * merged by rank fusion. Every search parameter is part of the cache key.
    */
-  async search(req: SearchRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPage[]>> {
+  async search(req: SearchRequest, mode: SearchMode, scope: CallScope, maxAgeSeconds: number): Promise<Served<MergedPage[]>> {
     const providers = capableProviders(this.deps.searchProviders, req);
     const identity = [mode, req.query.toLowerCase(), req.type, req.limit, req.page, req.country, req.language, req.recency, req.device, req.sites, req.excludeSites];
     const key = `${CACHE_VERSION}:search:${await sha256Hex(JSON.stringify(identity))}`;
     const ttl = (hits: MergedPage[]) => (hits.length ? this.deps.limits.searchTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
-    return this.cached(key, ttl, fresh, scope, (deadlineAt) =>
+    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       mode === SearchMode.Thorough ? this.searchAll(providers, req, deadlineAt, scope) : this.searchFirst(providers, req, deadlineAt, scope),
     );
   }
@@ -153,6 +171,7 @@ export class Engine {
       attempt: (p, signal, timeoutMs, parent) => p.search(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
       judge: emptyMovesOn,
       describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
+      cost: searchCost(req),
       ...this.chainCommon(deadlineAt, scope),
     });
   }
@@ -163,11 +182,12 @@ export class Engine {
   }
 
   private async searchAll(providers: SearchProvider[], req: SearchRequest, deadlineAt: number, scope: CallScope): Promise<ChainResult<MergedPage[]>> {
-    return this.fanOut(providers, (p) => this.searchChain([p], req, deadlineAt, scope), (lists) => mergeRanked(lists, req.limit));
+    const merge = (lists: FoundPage[][]) => mergeRanked(lists, req.limit);
+    return fanOut(providers, (p) => this.searchChain([p], req, deadlineAt, scope), merge, this.deps.limits.thoroughGraceMs, searchCost(req));
   }
 
   /** Paper search: same modes as web search, merged by DOI, arXiv id or title. */
-  async papers(req: PaperRequest, mode: SearchMode, fresh: boolean, scope: CallScope): Promise<Served<MergedPaper[]>> {
+  async papers(req: PaperRequest, mode: SearchMode, scope: CallScope, maxAgeSeconds: number): Promise<Served<MergedPaper[]>> {
     const providers = capablePaperProviders(this.deps.paperProviders, req);
     const identity = [mode, req.query?.toLowerCase(), req.author?.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort, req.collection];
     const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
@@ -180,40 +200,34 @@ export class Engine {
         describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
         ...this.chainCommon(deadlineAt, scope),
       });
-    return this.cached(key, ttl, fresh, scope, async (deadlineAt) => {
+    return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       if (mode === SearchMode.Thorough) {
-        return this.fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort));
+        return fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort), this.deps.limits.thoroughGraceMs);
       }
       const result = await chain(providers, deadlineAt);
       return { ...result, value: mergePapers([result.value], req.limit, req.sort) };
     });
   }
 
-  /**
-   * Thorough mode: one chain per provider, in parallel, under the same
-   * deadline. Once one answers, the rest get `thoroughGraceMs`; succeeds if
-   * any provider answered, merging what came back.
-   */
-  private async fanOut<P extends { id: string; costPerCall: number }, T, V>(
-    providers: P[],
-    run: (provider: P) => Promise<ChainResult<T>>,
-    merge: (values: T[]) => V,
-  ): Promise<ChainResult<V>> {
-    const settled = await settleWithGrace(providers.map(run), this.deps.limits.thoroughGraceMs);
-    const ok = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
-    if (ok.length === 0) {
-      const reasons = settled.flatMap((s) => (s.status === "rejected" ? [s.reason] : []));
-      // A spending limit is the one failure the caller can act on: report it first.
-      const overBudget = reasons.find((r) => r instanceof McpyError && r.code === ErrorCode.BudgetExceeded);
-      throw overBudget ?? reasons[0] ?? new McpyError(ErrorCode.Timeout, "no source answered in time");
-    }
-    const attempts: AttemptRecord[] = settled.flatMap((s, i) =>
-      s.status === "fulfilled"
-        ? s.value.attempts
-        : [{ provider: providers[i].id, outcome: AttemptOutcome.Error, reason: s.status, publicReason: s.status, latencyMs: 0 }],
+  /** Whether some listing source can search this market. */
+  servesListings(market: ListingRequest["market"]): boolean {
+    return (this.deps.listingProviders ?? []).some((p) => p.markets.includes(market));
+  }
+
+  /** A marketplace's results from listing APIs, cached like the page they replace (continuations reread it). */
+  async listings(req: ListingRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<ListingPage>> {
+    const providers = (this.deps.listingProviders ?? []).filter((p) => p.markets.includes(req.market));
+    if (!providers.length) throw new McpyError(ErrorCode.NoProviders, "no listing source serves this marketplace");
+    const key = `${CACHE_VERSION}:listings:${await sha256Hex(JSON.stringify([req.market, req.query.toLowerCase(), req.sort, req.minPrice, req.maxPrice, req.page]))}`;
+    const ttl = (p: ListingPage) => (p.rows.length ? this.deps.limits.pageTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
+    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
+      runChain({
+        providers,
+        attempt: (p, signal, timeoutMs, parent) => p.searchListings(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
+        judge: (p) => emptyMovesOn(p.rows),
+        ...this.chainCommon(deadlineAt, scope),
+      }),
     );
-    const costUsd = settled.reduce((sum, s, i) => sum + (s.status === "fulfilled" ? s.value.costUsd : providers[i].costPerCall), 0);
-    return { value: merge(ok.map((r) => r.value)), provider: ok.map((r) => r.provider).join("+"), attempts, costUsd, salvaged: false };
   }
 
   private chainCommon(deadlineAt: number, scope: CallScope) {
@@ -224,6 +238,7 @@ export class Engine {
       telemetry: scope.telemetry,
       parent: scope.parent,
       meter: scope.meter,
+      onQuota: scope.onQuota,
     };
   }
 
@@ -246,25 +261,27 @@ export class Engine {
     key: string,
     /** Seconds to cache the result, or undefined to not cache it. */
     ttl: (value: T, salvaged: boolean) => number | undefined,
-    fresh: boolean,
+    /** Oldest entry to serve; older ones are fetched again, and 0 skips the read. */
+    maxAgeSeconds: number,
     scope: CallScope,
     run: (deadlineAt: number) => Promise<ChainResult<T>>,
   ): Promise<Served<T>> {
-    if (!fresh) {
+    const skip = maxAgeSeconds === 0;
+    if (!skip) {
       const hit = await this.deps.cache.get<Cached<T>>(key);
-      if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider };
+      if (hit && isYoungEnough(hit, maxAgeSeconds)) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider };
     }
     const result = await run(Date.now() + this.deps.limits.deadlineMs);
     const seconds = ttl(result.value, result.salvaged);
     if (seconds !== undefined) {
-      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider }, seconds).catch(() => undefined);
+      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider, storedAt: Date.now() }, seconds).catch(() => undefined);
       if (scope.defer) scope.defer(write);
       else await write;
     }
     scope.telemetry.log(LogLevel.Debug, seconds === undefined ? "result not cached" : "cached result", { [Attr.Provider]: result.provider }, scope.parent);
     return {
       value: result.value,
-      cache: fresh ? CacheStatus.Bypass : CacheStatus.Miss,
+      cache: skip ? CacheStatus.Bypass : CacheStatus.Miss,
       attempts: result.attempts.length,
       provider: result.provider,
     };

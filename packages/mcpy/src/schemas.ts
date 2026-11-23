@@ -5,10 +5,13 @@
 
 import { z } from "zod";
 import type { PaperSearchInput, PaperSearchResult } from "./schemas-papers.js";
+import type { ShoppingItemInput, ShoppingItemResult, ShoppingSearchInput, ShoppingSearchResult } from "./services/shopping/schema.js";
 import {
   CacheStatusSchema,
   DeviceSchema,
   ErrorCodeSchema,
+  HttpMethod,
+  HttpMethodSchema,
   PageFormat,
   PageFormatSchema,
   RecencySchema,
@@ -20,15 +23,60 @@ import {
 } from "./enums.js";
 
 /** Hard ceiling on characters returned by one call, whatever the caller asks. */
-export const MAX_OUTPUT_CHARS = 100_000;
+export const MAX_OUTPUT_CHARS = 50_000;
 export const MAX_SEARCH_RESULTS = 50;
 export const MAX_SEARCH_PAGE = 10;
 const MAX_SITES = 10;
+/** Largest request body a caller may send with a POST, in characters. */
+export const MAX_REQUEST_BODY_CHARS = 100_000;
+/** Most extra request headers per call. */
+export const MAX_REQUEST_HEADERS = 20;
+/** Longest wait a caller may ask for on a rendered page, in ms. */
+export const MAX_RENDER_WAIT_MS = 15_000;
 
 const url = z.string().url().max(4096).describe("Absolute http(s) URL");
-const fresh = z.boolean().default(false).describe("Ignore the cache and fetch again");
+
+/** Default `max_age` of each cached operation, in seconds. */
+export const DEFAULT_MAX_AGE_SECONDS = { page: 3_600, search: 900, papers: 86_400 } as const;
+
+/**
+ * How old a cached answer a call accepts, in seconds; 0 skips the cache.
+ * Every cached operation takes this one field, with its own default.
+ */
+export function maxAgeField(defaultSeconds: number) {
+  return z
+    .number()
+    .int()
+    .min(0)
+    .max(30 * 86_400)
+    .default(defaultSeconds)
+    .describe(`Oldest cached answer to accept, in seconds (default ${defaultSeconds}): 86400 for data that changes daily, 60 for live data, 0 to skip the cache`);
+}
+const pageMaxAge = maxAgeField(DEFAULT_MAX_AGE_SECONDS.page);
 const userAgent = UserAgentProfileSchema.optional().describe("Browser to present as (default: an honest mcpy user agent)");
 const format = PageFormatSchema.default(PageFormat.Markdown).describe("markdown (readable text) or html (raw page)");
+
+/** An HTTP header name (RFC 9110 token). Which names are refused is checked by the operation. */
+const headerName = z.string().regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$/, "an HTTP header name");
+
+/** How the page is requested: shared by fetch and grep. */
+const pageRequestFields = {
+  render: z
+    .boolean()
+    .default(false)
+    .describe("Run the page's JavaScript in a real browser first, for pages that load their content with scripts (slower; GET only)"),
+  wait_ms: z.number().int().min(0).max(MAX_RENDER_WAIT_MS).optional().describe("With render: extra time to let the page finish loading, in ms"),
+  method: HttpMethodSchema.default(HttpMethod.Get).describe("GET, or POST to send a body (for APIs that take a JSON or form body)"),
+  body: z
+    .string()
+    .max(MAX_REQUEST_BODY_CHARS)
+    .optional()
+    .describe("With method POST: the request body, e.g. a JSON string. A JSON body without a content-type header is sent as application/json"),
+  headers: z
+    .record(headerName, z.string().max(2_000))
+    .optional()
+    .describe("Extra request headers, e.g. {\"Origin\": \"https://example.com\"}. Host, Content-Length and connection-level headers are refused"),
+};
 
 // Input schemas must stay representable as JSON Schema (MCP publishes them),
 // so no transforms here: values are validated case-insensitively and
@@ -39,9 +87,23 @@ export const FetchInputSchema = z.object({
   url,
   format,
   offset: z.number().int().min(0).default(0).describe("Character to start from; use next_offset from the previous call"),
+  version: z
+    .string()
+    .regex(/^[0-9a-f]{16}$/)
+    .optional()
+    .describe("With offset: the version from the first part, so every part comes from the same copy of the page"),
   max_chars: z.number().int().min(100).max(MAX_OUTPUT_CHARS).default(10_000).describe("Most characters to return"),
+  script: z
+    .string()
+    .min(1)
+    .max(100_000)
+    .optional()
+    .describe(
+      "JavaScript module run on the whole page: `export default (page) => value`, page is { url, final_url, status, title, content }. Returns the value as JSON instead of the page; use format html to work on the raw page",
+    ),
   user_agent: userAgent,
-  fresh,
+  ...pageRequestFields,
+  max_age: pageMaxAge,
 });
 
 export const GrepInputSchema = z.object({
@@ -52,7 +114,8 @@ export const GrepInputSchema = z.object({
   max_matches: z.number().int().min(1).max(200).default(20),
   format,
   user_agent: userAgent,
-  fresh,
+  ...pageRequestFields,
+  max_age: pageMaxAge,
 });
 
 export const SearchInputSchema = z
@@ -76,7 +139,7 @@ export const SearchInputSchema = z
     sites: z.array(hostname).min(1).max(MAX_SITES).optional().describe("Only results from these sites"),
     exclude_sites: z.array(hostname).min(1).max(MAX_SITES).optional().describe("No results from these sites"),
     mode: SearchModeSchema.default(SearchMode.Fast).describe("fast: first source that answers; thorough: combine all sources (slower, costs more)"),
-    fresh,
+    max_age: maxAgeField(DEFAULT_MAX_AGE_SECONDS.search),
   })
   .refine((s) => !(s.sites && s.exclude_sites), { message: "use either sites or exclude_sites, not both", path: ["exclude_sites"] });
 
@@ -95,7 +158,9 @@ export const FetchResultSchema = z.object({
   content: z.string(),
   offset: z.number().int(),
   total_chars: z.number().int(),
-  next_offset: z.number().int().optional().describe("Pass as offset to read the next part; absent at the end"),
+  next_offset: z.number().int().optional().describe("Pass as offset, with version, to read the next part; absent at the end"),
+  version: z.string().optional().describe("Which copy of the page this is; set when it has more than one part"),
+  tip: z.string().optional().describe("Set when the page is too long for one call"),
   meta: ResultMetaSchema,
 });
 
@@ -162,4 +227,6 @@ export interface McpyApi {
   grep(input: GrepInput): Promise<GrepResult>;
   search(input: SearchInput): Promise<SearchResult>;
   papers(input: PaperSearchInput): Promise<PaperSearchResult>;
+  shopping(input: ShoppingSearchInput): Promise<ShoppingSearchResult>;
+  shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult>;
 }

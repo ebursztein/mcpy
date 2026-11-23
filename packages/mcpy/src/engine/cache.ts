@@ -11,6 +11,11 @@ export interface KvLike {
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
+/** Whether an entry stored at `storedAt` (epoch ms; unknown on old entries) is within `maxAgeSeconds`. */
+export function isYoungEnough(entry: { storedAt?: number }, maxAgeSeconds: number): boolean {
+  return entry.storedAt === undefined || Date.now() - entry.storedAt <= maxAgeSeconds * 1000;
+}
+
 // KV values are capped at 25 MiB; stay well under it.
 const KV_MAX_VALUE_BYTES = 20 * 1024 * 1024;
 // KV rejects expirationTtl below 60 seconds.

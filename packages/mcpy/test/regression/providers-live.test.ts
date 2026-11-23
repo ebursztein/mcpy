@@ -102,11 +102,10 @@ describe("hosted browsers keep their own user agent", () => {
   const okScrape = () => new Response(JSON.stringify({ success: true, data: { markdown: "# hi", metadata: { statusCode: 200 } } }));
   const okRender = () => new Response(JSON.stringify({ success: true, result: "# hi" }));
 
-  it("does not forward the default agent, but forwards an explicitly chosen browser", async () => {
-    for (const [provider, reply, field] of [
-      [firecrawl({ apiKey: "k" }), okScrape, "headers"],
-      [cloudflareBrowser({ accountId: "a", apiToken: "t" }), okRender, "userAgent"],
-    ] as const) {
+  // Firecrawl no longer takes a chosen desktop browser either: see
+  // regression/shopping-sources.test.ts (Cardmarket timed out with it, 2026-11-22).
+  it("does not forward the default agent to Browser Run, but forwards an explicitly chosen browser", async () => {
+    for (const [provider, reply, field] of [[cloudflareBrowser({ accountId: "a", apiToken: "t" }), okRender, "userAgent"]] as const) {
       const quiet = stubFetch(reply);
       await provider.fetchPage(page(UserAgentProfile.Default), providerCall(quiet.fetch));
       expect(quiet.calls[0].body, provider.id).not.toHaveProperty(field);

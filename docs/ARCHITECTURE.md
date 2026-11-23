@@ -35,13 +35,57 @@ Rules, each enforced by tests where possible:
 5. **Modules stay under 300 lines.** A test fails the build otherwise.
 6. **One folder per provider**: `providers/<name>/{index,schemas,...}.ts`.
 
+## Shopping: services, sites, fetcher
+
+`shopping_search` and `shopping_item` add a layer between the API and the engine:
+
+```
+MCP / REST -> Mcpy facade -> services/shopping -> sites/<site> -> engine.page() -> providers -> HttpClient
+                              (input, merge,     (URLs, filters,  (cache, fallback,
+                               reports, cursor)   page readers)    render, breaker)
+```
+
+- **Service** (`services/shopping/`): validates the input, asks each requested
+  site for its search request, fetches it through the engine, hands the page
+  back to the site's reader, normalizes the rows, applies the filters the site
+  could not, interleaves sites and reports per site (`ok`, `empty`, `failed`
+  with `blocked`/`redesigned`/`redirected`/`truncated`/`timeout`/`upstream_failed`,
+  and `ignored` request parts). A failed site never fails the call.
+- **Sites** (`sites/<region>/`): one `ShoppingSite` per marketplace key
+  (`ebay_de`, `cardmarket`, `leboncoin`...). A site knows its URLs, which
+  filters its URL applies, and how to read its result page; it never fetches.
+  Card marketplaces return product links; the service opens up to
+  `max_products` product pages and every seller's offer becomes a listing.
+  Shared readers: `sites/readers/` (embedded JSON, JSON-LD, HTML cards, values).
+- **Normalize** (`sites/normalize.ts`): a row is a listing only if its URL is
+  on the site's host(s) with a listing id and a title; every other field is
+  validated and dropped on its own if bad, never the row.
+- **Fetcher**: the engine's page path, unchanged: the universal cache
+  (`max_age`), site routes, fallback chain, render providers. Sites prefer
+  their own JSON APIs and embedded state (free) over rendering (paid).
+- **Listing APIs** (last resort): a site may declare an `api` read (today the
+  six eBay sites). When every page source failed for its search page
+  (`blocked`, `timeout`, `upstream_failed`; not `redesigned` or `redirected`,
+  and not over budget), the service asks the engine's listing sources
+  (`createMcpy({ listings })`, the server's `LISTING_PROVIDERS`) for the same
+  market, sort, bounds and page. Their rows are thinner than the page's, so
+  the page reader stays the main path. Contract: `providers/listing-types.ts`.
+- **Paging**: `next_cursor` holds one position per site (search page or the
+  site's own token, rows already returned, product pages already opened, retries).
+  Continuation calls reread the cached page (up to the page cache TTL, 1 h by
+  default), so offsets point at the same rows; a transient failure past page 1
+  keeps the site's place for up to two retries.
+- **Bounds**: 4 sites fetched at once, at most 20 product pages per call, a 90 s
+  whole-call deadline (a site still running is reported as timed out).
+- Every store's chosen path and live verdict is recorded in `docs/shopping/`.
+
 ## Reliability
 
 | Concern | Mechanism |
 | --- | --- |
 | Provider down or blocked | Fallback chain: next provider on error, HTTP 401/403/429/5xx from the target, bot challenge (judged on page title, challenge markup on small pages, challenge wording on tiny pages), or an empty HTML shell |
 | Sites that block cheap providers | Site routes: once a later page provider serves a site (hostname + format), the next fetch starts with it, so a blocked direct fetch or browser attempt is not paid for on every call. The providers it skips move to the end of the chain, never out of it. Routes live in the cache for `siteRouteTtlSeconds` (default 1 day), then the cheap providers get another chance |
-| Definitive answers | 404/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
+| Definitive answers | 404/405/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
 | Thin but real pages | Short text, JSON or markdown is served as is. A short HTML page escalates; if no provider does better, the best one is returned and not cached |
 | Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After`; programming errors are never retried |
 | Slow providers | Per-attempt timeout enforced by the engine (even if a provider ignores its abort signal), capped by an overall deadline |
@@ -49,9 +93,14 @@ Rules, each enforced by tests where possible:
 | Unsafe targets (SSRF) | Only public http(s) URLs. Redirects are followed by hand and every hop is checked. Hosted providers (Firecrawl, Bright Data, Browser Run) follow redirects on their side, outside this guard |
 | Huge or binary pages | Content type checked before download; byte cap on every upstream body |
 | Grep patterns | RE2 (re2js): linear time, so no pattern can stall the server; `literal` mode for plain text |
-| LLM context | Hard caps on returned characters, pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
+| Large pages | Fetch `script`: the caller's JavaScript module runs on the whole page and only its JSON result is returned (still paginated). The server loads each script as its own module with the Worker Loader binding (Workers cannot eval a string), keyed by the script's hash so a warm isolate is reused. Pages longer than one call carry a `tip` pointing at it |
+| Pages read in parts | A page longer than one part is also stored under its own version key (a hash of the copy), written before the first part returns; later parts pass `version` and read exactly that copy. The shared cache entry cannot promise this: it is written after the response, KV may serve an older copy for a while, and another call can replace it. A part whose copy is gone fails with `version_expired` |
+| LLM context | Hard caps on returned characters (50,000 per call), pagination, grep with bounded context and windowed long lines, short search snippets, `truncated` flags |
 | Search coverage | Search providers declare capabilities (types, recency, site filters, depth); requests go only to providers that can honor them. Country, language and device are hints. `thorough` mode asks every capable provider in parallel and merges with reciprocal rank fusion, deduplicating by normalized URL |
-| Repeat requests | Cache keyed by normalized URL / query; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
+| JavaScript pages | `render: true` sends a fetch only to providers that run a real browser (Cloudflare Browser Rendering through its Workers binding, then Firecrawl); `wait_ms` gives the page time to finish. Without it, a page that is a script shell but long enough to pass as content is served as is: detection cannot tell, so the caller asks |
+| Requests beyond a GET | `method`/`body`/`headers` go only to providers that declare they can send them (`PageCapabilities`); a POST reaches only a direct request, never a paid fallback. A caller's POST is retried only after 408, 425 or 429, never after a 5xx or a lost connection, and 301/302/303 turn it into a GET without its body. Caller headers cannot set `Host`, `Content-Length` or connection headers |
+| Cost estimates | Providers estimate per request where the bill depends on it (Firecrawl search: 2 credits per 10 results), so caps see what a call really costs |
+| Repeat requests | Cache keyed by normalized URL / query, storing the page as fetched (scripts run on it afterwards, so a new script never refetches); every call (fetch, grep, search, papers) says how old an answer it accepts with one shared `max_age` field, 0 skipping the cache; written after the response when the host offers `defer` (Workers `waitUntil`); empty search results kept 60 s only |
 
 ## Observability
 
@@ -88,6 +137,16 @@ and the cache still answer; if nothing does, `budget_exceeded`). Every
 operation reports what its attempts cost, failed ones included. The server's
 limit keeps each client's total for the UTC day in its own Durable Object
 (`ClientBudget`). Costs are the providers' per-call estimates.
+
+Owner alerts: the call context can also carry an `onQuota` sink. The chain
+calls it when a paid provider fails with 402 (`out_of_credits`) or 429
+(`rate_limited`); the alert names the provider, so it is for the host, never
+for callers. The server's sink (`apps/server/src/alerts.ts`) pushes to
+Pushover once per provider and kind per cooldown. The budget pushes once
+when an add moves a client's day total past its warning line
+(`CAP_WARNING_PERCENT` of the cap) and once when it passes the cap (the
+budget object returns the exact total each add replaced, so float sums
+cannot fire either twice).
 
 ## User agents
 

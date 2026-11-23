@@ -1,0 +1,35 @@
+# Stores: eBay and Latin America (probed 2026-11-22)
+
+Modules: `packages/mcpy/src/sites/ebay/` (`ebay.ts`, `card.ts`) and
+`packages/mcpy/src/sites/americas/` (`olx-br.ts`, `mercadolibre.ts`, `meli-cards.ts`).
+Live numbers come from `scripts/live-shopping.ts`: direct fetch from a dev machine, then the Firecrawl and Bright Data fallbacks.
+
+| key | path chosen | live result | fields available | status | if not working |
+|---|---|---|---|---|---|
+| ebay_us | HTML `li.s-card` cards, no render | named "black lotus": 59 rows (attempts 2); floor $50 newest: 59 rows, applied by the site (`_udlo`, every row >= 50); nonsense: empty | price + currency, format (auction / best_offer / fixed_price), bids, buy-now on auctions, shipping (free = 0), condition, location ("Located in"), listed age (posted_text), promoted, image, time left (details) | working | From Cloudflare IPs the direct fetch is often 403; the fallback chain serves the page |
+| ebay_uk | same | named "charizard": 60 (attempts 3); floor £50: 60, applied by the site; nonsense: empty | same ("from <country>" location; VAT note skipped) | working | same 403 pattern |
+| ebay_de | same | named "glurak": 60 (attempts 2); nonsense: empty (attempts 3); floor (`_udlo=50`): timed out or upstream_failed in 3 local runs. Through tools.ly.tl it returned 60 rows, all >= 50 EUR, but only after 3 attempts | same; "Privat" seller type in details | partial | eBay.de 403s direct fetches. The fallback works, but slowly and not every time (60 s deadline) |
+| ebay_fr | same | named "pokemon": 60 (attempts 2); floor: 60, applied by the site; nonsense: empty. One named run timed out at 60 s | same | working | slow fallback (up to 45 s) |
+| ebay_it | same | named: 60; floor: 60, applied by the site; nonsense: empty | same | working | |
+| ebay_es | same | named: 60; floor: 60, applied by the site; nonsense: empty | same | working | |
+| olx_br | Next.js flight data (`{"ads":[...],"searchBoxProps"}`), no render | named "pokemon": 50 (total 14,397); floor 50 newest: 50, applied by the site (`ps`/`pe`, `sf=1`); "black lotus" with a 500 floor: 15, all >= 500; nonsense: empty | price, posted_at (epoch), location, condition (Usado/Novo), seller (OLX Pay name), promoted (fixedOnTop / isFeatured), image, category / type / professional / OLX Pay (details) | working | A plain fetch from Cloudflare works (attempts 1). A dev IP gets 403 and falls back |
+| mercadolivre_br | embedded state `_n.ctx.r` → `initialState.results[].polycard`, no render; reader built from a real Bright Data page | named: `redirected` (the plain fetch lands on a 200 login wall on www.mercadolivre.com.br/gz/account-verification); nonsense: same | (when served) price + currency, free shipping, seller / store label, promoted (ads), image, rating, highlight, coupon, catalog product, international origin | failed | Wall: plain fetch (every user agent) redirects to `/gz/account-verification`, and a residential IP gets `/captcha/wall`. Public API `api.mercadolibre.com/sites/MLB/search` returns 403 `{"message":"forbidden"}` (now needs OAuth). Firecrawl: all engines failed. Bright Data Web Unlocker served the real page (52 rows) once, then answered HTTP 402 |
+| mercadolibre_ar | same module, `listado.mercadolibre.com.ar` | `redirected` to the account-verification wall | same | failed | same as BR |
+| mercadolibre_mx | same, `.com.mx` | `redirected` | same | failed | same |
+| mercadolibre_cl | same, `.cl` | `redirected` | same | failed | same |
+| mercadolibre_co | same, `.com.co` | `redirected` | same | failed | same |
+
+## Notes
+
+- eBay URL: `/sch/i.html?_nkw=<q>&_sop=<sort>&_udlo&_udhi&_ipg=60&_pgn=<n>&rt=nc`. `_sop` values: 10 newest, 12 best match, 15 lowest price + shipping, 16 highest, 1 ending soonest. RSS (`_rss=1`) is gone, and the mobile UA gets the same desktop page (about 27 rows). Nothing has JSON state or JSON-LD.
+- eBay "Results matching fewer words" (`srp-river-answer--REWRITE_START`) can sit above the list. Every card after it is filler, so a page with only filler reads as `empty` (fixture `ebay-de-fewer-words.html`).
+- eBay hides "Sponsored" in the markup: the footer `<b aria-labelledby="ids">` points at hidden divs, and a card is promoted when one of those divs holds text. The "Shop on eBay" placeholder cards (`/itm/123456` on `ebay.com`) are dropped.
+- With newest sort, eBay cards show "Listed 1m ago" in place of time left and no seller or feedback row. The seller pattern is in place, but no live page showed a seller row.
+- MercadoLibre has no newest sort. The sort and price URL grammar (`_OrderId_PRICE[*DESC]`, `_PriceRange_<from><CUR>-<to><CUR>`, `_Desde_<n>`) is taken from the page's own links. `applies` claims only the sort: the price range could not be checked against live rows because of the 402.
+- MercadoLibre's nonsense query ("qzxjvwk glurak zzqv") returned 119 real-looking Pokémon rows, with no "no results" marker in the state. Its fuzzy match cannot be told apart from a result.
+
+## Next steps (failed / partial)
+
+1. **MercadoLibre (all 5):** the engine needs to treat a redirect to a login or verification wall as a block, so the chain moves on to Bright Data. This is engine work, outside this group. One way: in `engine/quality.ts`, escalate when `finalUrl`'s path matches `/account-verification|/captcha/` (or the site declares wall URL patterns). Then check Bright Data's 402 (budget or zone limit), rerun live, and verify `_PriceRange_` before setting `applies.minPrice`.
+2. **ebay_de:** the reader is fine. Fallback latency is the problem: consider a longer deadline for eBay or a cached retry.
+3. **Listing API fallback (2026-11-23):** every eBay site declares an `api` read. When no page source gets the search page, Serpent's eBay API (`LISTING_PROVIDERS=serpent`, $0.0004 a call) stands in. Live: EBAY_DE with a 50 EUR floor and newest sort, 60 rows (all >= 50) in 40 s; EBAY_US plain, 60 rows in 31 s; 3 other calls hit Serpent's 45 s budget (refunded). Its rows carry price, condition, shipping and image only (no bids, format, location, seller). Litescrape's eBay search answered EBAY_DE with a floor in 2.4 s with best-offer, shipping and listed age, but its eBay endpoint was down for .com and .co.uk the same hour.

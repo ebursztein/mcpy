@@ -130,6 +130,19 @@ describe("REST against elie.net", () => {
     Object.assign(measured, { cachedWallMs: Math.round(warm.wallMs), cachedServerMs: second.meta.latency_ms });
   });
 
+  it("runs a fetch script on the whole page and returns only its result", async () => {
+    const script = "export default (page) => ({ title: page.title, h1: (page.content.match(/<h1[^>]*>/g) ?? []).length, size: page.content.length });";
+    const { response, text } = await post(RestRoute.Fetch, { url: TARGET, format: "html", script });
+    expect(response.status, text).toBe(200);
+    const out = JSON.parse(FetchResultSchema.parse(JSON.parse(text)).content) as { title: string; size: number };
+    expect(out.title.length).toBeGreaterThan(0);
+    expect(out.size).toBeGreaterThan(1_000);
+
+    const broken = await post(RestRoute.Fetch, { url: TARGET, format: "html", script: "export default () => { throw new Error('nope') }" });
+    expect(broken.response.status).toBe(400);
+    expect(ErrorBodySchema.parse(JSON.parse(broken.text)).error.message).toContain("nope");
+  });
+
   it("paginates with GET query parameters", async () => {
     const { response, text } = await api(`${RestRoute.Fetch}?url=${encodeURIComponent(TARGET)}&max_chars=500&offset=100`);
     expect(response.status).toBe(200);
@@ -170,13 +183,13 @@ describe("MCP against elie.net", () => {
 
   const INIT = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "mcpy-e2e", version: "0.0.0" } };
 
-  it("initializes and lists exactly web_fetch, web_grep, web_search, paper_search", async () => {
+  it("initializes and lists exactly web_fetch, web_grep, web_search, paper_search, shopping_search, shopping_item", async () => {
     const init = await rpc("initialize", INIT);
     expect(init.response.status).toBe(200);
     expect(init.message.result?.serverInfo).toMatchObject({ name: "mcpy" });
     const list = await rpc("tools/list", {});
     const names = ((list.message.result?.tools ?? []) as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers].sort());
+    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem].sort());
   });
 
   it("accepts the key as ?key= on /mcp", async () => {

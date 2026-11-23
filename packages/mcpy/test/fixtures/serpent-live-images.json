@@ -1,0 +1,67 @@
+{
+ "success": true,
+ "query": "charizard base set card",
+ "type": "images",
+ "engine": "google",
+ "country": "us",
+ "results": {
+  "images": [
+   {
+    "position": 1,
+    "title": "Charizard - Base Set #4 Pokemon Card",
+    "thumbnail": "https://tse3.mm.bing.net/th/id/OIP.Qhf4HOzMKgqNJzJAaD0RMwHaKV?r=0&pid=Api&h=220&P=0",
+    "original": "https://den-cards.pokellector.com/119/Charizard.BS.4.png",
+    "width": 570,
+    "height": 795,
+    "source": "www.pokellector.com",
+    "pageUrl": "https://www.pokellector.com/card/Charizard-Base-Set-BS-4"
+   },
+   {
+    "position": 2,
+    "title": "THE OG!!! Gorgeous BASE SET CHARIZARD Holographic Pokemon Card ...",
+    "thumbnail": "https://tse1.mm.bing.net/th/id/OIP.-KAWbTqpVaFfqFIJo6YQQwHaKO?r=0&pid=Api&h=220&P=0",
+    "original": "https://www.pictureserver1.auctionninja.com/pictureserver/dgw-collectibles/Pictures/2.11.26_003_447_20487_1770841391339.jpg",
+    "width": 1448,
+    "height": 2000,
+    "source": "www.auctionninja.com",
+    "pageUrl": "https://www.auctionninja.com/dgw-collectibles/product/the-og-gorgeous-base-set-charizard-holographic-pokemon-card--2694829.html"
+   },
+   {
+    "position": 3,
+    "title": "1999 Charizard 1st Edition Base Set Shadowless Holographic Proxy Card ...",
+    "thumbnail": "https://tse1.mm.bing.net/th/id/OIP.h_rV83sZhe-I_Brs9CW8SwHaIw?r=0&pid=Api&h=220&P=0",
+    "original": "https://i.etsystatic.com/39266313/r/il/fb55cd/5296064571/il_fullxfull.5296064571_5u7c.jpg",
+    "width": 2017,
+    "height": 2386,
+    "source": "www.etsy.com",
+    "pageUrl": "https://www.etsy.com/listing/1539781135/1999-charizard-1st-edition-base-set"
+   },
+   {
+    "position": 4,
+    "title": "Pokemon TCG: Base Set Remastered — Card Spotlight - Charizard line",
+    "thumbnail": "https://tse4.mm.bing.net/th/id/OIP.TAP43UTAZSWoLc83DEGC9AHaKU?r=0&pid=Api&h=220&P=0",
+    "original": "https://64.media.tumblr.com/fc91fb5fb05c1242a9455d08b629c6c1/efbe13d820d61587-3b/s1280x1920/76425bbfed090707d6c606660514b2e8583e3947.png",
+    "width": 552,
+    "height": 769,
+    "source": "base-set-remastered.tumblr.com",
+    "pageUrl": "https://base-set-remastered.tumblr.com/post/720590829313523712/card-spotlight-charizard-line"
+   },
+   {
+    "position": 5,
+    "title": "Charizard - 1st Edition Base Set - Holo / Holographic Reprint - Etsy",
+    "thumbnail": "https://tse2.mm.bing.net/th/id/OIP.tWTdgxVtSRRGsf0HGWxJogHaKf?r=0&pid=Api&h=220&P=0",
+    "original": "https://i.etsystatic.com/35879403/r/il/96e24f/4747160499/il_fullxfull.4747160499_os5p.jpg",
+    "width": 1075,
+    "height": 1522,
+    "source": "www.etsy.com",
+    "pageUrl": "https://www.etsy.com/listing/1391498377/charizard-1st-edition-base-set-holo"
+   }
+  ],
+  "totalResults": 5
+ },
+ "meta": {
+  "totalImages": 5,
+  "elapsed": "10097ms",
+  "timestamp": "2026-11-23T03:04:24.332Z"
+ }
+}

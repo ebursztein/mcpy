@@ -6,13 +6,23 @@
 
 export { brightData, brightDataSearch, BRIGHTDATA_SEARCH_CAPABILITIES, type BrightDataOptions } from "./brightdata/index.js";
 export { cloudflareBrowser, type CloudflareBrowserOptions } from "./cloudflare-browser/index.js";
+export {
+  cloudflareBrowserBinding,
+  type BrowserRender,
+  type BrowserRenderRequest,
+  type CloudflareBrowserBindingOptions,
+  type RenderedPage,
+} from "./cloudflare-browser/binding.js";
 export { direct, type DirectOptions } from "./direct/index.js";
-export { firecrawl, firecrawlSearch, FIRECRAWL_SEARCH_CAPABILITIES, type FirecrawlOptions } from "./firecrawl/index.js";
+export { serpentSearch, SERPENT_DEFAULT_USD_PER_CALL, SERPENT_SEARCH_CAPABILITIES, type SerpentOptions } from "./serpent/index.js";
+export { serpentListings, SERPENT_EBAY_USD_PER_CALL, type SerpentListingsOptions } from "./serpent/ebay.js";
+export { firecrawl, firecrawlSearch, FIRECRAWL_HOBBY_USD_PER_CREDIT, FIRECRAWL_SEARCH_CAPABILITIES, type FirecrawlOptions } from "./firecrawl/index.js";
 export {
   ProviderId,
   ProviderIdSchema,
   type FetchedPage,
   type FoundPage,
+  type PageCapabilities,
   type PageProvider,
   type PageRequest,
   type ProviderCall,
@@ -26,6 +36,9 @@ export { ProviderFailure } from "../errors.js";
 export { HttpClient, HttpMethod, type HttpContext, type HttpRequest, type HttpResponse } from "../http/client.js";
 export { contentKindOf } from "../content/kind.js";
 export { htmlToMarkdown, htmlTitle, splitFrontmatter } from "../content/extract.js";
+
+// Marketplace listing APIs.
+export { ListingMarket, ListingMarketSchema, ListingSort, ListingSortSchema, type FoundListing, type ListingPage, type ListingProvider, type ListingRequest } from "./listing-types.js";
 
 // Paper indexes.
 export { openAlex, OPENALEX_CAPABILITIES, type OpenAlexOptions } from "./openalex/index.js";

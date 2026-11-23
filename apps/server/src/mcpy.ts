@@ -2,6 +2,7 @@ import { createMcpy, KvCache, MemoryCache, type Mcpy } from "mcpy";
 import type { Telemetry } from "mcpy/telemetry";
 import type { Env, ServerEnv } from "./env.js";
 import { buildProviders, type ProviderSetup } from "./providers.js";
+import { workerLoaderScripts } from "./scripts.js";
 
 // Per-isolate fallback cache when no KV namespace is bound (local dev).
 const isolateCache = new MemoryCache(500);
@@ -13,12 +14,14 @@ const instances = new WeakMap<object, { mcpy: Mcpy; providers: ProviderSetup }>(
 export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcpy: Mcpy; providers: ProviderSetup } {
   let entry = instances.get(env);
   if (!entry) {
-    const providers = buildProviders(config);
+    const providers = buildProviders(config, { browser: env.BROWSER });
     const mcpy = createMcpy({
       pages: providers.pages,
       search: providers.search,
       papers: providers.papers,
+      listings: providers.listings,
       cache: env.CACHE ? new KvCache(env.CACHE) : isolateCache,
+      scripts: env.LOADER ? workerLoaderScripts(env.LOADER) : undefined,
       limits: {
         attemptTimeoutMs: config.ATTEMPT_TIMEOUT_MS,
         deadlineMs: config.DEADLINE_MS,

@@ -7,6 +7,7 @@
 import { vi } from "vitest";
 import worker from "../../src/index.js";
 import type { Env } from "../../src/env.js";
+import { ClientBudget, type BudgetNamespaceLike } from "../../src/budget.js";
 
 export const USER_KEY = "user-key-0123456789abcdef";
 export const ADMIN_KEY = "admin-key-0123456789abcdef";
@@ -173,4 +174,22 @@ export async function captureLogs<T>(fn: () => Promise<T>): Promise<{ value: T; 
   } finally {
     spy.mockRestore();
   }
+}
+
+/** Real ClientBudget objects over in-memory storage, one per client name. */
+export function budgetNamespace(): BudgetNamespaceLike & { objects: Map<string, ClientBudget> } {
+  const objects = new Map<string, ClientBudget>();
+  return {
+    objects,
+    idFromName: (name) => name,
+    get(id) {
+      const name = id as unknown as string;
+      if (!objects.has(name)) {
+        const data = new Map<string, unknown>();
+        objects.set(name, new ClientBudget({ storage: { get: async <T>(k: string) => data.get(k) as T | undefined, put: async (k, v) => void data.set(k, v) } }));
+      }
+      const object = objects.get(name)!;
+      return { fetch: (request: Request) => object.fetch(request) };
+    },
+  };
 }

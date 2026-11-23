@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { ErrorCode, SpanName, SpanStatus } from "../enums.js";
+import { ErrorCode, HttpMethod, SpanName, SpanStatus } from "../enums.js";
 import { ProviderFailure } from "../errors.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
@@ -8,8 +8,7 @@ import { readTextCapped } from "./body.js";
 import { backoffDelay, isRetryableError, isRetryableStatus, retryAfterMs, sleep, type RetryPolicy } from "./retry.js";
 import { assertPublicHttpUrl } from "./url.js";
 
-export const HttpMethod = { Get: "GET", Post: "POST" } as const;
-export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
+export { HttpMethod };
 
 export interface HttpRequest {
   url: string;
@@ -17,6 +16,8 @@ export interface HttpRequest {
   headers?: Record<string, string>;
   /** Serialized as JSON with the matching content type. */
   json?: unknown;
+  /** Sent as is (ignored when `json` is set); the content type is the caller's header. */
+  body?: string;
   /**
    * Checked against the response content type before the body is read;
    * returning false fails the request with `unsupported_content` without
@@ -49,6 +50,8 @@ export interface HttpClientOptions {
 
 export const MAX_REDIRECTS = 5;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
+/** Answers that say the server did not act on the request, so even a POST may be sent again. */
+const NOT_PROCESSED = new Set([408, 425, 429]);
 
 /**
  * The only way mcpy talks to the network. Every try gets a span; transient
@@ -82,10 +85,16 @@ export class HttpClient {
     }
   }
 
-  /** One request (no redirect following), retried on transient failures. Body unread. */
+  /**
+   * One request (no redirect following), retried on transient failures. Body unread.
+   * A caller's POST to a target may not be safe to repeat: it is retried only
+   * when the answer says it was not processed (408, 425, 429), never after a
+   * 5xx or a lost connection. mcpy's own JSON calls to providers retry as GETs do.
+   */
   private async withRetries(req: HttpRequest, ctx: HttpContext): Promise<Response> {
     const { retry } = this.options;
     const target = new URL(req.url);
+    const unsafe = req.method === HttpMethod.Post && req.json === undefined;
     for (let attempt = 0; ; attempt++) {
       const span = ctx.telemetry.startSpan(
         SpanName.HttpClient,
@@ -101,13 +110,14 @@ export class HttpClient {
         const res = await this.options.fetch(req.url, {
           method: req.method ?? HttpMethod.Get,
           headers: req.json === undefined ? req.headers : { "Content-Type": "application/json", ...req.headers },
-          body: req.json === undefined ? undefined : JSON.stringify(req.json),
+          body: req.json === undefined ? req.body : JSON.stringify(req.json),
           redirect: "manual",
           signal: ctx.signal,
         });
         span.setAttributes({ [Attr.HttpStatus]: res.status });
 
-        if (isRetryableStatus(res.status) && attempt < retry.retries) {
+        const retryable = unsafe ? NOT_PROCESSED.has(res.status) : isRetryableStatus(res.status);
+        if (retryable && attempt < retry.retries) {
           const delay = retryAfterMs(res.headers.get("retry-after"), retry) ?? backoffDelay(attempt + 1, retry);
           if (Date.now() + delay < ctx.deadlineAt) {
             await discard(res);
@@ -124,7 +134,7 @@ export class HttpClient {
         if (err instanceof ProviderFailure) throw err;
         span.recordError(err);
         span.end(SpanStatus.Error, err instanceof Error ? err.message : String(err));
-        if (isRetryableError(err) && attempt < retry.retries) {
+        if (!unsafe && isRetryableError(err) && attempt < retry.retries) {
           const delay = backoffDelay(attempt + 1, retry);
           if (Date.now() + delay < ctx.deadlineAt) {
             await sleep(delay, ctx.signal).catch((abort) => {
@@ -175,7 +185,9 @@ export class HttpClient {
 function nextHop(req: HttpRequest, status: number, url: string): HttpRequest {
   assertPublicHttpUrl(url);
   const toGet = status === 303 || ((status === 301 || status === 302) && req.method === HttpMethod.Post);
-  return toGet ? { ...req, url, method: HttpMethod.Get, json: undefined } : { ...req, url };
+  if (!toGet) return { ...req, url };
+  const headers = req.headers && Object.fromEntries(Object.entries(req.headers).filter(([name]) => name.toLowerCase() !== "content-type"));
+  return { ...req, url, method: HttpMethod.Get, json: undefined, body: undefined, headers };
 }
 
 /** Drop a body we will not read; a body that already errored must not fail the request. */

@@ -6,6 +6,7 @@ import { buildProviders, SkipReason } from "../../src/providers.js";
 const FIRECRAWL = { FIRECRAWL_API_KEY: "fc-test" };
 const BRIGHTDATA = { BRIGHTDATA_API_KEY: "bd-test", BRIGHTDATA_UNLOCKER_ZONE: "unlocker", BRIGHTDATA_SERP_ZONE: "serp" };
 const CLOUDFLARE = { CF_ACCOUNT_ID: "acct", CF_BROWSER_API_TOKEN: "cf-test" };
+const SERPENT = { SERPENT_API_KEY: "sk_live_test" };
 
 const ids = (list: { id: string }[]) => list.map((p) => p.id);
 
@@ -20,18 +21,35 @@ describe("buildProviders", () => {
       { id: ProviderId.BrightData, reason: SkipReason.MissingCredentials },
     ]);
     expect(setup.skipped.search).toEqual([
+      { id: ProviderId.Serpent, reason: SkipReason.MissingCredentials },
       { id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials },
       { id: ProviderId.BrightData, reason: SkipReason.MissingCredentials },
     ]);
   });
 
   it("enables every provider with credentials, in the default order", () => {
-    const setup = buildProviders(loadEnv({ ...FIRECRAWL, ...BRIGHTDATA, ...CLOUDFLARE }));
+    const setup = buildProviders(loadEnv({ ...SERPENT, ...FIRECRAWL, ...BRIGHTDATA, ...CLOUDFLARE }));
     expect(ids(setup.pages)).toEqual([ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]);
-    expect(ids(setup.search)).toEqual([ProviderId.Firecrawl, ProviderId.BrightData]);
+    // Cheapest search first: Serpent bills $0.0006 a call, Firecrawl about $0.0076 for 10 results.
+    expect(ids(setup.search)).toEqual([ProviderId.Serpent, ProviderId.Firecrawl, ProviderId.BrightData]);
     expect(ids(setup.papers)).toEqual([ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed]);
     // Semantic Scholar needs a key; OpenAlex, arXiv and PubMed work without one.
-    expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }] });
+    // One Serpent key serves search and the eBay listing fallback.
+    expect(ids(setup.listings)).toEqual([ProviderId.Serpent]);
+    expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }], listings: [] });
+  });
+
+  it("runs the browser on the Browser Rendering binding when bound, with no API token", () => {
+    const setup = buildProviders(loadEnv({}), { browser: {} });
+    expect(ids(setup.pages)).toEqual([ProviderId.Direct, ProviderId.CloudflareBrowser]);
+    expect(setup.pages[1].capabilities).toEqual({ render: true, headers: true });
+    expect(setup.skipped.pages.map((s) => s.id)).not.toContain(ProviderId.CloudflareBrowser);
+  });
+
+  it("prices Firecrawl at the configured credit rate", () => {
+    const setup = buildProviders(loadEnv({ ...FIRECRAWL, FIRECRAWL_USD_PER_CREDIT: "0.0032" }));
+    expect(setup.pages.find((p) => p.id === ProviderId.Firecrawl)?.costPerCall).toBeCloseTo(0.0032, 10);
+    expect(setup.search[0].costPerCall).toBeCloseTo(0.0064, 10);
   });
 
   it("follows the configured order", () => {

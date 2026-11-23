@@ -1,9 +1,11 @@
 import { CacheStatus, ErrorBodySchema, LogLevel, ErrorCode, FetchResultSchema, GrepResultSchema, RestRoute } from "mcpy";
 import { ProviderId } from "mcpy/providers";
 import { Attr } from "mcpy/telemetry";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mentionsProvider } from "../../../../packages/mcpy/test/helpers.js";
 import { SkipReason } from "../../src/providers.js";
+import { CLIENT_RATE_LIMIT } from "../../src/rate-limit.js";
 import { AdminRoute } from "../../src/rest.js";
 import { ADMIN_KEY, ARTICLE_TITLE, articleUrl, call, captureLogs, makeEnv, stubNetwork, USER_KEY } from "./harness.js";
 
@@ -125,7 +127,7 @@ describe("REST operations", () => {
     const env = makeEnv();
     const url = articleUrl("get");
     await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}`, { env });
-    const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}&max_chars=150&offset=10&fresh=true`, { env });
+    const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(url)}&max_chars=150&offset=10&max_age=0`, { env });
     expect(response.status).toBe(200);
     const result = FetchResultSchema.parse(await response.json());
     expect(result.content.length).toBeLessThanOrEqual(150);
@@ -206,22 +208,36 @@ describe("admin", () => {
       pages: [ProviderId.Direct],
       search: [],
       papers: [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed],
+      listings: [],
       skipped: {
         pages: [],
         search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }],
         papers: [{ id: ProviderId.SemanticScholar, reason: SkipReason.MissingCredentials }],
+        listings: [{ id: ProviderId.Serpent, reason: SkipReason.MissingCredentials }],
       },
     });
   });
 });
 
 describe("rate limiting and misconfiguration", () => {
+  it("reports the same limit wrangler.jsonc enforces, in every environment", () => {
+    const config = readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8");
+    const limits = [...config.matchAll(/"name": "RATE_LIMITER".*?"simple": \{ "limit": (\d+), "period": (\d+) \}/g)];
+    expect(limits.length).toBeGreaterThanOrEqual(2);
+    for (const [, limit, period] of limits) expect({ requests: Number(limit), periodSeconds: Number(period) }).toEqual(CLIENT_RATE_LIMIT);
+  });
+
   it("returns 429 rate_limited with Retry-After, keyed by client name", async () => {
     const limit = vi.fn(async () => ({ success: false }));
     const response = await call(`${RestRoute.Fetch}?url=${encodeURIComponent(articleUrl())}`, { env: makeEnv({ RATE_LIMITER: { limit } }) });
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("60");
-    expect((await errorOf(response)).code).toBe(ErrorCode.RateLimited);
+    // The refusal says what to pace to, in the body and the headers.
+    expect(response.headers.get("RateLimit-Policy")).toBe("120;w=60");
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("120");
+    const error = await errorOf(response);
+    expect(error.code).toBe(ErrorCode.RateLimited);
+    expect(error.message).toContain("120 requests per 60 s");
     expect(limit).toHaveBeenCalledWith({ key: "alice" });
     expect(net.upstream).toEqual([]);
   });

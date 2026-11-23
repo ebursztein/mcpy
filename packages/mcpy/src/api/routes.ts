@@ -4,6 +4,8 @@ export const RestRoute = {
   Grep: "/v1/grep",
   Search: "/v1/search",
   Papers: "/v1/papers",
+  Shopping: "/v1/shopping",
+  ShoppingItem: "/v1/shopping/item",
 } as const;
 export type RestRoute = (typeof RestRoute)[keyof typeof RestRoute];
 
@@ -13,5 +15,7 @@ export const ToolName = {
   Grep: "web_grep",
   Search: "web_search",
   Papers: "paper_search",
+  Shopping: "shopping_search",
+  ShoppingItem: "shopping_item",
 } as const;
 export type ToolName = (typeof ToolName)[keyof typeof ToolName];

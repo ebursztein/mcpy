@@ -29,8 +29,8 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const errorResponse = (err: McpyError, headers: Record<string, string> = {}) => json(err.toJSON(), err.httpStatus, headers);
 
-const NUMERIC = new Set(["offset", "max_chars", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
-const BOOLEAN = new Set(["fresh", "literal", "open_access"]);
+const NUMERIC = new Set(["offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
+const BOOLEAN = new Set(["literal", "open_access"]);
 const LIST = new Set(["sites", "exclude_sites"]);
 
 /**
@@ -62,6 +62,8 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.Grep]: (api, input) => api.grep(input as never),
   [RestRoute.Search]: (api, input) => api.search(input as never),
   [RestRoute.Papers]: (api, input) => api.papers(input as never),
+  [RestRoute.Shopping]: (api, input) => api.shopping(input as never),
+  [RestRoute.ShoppingItem]: (api, input) => api.shoppingItem(input as never),
 };
 
 export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView): Promise<Response> {
@@ -77,6 +79,7 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
       pages: providers.pages.map((p) => p.id),
       search: providers.search.map((p) => p.id),
       papers: providers.papers.map((p) => p.id),
+      listings: providers.listings.map((p) => p.id),
       skipped: providers.skipped,
     });
   }

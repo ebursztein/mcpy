@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { UserAgentProfile, type ContentKind, type Device, type PageFormat, type Recency, type SearchType } from "../enums.js";
+import { UserAgentProfile, type ContentKind, type Device, type HttpMethod, type PageFormat, type Recency, type SearchType } from "../enums.js";
 import type { HttpClient, HttpContext } from "../http/client.js";
 
 /** Ids of the built-in providers (custom providers may use their own). */
@@ -13,6 +13,7 @@ export const ProviderId = {
   CloudflareBrowser: "cloudflare_browser",
   Firecrawl: "firecrawl",
   BrightData: "brightdata",
+  Serpent: "serpent",
   OpenAlex: "openalex",
   Arxiv: "arxiv",
   SemanticScholar: "semantic_scholar",
@@ -23,6 +24,7 @@ export const ProviderIdSchema = z.enum([
   ProviderId.CloudflareBrowser,
   ProviderId.Firecrawl,
   ProviderId.BrightData,
+  ProviderId.Serpent,
   ProviderId.OpenAlex,
   ProviderId.Arxiv,
   ProviderId.SemanticScholar,
@@ -34,6 +36,32 @@ export interface PageRequest {
   url: string;
   format: PageFormat;
   userAgent: UserAgentProfile;
+  /** Default GET. The engine only hands a POST to providers with `capabilities.post`. */
+  method?: HttpMethod;
+  /** Request body, with `method` POST. */
+  body?: string;
+  /** Extra request headers (validated names), for providers with `capabilities.headers`. */
+  headers?: Record<string, string>;
+  /** Run the page's JavaScript first: only providers with `capabilities.render` get it. */
+  render?: boolean;
+  /** With `render`: extra time to let the page finish loading, in ms. */
+  waitMs?: number;
+  /**
+   * Fetch as a visitor from this country (lowercase ISO 3166-1 alpha-2), for
+   * sites that localize prices by IP. A hint: providers that cannot choose
+   * their exit country ignore it.
+   */
+  country?: string;
+}
+
+/** What a page provider can do beyond a plain GET. Absent fields are false. */
+export interface PageCapabilities {
+  /** Runs the page's JavaScript in a real browser. */
+  render?: boolean;
+  /** Sends POST requests with a body to the target. */
+  post?: boolean;
+  /** Sends the caller's extra request headers to the target. */
+  headers?: boolean;
 }
 
 export interface FetchedPage {
@@ -129,11 +157,14 @@ interface ProviderBase {
 }
 
 export interface PageProvider extends ProviderBase {
+  readonly capabilities?: PageCapabilities;
   fetchPage(req: PageRequest, call: ProviderCall): Promise<FetchedPage>;
 }
 
 export interface SearchProvider extends ProviderBase {
   readonly capabilities: SearchCapabilities;
+  /** Estimated USD of this search when it depends on the request (e.g. on how many results); default `costPerCall`. */
+  costOf?(req: SearchRequest): number;
   search(req: SearchRequest, call: ProviderCall): Promise<FoundPage[]>;
 }
 

@@ -45,11 +45,10 @@ function toPage(req: PageRequest, res: HttpResponse): FetchedPage {
 export function direct(options: DirectOptions = {}): PageProvider {
   const retryProfile = options.blockedRetryProfile === undefined ? UserAgentProfile.Chrome : options.blockedRetryProfile;
 
-  async function get(req: PageRequest, profile: UserAgentProfile, call: ProviderCall): Promise<HttpResponse> {
-    return call.http.send(
-      { url: req.url, headers: { "User-Agent": call.userAgent(profile), Accept: accept(req.format) }, acceptContentType: isTextual },
-      call.context,
-    );
+  /** The caller's own headers win over ours, User-Agent and Accept included. */
+  async function send(req: PageRequest, profile: UserAgentProfile, call: ProviderCall): Promise<HttpResponse> {
+    const headers = { "User-Agent": call.userAgent(profile), Accept: accept(req.format), ...req.headers };
+    return call.http.send({ url: req.url, method: req.method, body: req.body, headers, acceptContentType: isTextual }, call.context);
   }
 
   return {
@@ -58,10 +57,12 @@ export function direct(options: DirectOptions = {}): PageProvider {
     // A failing direct fetch means the target is down or blocking, not that
     // fetch is unhealthy: never open its circuit.
     circuitBreaker: false,
+    capabilities: { post: true, headers: true },
     async fetchPage(req, call) {
-      let res = await get(req, req.userAgent, call);
-      if (BLOCKED.has(res.status) && retryProfile && retryProfile !== req.userAgent) {
-        res = await get(req, retryProfile, call);
+      let res = await send(req, req.userAgent, call);
+      const ownAgent = Object.keys(req.headers ?? {}).some((name) => name.toLowerCase() === "user-agent");
+      if (BLOCKED.has(res.status) && retryProfile && retryProfile !== req.userAgent && !ownAgent) {
+        res = await send(req, retryProfile, call);
       }
       return toPage(req, res);
     },

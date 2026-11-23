@@ -16,13 +16,13 @@ describe("engine cache: pages", () => {
     expect(p.calls).toHaveLength(1);
   });
 
-  it("fresh: true bypasses the read, calls the provider again and refreshes the entry", async () => {
+  it("max_age: 0 bypasses the read, calls the provider again and refreshes the entry", async () => {
     let version = 1;
     const p = fakePages("p", () => page({ content: `v${version} ${LONG_TEXT}` }));
     const { mcpy } = testMcpy({ pages: [p] });
     await mcpy.fetch({ url: URL_A });
     version = 2;
-    const fresh = await mcpy.fetch({ url: URL_A, fresh: true });
+    const fresh = await mcpy.fetch({ url: URL_A, max_age: 0 });
     expect(fresh.meta.cache).toBe(CacheStatus.Bypass);
     expect(fresh.content.startsWith("v2")).toBe(true);
     expect(p.calls).toHaveLength(2);
@@ -161,11 +161,11 @@ describe("engine cache: search", () => {
     expect(s.calls).toBe(1);
   });
 
-  it("fresh: true bypasses the search cache", async () => {
+  it("max_age: 0 bypasses the search cache", async () => {
     const s = fakeSearch("s", hits);
     const { mcpy } = testMcpy({ search: [s] });
     await mcpy.search({ query: "cats" });
-    expect((await mcpy.search({ query: "cats", fresh: true })).meta.cache).toBe(CacheStatus.Bypass);
+    expect((await mcpy.search({ query: "cats", max_age: 0 })).meta.cache).toBe(CacheStatus.Bypass);
     expect(s.calls).toBe(2);
   });
 });

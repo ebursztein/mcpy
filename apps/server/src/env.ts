@@ -7,7 +7,9 @@ import { LogLevel, LogLevelSchema, UserAgentProfile, UserAgentProfileSchema, typ
 import { ProviderId, ProviderIdSchema } from "mcpy/providers";
 import type { AnalyticsDatasetLike } from "mcpy/telemetry";
 import { z } from "zod";
+import type { BrowserBindingLike } from "./browser.js";
 import type { BudgetNamespaceLike } from "./budget.js";
+import type { WorkerLoaderLike } from "./scripts.js";
 
 export interface RateLimiterLike {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -22,6 +24,10 @@ export interface Env {
   AUTH_LIMITER?: RateLimiterLike;
   /** One Durable Object per client holding today's spend (see budget.ts). */
   BUDGET?: BudgetNamespaceLike;
+  /** Runs fetch scripts; without it, fetch rejects `script`. */
+  LOADER?: WorkerLoaderLike;
+  /** Browser Rendering: enables the cloudflare_browser page provider with no API token. */
+  BROWSER?: BrowserBindingLike;
   [key: string]: unknown;
 }
 
@@ -99,8 +105,10 @@ export const EnvSchema = z.object({
 
   // Routing between providers
   PAGE_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]),
-  SEARCH_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Firecrawl, ProviderId.BrightData]),
+  SEARCH_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent, ProviderId.Firecrawl, ProviderId.BrightData]),
   PAPER_PROVIDERS: csv(ProviderIdSchema, [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed, ProviderId.SemanticScholar]),
+  /** Marketplace listing APIs, the last resort for shopping sites no page source could fetch. */
+  LISTING_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
@@ -115,6 +123,14 @@ export const EnvSchema = z.object({
   // Spending (estimated USD per client per UTC day; needs the BUDGET binding)
   DAILY_BUDGET_USD: usd.optional(),
   CLIENT_DAILY_BUDGETS_USD: budgetOverrides,
+
+  // Owner alerts by Pushover (paid source out of credits or quota; a client reaching its cap)
+  PUSHOVER_TOKEN: secret,
+  PUSHOVER_USER: secret,
+  /** Quiet time after a quota alert before the same provider and kind alert again. */
+  ALERT_COOLDOWN_SECONDS: intVar(60, 7 * 86_400, 21_600),
+  /** Percent of a client's daily cap at which it gets a "running low" alert (100 turns it off). */
+  CAP_WARNING_PERCENT: intVar(1, 100, 80),
 
   // User agent
   DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Default),
@@ -133,9 +149,13 @@ export const EnvSchema = z.object({
   CF_BROWSER_API_BASE: z.string().url().optional(),
   FIRECRAWL_API_KEY: secret,
   FIRECRAWL_API_URL: z.string().url().optional(),
+  /** USD per Firecrawl credit on your plan, for cost estimates and caps (default: Hobby, $19 / 5,000). */
+  FIRECRAWL_USD_PER_CREDIT: z.coerce.number().positive().max(1).optional(),
   BRIGHTDATA_API_KEY: secret,
   BRIGHTDATA_UNLOCKER_ZONE: secret,
   BRIGHTDATA_SERP_ZONE: secret,
+  /** Serpent API (apiserpent.com): web, news and image search at $0.60 per 1,000 calls. */
+  SERPENT_API_KEY: secret,
   /** Optional: OpenAlex works without it, on a small budget shared per IP. */
   OPENALEX_API_KEY: secret,
   /** Semantic Scholar is enabled only with a key (anonymous calls are rate-limited). */

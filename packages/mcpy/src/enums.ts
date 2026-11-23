@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-function enumOf<const T extends Record<string, string>>(values: T) {
+export function enumOf<const T extends Record<string, string>>(values: T) {
   const schema = z.enum(Object.values(values) as [T[keyof T], ...T[keyof T][]]);
   return { values, schema };
 }
@@ -14,6 +14,12 @@ const pageFormat = enumOf({ Markdown: "markdown", Html: "html" } as const);
 export const PageFormat = pageFormat.values;
 export const PageFormatSchema = pageFormat.schema;
 export type PageFormat = z.infer<typeof PageFormatSchema>;
+
+/** HTTP method of a page request (and of mcpy's own calls to providers). */
+const httpMethod = enumOf({ Get: "GET", Post: "POST" } as const);
+export const HttpMethod = httpMethod.values;
+export const HttpMethodSchema = httpMethod.schema;
+export type HttpMethod = z.infer<typeof HttpMethodSchema>;
 
 const userAgentProfile = enumOf({
   /** Honest mcpy user agent (identifies the tool). */
@@ -61,13 +67,26 @@ const errorCode = enumOf({
   TooLarge: "too_large",
   UnsupportedContent: "unsupported_content",
   BadResponse: "bad_response",
+  /** The copy of a page that earlier parts came from is no longer kept. */
+  VersionExpired: "version_expired",
   Internal: "internal",
 } as const);
 export const ErrorCode = errorCode.values;
 export const ErrorCodeSchema = errorCode.schema;
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
-const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers" } as const);
+/** Why a paid source stopped answering: what a host may want to page its owner about. */
+const quotaAlertKind = enumOf({
+  /** HTTP 402: the account is out of credits or its plan does not cover the call. */
+  OutOfCredits: "out_of_credits",
+  /** HTTP 429 after retries: the account's rate limit or quota is used up for now. */
+  RateLimited: "rate_limited",
+} as const);
+export const QuotaAlertKind = quotaAlertKind.values;
+export const QuotaAlertKindSchema = quotaAlertKind.schema;
+export type QuotaAlertKind = z.infer<typeof QuotaAlertKindSchema>;
+
+const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers", Shopping: "shopping", ShoppingItem: "shopping_item" } as const);
 export const Operation = operation.values;
 export const OperationSchema = operation.schema;
 export type Operation = z.infer<typeof OperationSchema>;

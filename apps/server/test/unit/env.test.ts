@@ -18,7 +18,7 @@ describe("loadEnv defaults", () => {
   it("fills every setting when the env is empty", () => {
     const config = loadEnv({});
     expect(config.PAGE_PROVIDERS).toEqual([ProviderId.Direct, ProviderId.CloudflareBrowser, ProviderId.Firecrawl, ProviderId.BrightData]);
-    expect(config.SEARCH_PROVIDERS).toEqual([ProviderId.Firecrawl, ProviderId.BrightData]);
+    expect(config.SEARCH_PROVIDERS).toEqual([ProviderId.Serpent, ProviderId.Firecrawl, ProviderId.BrightData]);
     expect(config.ATTEMPT_TIMEOUT_MS).toBe(20_000);
     expect(config.DEADLINE_MS).toBe(60_000);
     expect(config.MAX_RESPONSE_BYTES).toBe(5_000_000);
@@ -59,7 +59,7 @@ describe("csv vars", () => {
   });
 
   it("falls back to the default list when only separators are given", () => {
-    expect(loadEnv({ SEARCH_PROVIDERS: " , " }).SEARCH_PROVIDERS).toEqual([ProviderId.Firecrawl, ProviderId.BrightData]);
+    expect(loadEnv({ SEARCH_PROVIDERS: " , " }).SEARCH_PROVIDERS).toEqual([ProviderId.Serpent, ProviderId.Firecrawl, ProviderId.BrightData]);
   });
 
   it("rejects an unknown provider id, naming PAGE_PROVIDERS", () => {

@@ -1,12 +1,25 @@
 import { z } from "zod";
 import { fetchOp, grepOp, searchOp } from "./api/operations.js";
+import type { ScriptRunner } from "./api/script.js";
 import { papersOp } from "./api/papers.js";
+import { shoppingItemOp } from "./services/shopping/item.js";
+import { shoppingSearchOp } from "./services/shopping/service.js";
+import {
+  ShoppingItemInputSchema,
+  ShoppingSearchInputSchema,
+  type ShoppingItemInput,
+  type ShoppingItemResult,
+  type ShoppingSearchInput,
+  type ShoppingSearchResult,
+} from "./services/shopping/schema.js";
 import { PaperSearchInputSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 import type { PaperProvider } from "./providers/paper-types.js";
+import type { ListingProvider } from "./providers/listing-types.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
 import { SpendMeter, type SpendLimit } from "./engine/meter.js";
+import type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
 import { HttpClient } from "./http/client.js";
@@ -50,12 +63,16 @@ export interface McpyOptions extends McpyConfig {
   search?: SearchProvider[];
   /** Paper indexes, tried in order. */
   papers?: PaperProvider[];
+  /** Marketplace listing APIs, the last resort for shopping sites whose pages no page source could fetch. */
+  listings?: ListingProvider[];
   /** Defaults to an in-memory cache. */
   cache?: Cache;
   /** Defaults to no telemetry. */
   telemetry?: Telemetry;
   /** Defaults to the global fetch. */
   fetch?: typeof fetch;
+  /** Runs fetch scripts; without one, fetch rejects `script`. */
+  scripts?: ScriptRunner;
 }
 
 /** Who is calling and how; lands on every span and log record. */
@@ -68,6 +85,8 @@ export interface CallContext {
   defer?: (work: Promise<unknown>) => void;
   /** Caps this caller's spending on paid sources; free sources and the cache stay available. */
   spendLimit?: SpendLimit;
+  /** Told when a paid source runs out of credits or quota; runs off the request path when `defer` is set. */
+  onQuota?: QuotaAlertSink;
 }
 
 /** The SDK. Implements the same McpyApi as the REST client. */
@@ -76,12 +95,13 @@ export class Mcpy implements McpyApi {
     private readonly engine: Engine,
     private readonly telemetry: Telemetry,
     private readonly defaultUserAgent: UserAgentProfile,
+    private readonly scripts: ScriptRunner | undefined,
     private readonly context: CallContext = {},
   ) {}
 
   /** A view of this instance bound to a caller (client name, request id, ...). */
   with(context: CallContext): Mcpy {
-    return new Mcpy(this.engine, this.telemetry, this.defaultUserAgent, { ...this.context, ...context });
+    return new Mcpy(this.engine, this.telemetry, this.defaultUserAgent, this.scripts, { ...this.context, ...context });
   }
 
   /**
@@ -89,11 +109,11 @@ export class Mcpy implements McpyApi {
    * per-request exporter on a server that flushes after each response.
    */
   withTelemetry(telemetry: Telemetry): Mcpy {
-    return new Mcpy(this.engine, telemetry, this.defaultUserAgent, this.context);
+    return new Mcpy(this.engine, telemetry, this.defaultUserAgent, this.scripts, this.context);
   }
 
   fetch(input: FetchInput): Promise<FetchResult> {
-    return this.run(Operation.Fetch, FetchInputSchema, input, (i, scope) => fetchOp(this.engine, i, this.defaultUserAgent, scope));
+    return this.run(Operation.Fetch, FetchInputSchema, input, (i, scope) => fetchOp(this.engine, i, this.defaultUserAgent, scope, this.scripts));
   }
 
   grep(input: GrepInput): Promise<GrepResult> {
@@ -106,6 +126,14 @@ export class Mcpy implements McpyApi {
 
   papers(input: PaperSearchInput): Promise<PaperSearchResult> {
     return this.run(Operation.Papers, PaperSearchInputSchema, input, (i, scope) => papersOp(this.engine, i, scope));
+  }
+
+  shopping(input: ShoppingSearchInput): Promise<ShoppingSearchResult> {
+    return this.run(Operation.Shopping, ShoppingSearchInputSchema, input, (i, scope) => shoppingSearchOp(this.engine, i, scope));
+  }
+
+  shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult> {
+    return this.run(Operation.ShoppingItem, ShoppingItemInputSchema, input, (i, scope) => shoppingItemOp(this.engine, i, scope));
   }
 
   /** Validation, span, structured log line and error mapping for every operation. */
@@ -133,7 +161,7 @@ export class Mcpy implements McpyApi {
       }
       const target = targetAttributes(parsed.data);
       span.setAttributes(target);
-      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer, meter });
+      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer, meter, onQuota: this.quotaReporter(telemetry, span.context) });
       const facts = {
         [Attr.Cache]: served.cache,
         [Attr.Attempts]: served.attempts,
@@ -161,6 +189,20 @@ export class Mcpy implements McpyApi {
     } finally {
       await this.recordSpend(meter, telemetry, span.context);
     }
+  }
+
+  /** Hand quota alerts to the host's sink; a failing sink is logged, never seen by the caller. */
+  private quotaReporter(telemetry: Telemetry, parent: SpanContext): ((alert: QuotaAlert) => void) | undefined {
+    const sink = this.context.onQuota;
+    if (!sink) return undefined;
+    return (alert) => {
+      telemetry.log(LogLevel.Warn, "paid source quota", { [Attr.Provider]: alert.provider, [Attr.Reason]: `${alert.kind} (HTTP ${alert.status})` }, parent);
+      const work = Promise.resolve()
+        .then(() => sink(alert))
+        .catch((err: unknown) => telemetry.log(LogLevel.Error, "quota alert failed", { [Attr.Reason]: err instanceof Error ? err.message : String(err) }, parent));
+      if (this.context.defer) this.context.defer(work);
+      else void work;
+    };
   }
 
   /** Report what the operation spent to the caller's limit, off the request path when possible. */
@@ -197,11 +239,12 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
     pageProviders: options.pages ?? [],
     searchProviders: options.search ?? [],
     paperProviders: options.papers ?? [],
+    listingProviders: options.listings ?? [],
     cache: options.cache ?? new MemoryCache(),
     http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
     breaker: new CircuitBreaker(config.breaker),
     limits: config.limits,
     userAgents: { defaultProfile: config.userAgent.default, customString: config.userAgent.custom },
   });
-  return new Mcpy(engine, options.telemetry ?? Telemetry.noop(), config.userAgent.default);
+  return new Mcpy(engine, options.telemetry ?? Telemetry.noop(), config.userAgent.default, options.scripts);
 }

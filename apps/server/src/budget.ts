@@ -32,6 +32,8 @@ const ORIGIN = "https://budget.internal";
 const DaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const AddSchema = z.object({ day: DaySchema, usd: z.number().positive().max(1_000) });
 const SpentSchema = z.object({ usd: z.number().min(0) });
+/** An add's answer: the new total and the exact total it replaced. */
+const AddedSchema = z.object({ usd: z.number().min(0), before: z.number().min(0) });
 const StateSchema = z.object({ day: DaySchema, usd: z.number().min(0) });
 
 export const utcDay = (now: Date) => now.toISOString().slice(0, 10);
@@ -65,12 +67,13 @@ export class ClientBudget {
       if (!body.success) return new Response("bad body", { status: 400 });
       const { day, usd } = body.data;
       const add = this.queue.then(async () => {
-        const total = (await this.spent(day)) + usd;
+        const before = await this.spent(day);
+        const total = before + usd;
         await this.state.storage.put(STATE_KEY, { day, usd: total });
-        return total;
+        return { usd: total, before };
       });
       this.queue = add.catch(() => undefined);
-      return Response.json({ usd: await add });
+      return Response.json(await add);
     }
     return new Response("not found", { status: 404 });
   }
@@ -81,11 +84,11 @@ export class ClientBudget {
   }
 }
 
-async function ask(stub: BudgetStub, path: string, body?: unknown): Promise<number> {
+async function ask(stub: BudgetStub, path: string, body?: unknown): Promise<unknown> {
   const init = body === undefined ? undefined : { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } };
   const response = await stub.fetch(new Request(`${ORIGIN}${path}`, init));
   if (!response.ok) throw new Error(`budget object answered HTTP ${response.status}`);
-  return SpentSchema.parse(await response.json()).usd;
+  return response.json();
 }
 
 function stubFor(ns: BudgetNamespaceLike, client: string): BudgetStub {
@@ -94,18 +97,37 @@ function stubFor(ns: BudgetNamespaceLike, client: string): BudgetStub {
 
 /** What `client` has spent today, in estimated USD. */
 export function spentToday(ns: BudgetNamespaceLike, client: string, now = new Date()): Promise<number> {
-  return ask(stubFor(ns, client), `${BudgetPath.Spent}?day=${utcDay(now)}`);
+  return ask(stubFor(ns, client), `${BudgetPath.Spent}?day=${utcDay(now)}`).then((body) => SpentSchema.parse(body).usd);
 }
 
-/** The SDK's view of one client's cap. */
-export function dailySpendLimit(ns: BudgetNamespaceLike, client: string, capUsd: number, now: () => Date = () => new Date()): SpendLimit {
+/** Hooks for a client's day total passing its warning line and its cap. */
+export interface CapWatch {
+  /** Fraction of the cap that counts as running low, e.g. 0.8. */
+  warnAt: number;
+  onCapNear?: (spentUsd: number) => Promise<void>;
+  onCapReached?: (spentUsd: number) => Promise<void>;
+}
+
+/**
+ * The SDK's view of one client's cap. Each hook in `watch` runs once per day:
+ * the budget object applies adds one at a time and returns the exact total
+ * each one replaced, so only one add crosses a given line. An add that jumps
+ * both lines reports only the cap.
+ */
+export function dailySpendLimit(ns: BudgetNamespaceLike, client: string, capUsd: number, now: () => Date = () => new Date(), watch?: CapWatch): SpendLimit {
   return {
     allows: async () => (await spentToday(ns, client, now())) < capUsd,
     record: async (usd) => {
-      await ask(stubFor(ns, client), BudgetPath.Add, { day: utcDay(now()), usd });
+      const added = AddedSchema.parse(await ask(stubFor(ns, client), BudgetPath.Add, { day: utcDay(now()), usd }));
+      if (!watch) return;
+      if (crossed(added.before, added.usd, capUsd)) await watch.onCapReached?.(added.usd);
+      else if (crossed(added.before, added.usd, capUsd * watch.warnAt)) await watch.onCapNear?.(added.usd);
     },
   };
 }
+
+/** Whether the add that moved the day's total from `before` to `after` is the one that reached `line`. */
+export const crossed = (before: number, after: number, line: number) => before < line && after >= line;
 
 /** A client's daily cap in USD, or undefined when it has none. */
 export function capFor(client: string, defaultCap: number | undefined, overrides: ReadonlyMap<string, number | undefined>): number | undefined {

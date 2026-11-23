@@ -5,6 +5,7 @@ import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
 import type { SpendMeter } from "./meter.js";
+import { quotaAlertFor, type QuotaAlert } from "./quota.js";
 
 export interface AttemptRecord {
   provider: string;
@@ -59,6 +60,10 @@ export interface ChainOptions<P extends ChainProvider, T> {
   parent: SpanContext;
   /** Paid attempts are skipped once the caller's spending limit says no. */
   meter?: SpendMeter;
+  /** Hears when a paid source refuses a call for account reasons (out of credits, quota used up). */
+  onQuota?: (alert: QuotaAlert) => void;
+  /** Estimated USD of one attempt at this request (default: the provider's flat `costPerCall`). */
+  cost?: (provider: P) => number;
 }
 
 /** Why a paid provider was not tried (also the public reason). */
@@ -117,16 +122,17 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
       continue;
     }
 
-    if (provider.costPerCall > 0 && o.meter && !(await o.meter.mayPay())) {
+    const cost = o.cost?.(provider) ?? provider.costPerCall;
+    if (cost > 0 && o.meter && !(await o.meter.mayPay())) {
       attempts.push({ provider: provider.id, outcome: AttemptOutcome.Skipped, reason: OVER_BUDGET, publicReason: OVER_BUDGET, latencyMs: 0 });
       continue;
     }
 
     const timeoutMs = Math.min(Math.max(o.attemptTimeoutMs, provider.attemptTimeoutMs ?? 0), remaining);
     const started = Date.now();
-    const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: provider.costPerCall }, o.parent);
-    costUsd += provider.costPerCall;
-    o.meter?.spend(provider.costPerCall);
+    const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: cost }, o.parent);
+    costUsd += cost;
+    o.meter?.spend(cost);
     try {
       const signal = AbortSignal.timeout(timeoutMs);
       const value = await bounded(o.attempt(provider, signal, timeoutMs, span.context), signal);
@@ -152,6 +158,8 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
       span.end(SpanStatus.Error, message);
       // Spans only leave the Worker when OTLP export is set up; logs always do.
       o.telemetry.log(LogLevel.Warn, "attempt failed", { [Attr.Provider]: provider.id, [Attr.Reason]: `${code}: ${message}`.slice(0, 500) }, span.context);
+      const quota = quotaAlertFor(provider, err);
+      if (quota) o.onQuota?.(quota);
       const stop = definitive(err);
       if (stop) throw stop;
       if (provider.circuitBreaker !== false) o.breaker.recordFailure(provider.id);

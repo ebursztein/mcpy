@@ -65,7 +65,34 @@ claude mcp add --transport http mcpy "https://tools.ly.tl/mcp" --header "Authori
 
 **Know the URL and need the content?** `fetch`. Start with `max_chars`
 5000-10000. If the result has `next_offset`, there is more: call again with
-`offset` set to it. Stop as soon as you have what you need.
+`offset` set to it and the same `version`. Stop as soon as you have what you need.
+
+**Need data from a huge page (a shop, a catalogue)?** Pass `script`, a
+JavaScript module that runs on the whole page server-side; only what it
+returns comes back, as JSON in `content` (`JSON.parse` it). Use
+`format: "html"` to work on the raw page. A result with `tip` means the page
+is too long for one call: read a part first to see its structure, then
+write the script.
+
+```js
+// page is { url, final_url, status, title, content }
+export default (page) => [...page.content.matchAll(/data-price="([\d.]+)"/g)].map((m) => Number(m[1]));
+```
+
+**Page comes back as an empty shell, or without the prices or listings you
+can see in a browser?** It loads them with JavaScript: fetch again with
+`render: true` (add `wait_ms`, e.g. 3000, if they still are not there). It
+is slower and costs more, so do not use it by default.
+
+**Data behind an API that takes a POST?** `fetch` with `method: "POST"`,
+`body` (a JSON string or a form), and `headers` if the API needs them, e.g.
+a browser `User-Agent` via `user_agent: "chrome"`. Find the call in the
+site's own page (format html) first. POSTs are cached by body too.
+
+```bash
+curl -s "$MCPY_URL/v1/fetch" -H "Authorization: Bearer $MCPY_KEY" -H "content-type: application/json" \
+  -d '{"url":"https://api.example.com/v2/search","method":"POST","body":"{\"q\":\"charizard\"}","user_agent":"chrome"}'
+```
 
 **Looking for something specific on a long page?** `grep` first. It returns
 only matching lines with `context` lines around them, which is far cheaper
@@ -119,8 +146,12 @@ curl -s "$MCPY_URL/v1/grep" -H "Authorization: Bearer $MCPY_KEY" -H "content-typ
 ```
 
 Every result has `meta`: `cache` (`hit`, `miss`, `bypass`), `latency_ms`,
-and `attempts`. Results are cached (pages 1 h, searches 15 min, papers 1 day);
-pass `fresh: true` only when you need a newer copy.
+and `attempts`. Every call takes `max_age`: the oldest cached answer it
+accepts, in seconds (defaults: pages 3600, searches 900, papers 86400).
+Pass 86400 for data that changes daily, a small value for live data, and
+0 to skip the cache. fetch, grep and scripts share the cached page of a
+URL (per `format` and `user_agent`, and per `render`, `method`, `body` and
+`headers` when set), so a new script or grep does not fetch again.
 
 ## Errors
 
@@ -132,11 +163,11 @@ Errors are `{"error": {"code", "message", "details"?}}` with an HTTP status.
 | `invalid_target` | 400 | The URL is not a public http(s) address (or redirects to one). Do not retry. |
 | `unsupported_content` | 415 | Not a text page (e.g. an image or archive). Do not retry. |
 | `unauthorized` / `forbidden` | 401 / 403 | Missing or wrong key. Ask your user for a valid one. |
-| `rate_limited` | 429 | Wait for `Retry-After` seconds, then retry. |
+| `rate_limited` | 429 | Over 120 requests per 60 s per API key (every call counts, page parts and cache hits included; the message and `RateLimit-Policy` header state the limit). Pace to it; wait `Retry-After` seconds, then retry. |
 | `budget_exceeded` | 429 | Your key used up today's allowance for paid sources (resets at midnight UTC; `Retry-After` says when). Cached pages and some free sources still work, so carry on with what you have; do not retry in a loop. Tell your user if you need more. |
 | `upstream_failed` | 502 | Every source failed (site down or blocking). Retry later, or try a different page. |
 | `timeout` | 504 | Took too long. Retry once; for search try `mode: "fast"`. |
-| `no_providers` | 503 | No sources are enabled for this tool on the server. Tell your user. |
+| `no_providers` | 503 | No source on the server can do this (none enabled, or none that can `render`, POST or send `headers`). Retry without that option, or tell your user. |
 
 ## Rules
 
