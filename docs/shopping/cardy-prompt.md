@@ -2,7 +2,7 @@
 
 You reach mcpy at `https://tools.ly.tl/mcp` (MCP) or `https://tools.ly.tl/v1/*` (REST) with your
 cardy key. Six tools: `web_fetch`, `web_grep`, `web_search`, `paper_search`, and two new ones,
-`shopping_search` and `shopping_item`. Your paid spend is capped at **$0.10 a day**; free sources
+`shopping_search` and `shopping_item`. Your paid spend is capped at **$0.40 a day**; free sources
 keep working after the cap, paid ones stop until midnight UTC (a site then reports `over_budget`).
 
 ## shopping_search: one call, many stores, one listing format
