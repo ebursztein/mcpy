@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ErrorCode, MARKETPLACES, McpyError, PageFormat, ContentKind, type Listing } from "mcpy";
-import { applyFilters, interleave } from "../../src/services/shopping/filters.js";
+import { applyFilters } from "../../src/services/shopping/filters.js";
+import { mergeSites } from "../../src/services/shopping/merge.js";
 import { canonicalUrl, normalize } from "../../src/sites/normalize.js";
 import { SITES } from "../../src/sites/registry.js";
 import { yahooAuctions } from "../../src/sites/asia/yahoo-auctions.js";
@@ -107,7 +108,7 @@ describe("filters", () => {
   });
 
   it("interleaves sites so one site cannot crowd out the others", () => {
-    expect(interleave([[row("a1"), row("a2"), row("a3")], [row("b1")]], 3).map((l) => l.id)).toEqual(["a1", "b1", "a2"]);
+    expect(mergeSites([{ key: "a", rows: [row("a1"), row("a2"), row("a3")] }, { key: "b", rows: [row("b1")] }], 3).results.map((l) => l.id)).toEqual(["a1", "b1", "a2"]);
   });
 });
 

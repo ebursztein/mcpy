@@ -18,7 +18,7 @@ import type { ListingProvider } from "./providers/listing-types.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
-import { SpendMeter, type SpendLimit } from "./engine/meter.js";
+import { roundUsd, SpendMeter, type SpendLimit } from "./engine/meter.js";
 import type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
@@ -172,6 +172,7 @@ export class Mcpy implements McpyApi {
       };
       span.setAttributes(facts);
       span.end(SpanStatus.Ok);
+      withCost(result, meter.spentUsd);
       telemetry.log(LogLevel.Info, `${operation} ok`, facts, span.context);
       return result;
     } catch (err) {
@@ -215,6 +216,12 @@ export class Mcpy implements McpyApi {
     if (this.context.defer) this.context.defer(write);
     else await write;
   }
+}
+
+/** Every result's meta states what the call cost the caller, failed attempts included. */
+function withCost(result: unknown, usd: number): void {
+  const meta = (result as { meta?: Record<string, unknown> } | null)?.meta;
+  if (meta && typeof meta === "object") meta["cost_usd"] = roundUsd(usd);
 }
 
 /** Host and user-agent profile of a validated input, for spans and metrics. */

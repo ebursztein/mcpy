@@ -93,7 +93,7 @@ describe("ebay card details", () => {
   const html = fixture("ebay-americas/ebay-de-fewer-words.html");
   const labels = hiddenLabels(html);
   const cards = blocks(html, /<li\b[^>]*class="s-card\b/);
-  const words = { bids: /^(\d+)\s+Gebote?$/i, bestOffer: /Preisvorschlag/i, buyNow: /Sofort-Kaufen/i, freeShipping: /^Kostenlos/i, location: /^aus (.+)$/, listed: /^Eingestellt\b.*$/, timeLeft: /^Noch .+$/, seller: /^$/ };
+  const words = { bids: /^(\d+)\s+Gebote?$/i, bestOffer: /Preisvorschlag/i, buyNow: /Sofort-Kaufen/i, freeShipping: /^Kostenlos/i, location: /^aus (.+)$/, home: /^Deutschland$/i, listed: /^Eingestellt\b.*$/, timeLeft: /^Noch .+$/, seller: /^$/ };
 
   it("reads the hidden Anzeige label as promoted, EUR prices and the private-seller note", () => {
     const row = ebayCard(cards[0]!, "www.ebay.de", words, labels)!;

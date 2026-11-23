@@ -50,6 +50,8 @@ function row(card: string): RawListing | undefined {
 
 export const rakuma: ShoppingSite = {
   key: "rakuma",
+  // n-gram search: "リザードン 初版" returned One Piece cards (2026-11-23).
+  matchesLoosely: true,
   host: "fril.jp",
   listingHosts: ["item.fril.jp"],
   country: "jp",

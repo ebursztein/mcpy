@@ -21,6 +21,8 @@ export class SpendMeter {
     private readonly limit?: SpendLimit,
     /** A limit that cannot answer fails open: it is a budget, not an access control. */
     private readonly onLimitError?: (err: unknown) => void,
+    /** The operation's meter, when this one meters a part of it. */
+    private readonly parent?: SpendMeter,
   ) {}
 
   /** Whether a paid attempt may run. Free attempts never need to ask. */
@@ -35,9 +37,23 @@ export class SpendMeter {
 
   spend(usd: number): void {
     this.total += usd;
+    this.parent?.spend(usd);
+  }
+
+  /**
+   * A meter for one part of the operation (e.g. one shopping site): it asks
+   * this meter's limit, and what it spends counts here too.
+   */
+  part(): SpendMeter {
+    // The part asks this meter, which asks the limit once for the whole operation.
+    const asParent: SpendLimit = { allows: () => this.mayPay(), record: () => Promise.resolve() };
+    return new SpendMeter(asParent, undefined, this);
   }
 
   get spentUsd(): number {
     return this.total;
   }
 }
+
+/** Micro-dollars are enough for a caller, and keep float noise out of answers. */
+export const roundUsd = (usd: number): number => Math.round(usd * 1e6) / 1e6;

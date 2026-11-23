@@ -2,8 +2,19 @@
 
 You reach mcpy at `https://tools.ly.tl/mcp` (MCP) or `https://tools.ly.tl/v1/*` (REST) with your
 cardy key. Six tools: `web_fetch`, `web_grep`, `web_search`, `paper_search`, and two new ones,
-`shopping_search` and `shopping_item`. Your paid spend is capped at **$0.40 a day**; free sources
-keep working after the cap, paid ones stop until midnight UTC (a site then reports `over_budget`).
+`shopping_search` and `shopping_item`. Your paid spend is capped at **$0.40 a day** across every
+tool and both entry points: `web_fetch`, `/v1/fetch`, `web_search` and the shopping tools all count
+against the same cap. Free sources keep working after the cap; paid ones stop until midnight UTC (a
+site then reports `over_budget`).
+
+**What a call costs** is in every response: `meta.cost_usd` for the call, and `cost_usd` on each
+store's report in `marketplaces[]`. Cache hits cost 0. A store is free when its page is fetched
+directly; it costs when the page must be rendered in a browser (Mercari, StarCityGames: about
+$0.0005) or when the store blocks direct fetches and a paid source serves it (eBay often does:
+about $0.004 a page), and card marketplaces pay once per product page they open. Spend scales
+with how often a paid store is fetched, not with how many stores you use: search the expensive ones
+less often (a longer `max_age` serves a repeat from cache for free) rather than leaving them out.
+Read `cost_usd` on a few calls per store to set each store's frequency.
 
 ## shopping_search: one call, many stores, one listing format
 
@@ -25,6 +36,7 @@ Input:
 | `card_condition` | This grade or better on Cardmarket's scale: `mint` > `near_mint` > `excellent` > `good` > `light_played` > `played` > `poor`. |
 | `language` | Cards printed in these languages (ISO codes: `en`, `ja`, `de`...). |
 | `format` | `fixed_price`, `auction`, `best_offer`, `wanted` (a buyer's post, never an ask). |
+| `title_match` | `auto` (default), `all_words`, `phrase`, `any`. Rows whose title lacks the query are dropped. `auto` is `all_words` on the stores that match loosely (Rakuma, PayPay Flea, Leboncoin, Milanuncios, Wallapop) and `any` elsewhere. Use `phrase` for names like "black lotus"; avoid `all_words` on card marketplaces, whose rows carry the product's name, not your words. |
 | `max_results` | Listings in total for the call, up to 60 (spread across stores). |
 | `max_products` | Card marketplaces: product pages to open, 1-10 (default 3). **Each one is a fetch and costs money**; keep it at 1-3. |
 | `cursor` | `next_cursor` from the previous call, with **exactly the same other inputs**, for the next listings. |
@@ -32,7 +44,7 @@ Input:
 
 Each listing can carry: `marketplace`, `id`, `url` (no tracking), `title` (as the seller wrote it,
 not translated), `price` `{amount, currency}`, `format`, `auction` `{bids, ends_at, buy_now}`
-(for an auction `price` is the current bid, not an ask), `shipping` (amount 0 = free),
+(for an auction `price` is the current bid, not an ask), `price_converted` (see eBay below), `shipping` (amount 0 = free),
 `condition`, `card_condition`, `language`, `quantity`, `product` (the product page an offer sits
 on), `status`, `posted_at` or `posted_text`, `location`, `country`, `seller` `{name,
 feedback_count, feedback_percent}`, `promoted`, `image`, and `details` (site-specific key/values).
@@ -42,7 +54,8 @@ page), `unsupported`, `over_budget` or `failed` with a `failure`: `blocked`, `re
 `redirected`, `timeout` or `upstream_failed`. **A failed store never fails the call.** `ignored`
 lists filters that store could not apply; when it lists `min_price`, `max_price` or `sort`,
 mcpy applied them itself on the rows it read, so they still hold for that page. `total` is the
-store's own result count when it states one.
+store's own result count when it states one; it is left out when `unmatched` (rows dropped by
+`title_match`) is present, because the store counted those too.
 
 Prices are never converted. Compare across currencies yourself, and say so when you do.
 
@@ -67,9 +80,9 @@ Working (66). Card-relevant ones first:
 | `yuyutei` | yuyu-tei.jp | JPY | Pokémon, Yu-Gi-Oh!, One Piece. |
 | `cardrush`, `dorasuta` | | JPY | Pokémon only. |
 | `magi`, `surugaya` | | JPY | Several games, no game filter (reports `game` ignored). |
-| `ebay_us`, `ebay_uk`, `ebay_de`, `ebay_fr`, `ebay_it`, `ebay_es` | | USD/GBP/EUR | Active listings only, no sold prices. When eBay blocks every page source, a listing API stands in; its rows then lack bids, format, location and seller, and can take 30-45 s. ebay_de is the flakiest. |
+| `ebay_us`, `ebay_uk`, `ebay_de`, `ebay_fr`, `ebay_it`, `ebay_es` | | USD/GBP/EUR | Active listings only, no sold prices. The eBay sites share listings: one call returns each listing **once**, from the site where it is not from abroad (the seller's own price). A row from another country's eBay carries `price_converted: true`: eBay converted it or added its own taxes, and the seller's price may differ. When eBay blocks every page source, a listing API stands in; its rows then lack bids, format, location and seller, and can take 30-45 s. ebay_de is the flakiest. |
 | `yahoo_auctions` | auctions.yahoo.co.jp | JPY | Auctions with bids and end times. |
-| `mercari_jp`, `paypay_flea`, `rakuma` | | JPY | Japanese flea markets. |
+| `mercari_jp`, `paypay_flea`, `rakuma` | | JPY | Japanese flea markets. Mercari now runs auctions too: a tile showing 現在 ¥ is an オークション商品, returned as `format: "auction"` with `price` the current bid (no bids or end time on the tile). |
 | `bunjang`, `joongna`, `daangn` | | KRW | Korean marketplaces. |
 | `catawiki` | catawiki.com | EUR | Auctions with bids and end times. |
 | `todocoleccion` | todocoleccion.net | EUR | Spanish collectibles. |

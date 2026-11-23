@@ -70,6 +70,8 @@ function row(item: Obj): RawListing | undefined {
 
 export const paypayFlea: ShoppingSite = {
   key: "paypay_flea",
+  // any query word matches: "リザードン 初版" returned Pikachu promos (2026-11-23).
+  matchesLoosely: true,
   host: "paypayfleamarket.yahoo.co.jp",
   country: "jp",
   currency: "JPY",

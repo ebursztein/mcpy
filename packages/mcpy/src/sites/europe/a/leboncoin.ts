@@ -89,6 +89,8 @@ function row(ad: Obj): RawListing | undefined {
 
 export const leboncoin: ShoppingSite = {
   key: "leboncoin",
+  // any query word matches: "black lotus" returned Lotus cars (2026-11-23).
+  matchesLoosely: true,
   host: "www.leboncoin.fr",
   country: "fr",
   currency: "EUR",

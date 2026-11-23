@@ -14,6 +14,9 @@
  * each row still carries the currency it states, and a symbol we cannot map
  * drops the price rather than mislabel it. From Japan the grid needs ~10 s to
  * fill (4 s gave skeleton cells only).
+ *
+ * Mercari runs auctions: a tile priced "現在 ¥" is one (checked 2026-11-23,
+ * m18105415223's page says オークション商品), so it is read as an auction.
  */
 
 import { ListingFormat, ListingStatus, ShoppingSort } from "../../services/shopping/schema.js";

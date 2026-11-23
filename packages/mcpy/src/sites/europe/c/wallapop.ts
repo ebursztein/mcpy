@@ -55,6 +55,8 @@ function row(item: Record<string, unknown>): RawListing | undefined {
 
 export const wallapop: ShoppingSite = {
   key: "wallapop",
+  // any query word matches: "black lotus" returned Lotus watches (2026-11-23).
+  matchesLoosely: true,
   host: "es.wallapop.com",
   country: "es",
   currency: "EUR",

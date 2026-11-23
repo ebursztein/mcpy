@@ -61,6 +61,8 @@ function row(ad: Obj, photos: Map<string, string>, reserved: Set<string>): RawLi
 
 export const milanuncios: ShoppingSite = {
   key: "milanuncios",
+  // matches descriptions: "black lotus" returned car dealer ads (2026-11-23).
+  matchesLoosely: true,
   host: "www.milanuncios.com",
   country: "es",
   currency: "EUR",

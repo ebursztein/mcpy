@@ -147,6 +147,7 @@ export const ResultMetaSchema = z.object({
   cache: CacheStatusSchema,
   latency_ms: z.number().nonnegative(),
   attempts: z.number().int().nonnegative().describe("Upstream requests made (0 when served from cache)"),
+  cost_usd: z.number().nonnegative().optional().describe("Estimated USD this call counted against your daily allowance (0: cache and free sources only)"),
 });
 
 export const FetchResultSchema = z.object({
