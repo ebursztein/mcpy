@@ -13,7 +13,7 @@ import { normalize, onSiteHost } from "../../sites/normalize.js";
 import { SITES } from "../../sites/registry.js";
 import type { ProductLink, RawListing, ShoppingSite, SiteQuery } from "../../sites/types.js";
 import { RequestPart, SiteStatus } from "../common.js";
-import { fetchAndRead, fetchFromApi, type SiteFetch } from "./fetch-site.js";
+import { fetchAndRead, searchSource } from "./fetch-site.js";
 import { applyFilters } from "./filters.js";
 import { mergeSites } from "./merge.js";
 import { titleMatcher, titleMatchFor } from "./title-match.js";
@@ -64,20 +64,28 @@ async function readOffers(engine: Engine, site: ShoppingSite, links: ProductLink
 }
 
 function siteQuery(input: ShoppingSearchQuery, at: SitePosition): SiteQuery {
-  return { query: input.query, sort: input.sort, minPrice: input.min_price, maxPrice: input.max_price, page: at.p, cursor: at.c, game: input.game };
+  return {
+    query: input.query,
+    sort: input.sort,
+    minPrice: input.min_price,
+    maxPrice: input.max_price,
+    page: at.p,
+    cursor: at.c,
+    game: input.game,
+    condition: input.condition,
+    format: input.format,
+    language: input.language,
+    sellerCountry: input.seller_country,
+    seller: input.seller,
+    category: input.category,
+    attributes: input.attributes,
+    facets: input.facets || undefined,
+  };
 }
 
 /** Where a failed site goes: kept for a retry only when it was already past its first page (one rule for every failure). */
 function failed(key: Marketplace, at: SitePosition, report: MarketplaceReport, served: Served<unknown>[], transient: boolean): SiteResult {
   return transient && (at.p > 1 || at.o > 0 || at.x > 0 || at.c) ? retryLater(key, at, report, served) : stopped(key, at, report, served);
-}
-
-/** The site's price bounds are whole units in most URLs: a fractional bound is applied by mcpy instead. */
-function honestApplies(req: ReturnType<ShoppingSite["search"]>, sq: SiteQuery) {
-  const applies = { ...req.applies };
-  if (sq.minPrice !== undefined && !Number.isInteger(sq.minPrice)) applies.minPrice = false;
-  if (sq.maxPrice !== undefined && !Number.isInteger(sq.maxPrice)) applies.maxPrice = false;
-  return { ...req, applies };
 }
 
 function stopped(key: Marketplace, at: SitePosition, report: MarketplaceReport, served: Served<unknown>[]): SiteResult {
@@ -100,12 +108,7 @@ async function searchSite(engine: Engine, key: Marketplace, at: SitePosition, qu
   if (input.game && site.games && !site.games.includes(input.game)) {
     return stopped(key, at, { ...base, status: SiteStatus.Unsupported, search_url: site.search({ ...sq, game: undefined }).url, ignored: [RequestPart.Game] }, []);
   }
-  let req = honestApplies(site.search(sq), sq);
-  let got: SiteFetch = await fetchAndRead(engine, site, req, (p) => site.read(p, sq), scope, input.max_age);
-  const viaApi = await fetchFromApi(engine, site, sq, got, scope, input.max_age);
-  // The listing API applies its own filters; the report keeps the site's search URL.
-  if (viaApi) [got, req] = [viaApi.got, honestApplies({ ...req, applies: viaApi.applies }, sq)];
-  const served: Served<unknown>[] = got.served ? [got.served] : [];
+  const { got, req, served } = await searchSource(engine, site, sq, scope, input.max_age);
   const report: MarketplaceReport = { ...base, status: SiteStatus.Ok, search_url: req.url };
   if (got.httpStatus) report.http_status = got.httpStatus;
   if (got.finalUrl && got.finalUrl !== req.url) report.final_url = got.finalUrl;
@@ -162,7 +165,8 @@ async function searchSite(engine: Engine, key: Marketplace, at: SitePosition, qu
   const unmatched = rows.length - titled.length;
   const { rows: kept, ignored } = applyFilters(titled, input, req);
   // A site that sells several games but cannot narrow to one: its rows are not filtered by game.
-  if (input.game && !site.games) ignored.push(RequestPart.Game);
+  if (input.game && !site.games && !req.applies?.game) ignored.push(RequestPart.Game);
+  if (input.facets && !outcome.facets) ignored.push(RequestPart.Facets);
   const available = kept.slice(at.o);
   const hasMore = site.pagesByCursor ? outcome.nextCursor !== undefined : (outcome.hasMore ?? false);
   return {
@@ -176,6 +180,7 @@ async function searchSite(engine: Engine, key: Marketplace, at: SitePosition, qu
       ...(outcome.total !== undefined && !unmatched ? { total: outcome.total } : {}),
       ...(unmatched ? { unmatched } : {}),
       ...(ignored.length ? { ignored } : {}),
+      ...(input.facets && outcome.facets ? { facets: outcome.facets } : {}),
     },
     progress: { at, available: available.length, products, opened, hasMore, nextToken: site.pagesByCursor ? outcome.nextCursor : undefined, stop: false },
   };

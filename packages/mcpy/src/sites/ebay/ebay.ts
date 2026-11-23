@@ -10,19 +10,22 @@
  * are applied by eBay. Everything after the "Results matching fewer words"
  * divider (srp-river-answer--REWRITE_START) is filler, not results.
  *
- * `api`: when no page source gets the search page (eBay.com and eBay.de
- * failed on every source from Cloudflare on 2026-11-23), a listing API
- * stands in. Its rows lack bids, format, location and seller.
+ * Order of sources (2026-11-23): the Browse feed first (browse.ts: free,
+ * about 1 s, sellers located in the site's country at their own price),
+ * then this search page (Cloudflare IPs are often refused; the paid page
+ * sources then serve it), then a listing API (listing-api.ts).
  */
 
-import { ListingMarket, ListingSort, type ListingPage } from "../../providers/listing-types.js";
+import { ListingMarket } from "../../providers/listing-types.js";
 import type { Country, Currency, Language } from "../../services/common.js";
 import type { Marketplace } from "../../services/shopping/marketplace.js";
 import { ShoppingSort } from "../../services/shopping/schema.js";
 import { blocks, looksBlocked, text } from "../readers/html.js";
 import { count, plus } from "../readers/values.js";
-import { SiteKind, type RawListing, type ReadOutcome, type ShoppingSite } from "../types.js";
-import { conditionOf, ebayCard, ebayItemId, hiddenLabels, type EbayWords } from "./card.js";
+import { SiteKind, type RawListing, type ShoppingSite } from "../types.js";
+import { browseFeed } from "./browse.js";
+import { ebayCard, ebayItemId, hiddenLabels, type EbayWords } from "./card.js";
+import { ebayListingApi } from "./listing-api.js";
 
 const PAGE_SIZE = 60;
 const SORTS: Record<ShoppingSort, string> = {
@@ -31,13 +34,6 @@ const SORTS: Record<ShoppingSort, string> = {
   [ShoppingSort.PriceLow]: "15",
   [ShoppingSort.PriceHigh]: "16",
   [ShoppingSort.EndingSoon]: "1",
-};
-const API_SORTS: Record<ShoppingSort, ListingSort> = {
-  [ShoppingSort.Newest]: ListingSort.Newest,
-  [ShoppingSort.Relevance]: ListingSort.BestMatch,
-  [ShoppingSort.PriceLow]: ListingSort.PriceLow,
-  [ShoppingSort.PriceHigh]: ListingSort.PriceHigh,
-  [ShoppingSort.EndingSoon]: ListingSort.EndingSoon,
 };
 /** Where the filler starts: "Results matching fewer words" and its translations. */
 const FEWER_WORDS = /srp-river-answer--REWRITE_START/;
@@ -195,23 +191,6 @@ function readSearch(html: string, host: string, words: EbayWords): ReturnType<Sh
   return { kind: "results", rows, total: totalOf(html), hasMore };
 }
 
-/** A listing API's rows as this site's rows: the item id makes the URL, on this site's host. */
-function readApi(page: ListingPage, l: EbayLocale): ReadOutcome {
-  if (!page.rows.length) return { kind: "empty" };
-  const rows = page.rows.flatMap((r): RawListing[] => {
-    let id = r.id;
-    try {
-      id ??= ebayItemId(new URL(r.url));
-    } catch {
-      id = undefined;
-    }
-    if (!id || !/^\d{9,15}$/.test(id)) return [];
-    const shipping = r.shipping && l.words.freeShipping.test(r.shipping) ? "free" : r.shipping;
-    return [{ url: `https://${l.host}/itm/${id}`, id, title: r.title, price: r.price?.amount, currency: r.price?.currency, shipping, condition: conditionOf(r.condition), seller: r.seller, image: r.images[0], details: { Condition: r.condition } }];
-  });
-  return { kind: "results", rows, total: page.total, hasMore: page.hasMore };
-}
-
 function site(l: EbayLocale): ShoppingSite {
   return {
     key: l.key,
@@ -231,13 +210,8 @@ function site(l: EbayLocale): ShoppingSite {
       };
     },
     read: (page) => readSearch(page.content, l.host, l.words),
-    api: {
-      request: (sq) => ({
-        listing: { market: l.market, query: sq.query, sort: API_SORTS[sq.sort], minPrice: sq.minPrice, maxPrice: sq.maxPrice, page: sq.page },
-        applies: { sort: true, minPrice: true, maxPrice: true },
-      }),
-      read: (page) => readApi(page, l),
-    },
+    feed: browseFeed({ host: l.host, country: l.country, currency: l.currency }),
+    api: ebayListingApi(l.market, l.host, l.words.freeShipping),
   };
 }
 

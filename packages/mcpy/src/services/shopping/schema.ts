@@ -91,6 +91,15 @@ export const ShoppingSearchInputSchema = z
     card_condition: CardConditionSchema.optional().describe("Trading cards: this grade or better"),
     language: enumSet(LanguageSchema, 10).optional().describe("Trading cards: only cards printed in these languages"),
     format: enumSet(ListingFormatSchema, 4).optional(),
+    seller_country: enumSet(CountrySchema, 10).optional().describe("Only items located in these countries (applied by the site, or by mcpy on rows that state a country)"),
+    seller: z.string().trim().min(1).max(100).optional().describe("Only this seller's listings, by the name the site shows"),
+    category: z.string().trim().min(1).max(50).optional().describe("The site's own category id, as facets list it; sites without categories report it in ignored"),
+    attributes: z
+      .record(z.string().trim().min(1).max(100), z.array(z.string().trim().min(1).max(100)).min(1).max(10))
+      .refine((a) => Object.keys(a).length >= 1 && Object.keys(a).length <= 10, { message: "1 to 10 attributes" })
+      .optional()
+      .describe('Item specifics as the site names them, as facets list them, any value matching, e.g. {"Grade": ["10", "9.5"]}. Sites without them report attributes in ignored'),
+    facets: z.boolean().default(false).describe("Also report each site's categories and item specifics with counts, from the sites that state them (to pick category and attributes)"),
     title_match: TitleMatchSchema.default(TitleMatch.Auto).describe(
       "Rows whose title lacks the query are dropped: all_words (every word), phrase (the words together, in order), any (the site's own matching). auto: all_words on sites that match loosely, any elsewhere",
     ),
@@ -155,6 +164,13 @@ export const ListingSchema = z.object({
 });
 export type Listing = z.infer<typeof ListingSchema>;
 
+const FacetCountSchema = z.object({ value: z.string(), count: z.number().int().nonnegative() });
+export const FacetsSchema = z.object({
+  categories: z.array(z.object({ id: z.string(), name: z.string(), count: z.number().int().nonnegative() })).describe("Categories matching the search; pass an id as category"),
+  attributes: z.array(z.object({ name: z.string(), values: z.array(FacetCountSchema) })).describe("Item specifics and their most common values; pass them as attributes"),
+});
+export type Facets = z.infer<typeof FacetsSchema>;
+
 export const MarketplaceReportSchema = z.object({
   marketplace: MarketplaceSchema,
   status: SiteStatusSchema,
@@ -169,6 +185,7 @@ export const MarketplaceReportSchema = z.object({
   error: ErrorCodeSchema.optional(),
   http_status: z.number().int().optional(),
   final_url: UrlSchema.optional(),
+  facets: FacetsSchema.optional(),
 });
 export type MarketplaceReport = z.infer<typeof MarketplaceReportSchema>;
 

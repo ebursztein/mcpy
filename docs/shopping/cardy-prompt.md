@@ -10,7 +10,7 @@ site then reports `over_budget`).
 **What a call costs** is in every response: `meta.cost_usd` for the call, and `cost_usd` on each
 store's report in `marketplaces[]`. Cache hits cost 0. A store is free when its page is fetched
 directly; it costs when the page must be rendered in a browser (Mercari, StarCityGames: about
-$0.0005) or when the store blocks direct fetches and a paid source serves it (eBay often does:
+$0.0005) or when the store blocks direct fetches and a paid source serves it (an eBay store does only when its free source fails:
 about $0.004 a page), and card marketplaces pay once per product page they open. Spend scales
 with how often a paid store is fetched, not with how many stores you use: search the expensive ones
 less often (a longer `max_age` serves a repeat from cache for free) rather than leaving them out.
@@ -27,7 +27,7 @@ Input:
 
 | field | use |
 | --- | --- |
-| `marketplaces` | 1-10 store keys (list below). Each key is one domain with its own currency. |
+| `marketplaces` | 1-10 store keys (list below). Each key is one domain with its own currency, except `ebay` (every eBay site, each row in its seller's currency). |
 | `query` | Write it as a seller on that site would, **in the site's language**: `リザードン` on Japanese sites, `Glurak` on German ones, `리자몽` on Korean ones. Use one call per language. |
 | `sort` | `newest` (default), `relevance`, `price_low`, `price_high`, `ending_soon`. Use `relevance` to find a specific card; `newest` returns loosely related items first on eBay. |
 | `min_price` / `max_price` | In **each site's own currency**. Mixing USD and JPY sites in one call with one bound is usually wrong: split the call. |
@@ -36,6 +36,11 @@ Input:
 | `card_condition` | This grade or better on Cardmarket's scale: `mint` > `near_mint` > `excellent` > `good` > `light_played` > `played` > `poor`. |
 | `language` | Cards printed in these languages (ISO codes: `en`, `ja`, `de`...). |
 | `format` | `fixed_price`, `auction`, `best_offer`, `wanted` (a buyer's post, never an ask). |
+| `seller_country` | Items located in these countries (`["jp"]`). eBay applies one country itself; otherwise mcpy keeps rows whose `country` matches. |
+| `seller` | One seller's listings, by the name the store shows. |
+| `category` | The store's own category id, from `facets` (eBay: `183454` is single trading cards). |
+| `attributes` | Item specifics as the store names them, from `facets`, any value matching: `{"Grade": ["10"], "Professional Grader": ["Professional Sports Authenticator (PSA)"]}`. Needs `category` (or `game`) on eBay. |
+| `facets` | `true`: each store that states them reports its categories and item specifics with counts, to pick `category` and `attributes`. Costs nothing extra on eBay but makes the reply larger: ask once, then search with the filters. |
 | `title_match` | `auto` (default), `all_words`, `phrase`, `any`. Rows whose title lacks the query are dropped. `auto` is `all_words` on the stores that match loosely (Rakuma, PayPay Flea, Leboncoin, Milanuncios, Wallapop) and `any` elsewhere. Use `phrase` for names like "black lotus"; avoid `all_words` on card marketplaces, whose rows carry the product's name, not your words. |
 | `max_results` | Listings in total for the call, up to 60 (spread across stores). |
 | `max_products` | Card marketplaces: product pages to open, 1-10 (default 3). **Each one is a fetch and costs money**; keep it at 1-3. |
@@ -66,9 +71,9 @@ all `images` and a longer `details` map. It reads the listing page's JSON-LD. It
 marketplace URLs (their "listing" URL is a product page shared by every seller), and Mercari,
 Wallapop and Bunjang have no item reader yet.
 
-## Stores (74 keys): what works
+## Stores (75 keys): what works
 
-Working (66). Card-relevant ones first:
+Working (67). Card-relevant ones first:
 
 | key | site | currency | notes |
 | --- | --- | --- | --- |
@@ -80,7 +85,8 @@ Working (66). Card-relevant ones first:
 | `yuyutei` | yuyu-tei.jp | JPY | Pokémon, Yu-Gi-Oh!, One Piece. |
 | `cardrush`, `dorasuta` | | JPY | Pokémon only. |
 | `magi`, `surugaya` | | JPY | Several games, no game filter (reports `game` ignored). |
-| `ebay_us`, `ebay_uk`, `ebay_de`, `ebay_fr`, `ebay_it`, `ebay_es` | | USD/GBP/EUR | Active listings only, no sold prices. The eBay sites share listings: one call returns each listing **once**, from the site where it is not from abroad (the seller's own price). A row from another country's eBay carries `price_converted: true`: eBay converted it or added its own taxes, and the seller's price may differ. When eBay blocks every page source, a listing API stands in; its rows then lack bids, format, location and seller, and can take 30-45 s. ebay_de is the flakiest. |
+| `ebay` | every eBay site | seller's own | Every eBay site in one search: any product, narrowed with `seller_country`, `category`, `attributes`. Japanese sellers: `seller_country: ["jp"]`; they list in USD and title in English (`charizard`, not `リザードン`). |
+| `ebay_us`, `ebay_uk`, `ebay_de`, `ebay_fr`, `ebay_it`, `ebay_es` | | USD/GBP/EUR | **Sellers located in that country** (or the `seller_country` you name), at the seller's own price and currency. Free and fast: eBay's own search answers first; only when it fails does the store read eBay's page (often paid, about $0.004) and then a listing API whose rows lack bids, format, location and seller. Bounds are in the store's currency (USD on `ebay`). On eBay, `game` sets eBay's trading-card category and Game, `language` its Language, and `condition`, `format`, `seller` and one `seller_country` are applied by eBay. Rows carry bids, end time and buy-now on auctions, seller and feedback, shipping (absent when eBay calculates it), `country`, `details["eBay site"]` and `details["USD price"]`. One call returns each listing **once** across eBay stores; `price_converted` appears only on rows read from eBay's page. Open listings only. |
 | `yahoo_auctions` | auctions.yahoo.co.jp | JPY | Auctions with bids and end times. |
 | `mercari_jp`, `paypay_flea`, `rakuma` | | JPY | Japanese flea markets. Mercari now runs auctions too: a tile showing 現在 ¥ is an オークション商品, returned as `format: "auction"` with `price` the current bid (no bids or end time on the tile). |
 | `bunjang`, `joongna`, `daangn` | | KRW | Korean marketplaces. |
@@ -110,9 +116,9 @@ prices are not available from any source mcpy has.
 
 ## Using it well
 
+- eBay: `ebay` with filters (`seller_country`, `game`, `attributes`); ask `facets: true` once to learn a category's item specifics (Grade, Professional Grader, Set...).
 - Pick the stores for the card and market: Japanese cards → `yahoo_auctions`, `mercari_jp`,
-  `cardrush`, `yuyutei`, `dorasuta` with a Japanese query; European → `cardmarket`, `ebay_de`,
-  `ebay_fr`, `kleinanzeigen`, `vinted_fr`; US → `tcgplayer`, `ebay_us`.
+  `cardrush`, `yuyutei`, `dorasuta` with a Japanese query; European → `cardmarket`, `ebay`, `kleinanzeigen`, `vinted_fr`; US → `tcgplayer`, `ebay`.
 - One currency (and one language) per call. Use `game` on card sites.
 - Keep `max_products` low and `max_age` at its default: cached reads are free, and your cap is small.
 - Page with `next_cursor` instead of raising `max_results`. A store that failed on its first page

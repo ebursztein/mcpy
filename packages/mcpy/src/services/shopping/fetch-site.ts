@@ -122,3 +122,42 @@ export async function fetchFromApi(
     return undefined;
   }
 }
+
+/** The site's price bounds are whole units in most URLs: a fractional bound is applied by mcpy instead. */
+export function honestApplies(req: SiteRequest, sq: SiteQuery): SiteRequest {
+  const applies = { ...req.applies };
+  if (sq.minPrice !== undefined && !Number.isInteger(sq.minPrice)) applies.minPrice = false;
+  if (sq.maxPrice !== undefined && !Number.isInteger(sq.maxPrice)) applies.maxPrice = false;
+  return { ...req, applies };
+}
+
+export interface SearchFetch {
+  got: SiteFetch;
+  /** The request that answered (its URL is the report's search_url, its applies decide mcpy's own filtering). */
+  req: SiteRequest;
+  /** Every fetch made, including a feed that failed. */
+  served: Served<unknown>[];
+}
+
+/**
+ * A site's search, cheapest source first: its feed (free, fuller rows) when
+ * it has one, then its search page through the fallback chain, then its
+ * listing API. A feed that failed in any way hands over to the page; an empty
+ * feed answer stands, as the site's own "no results".
+ */
+export async function searchSource(engine: Engine, site: ShoppingSite, sq: SiteQuery, scope: CallScope, maxAgeSeconds: number): Promise<SearchFetch> {
+  const served: Served<unknown>[] = [];
+  if (site.feed) {
+    const req = honestApplies(site.feed.search(sq), sq);
+    const got = await fetchAndRead(engine, site, req, (p) => site.feed!.read(p, sq), scope, maxAgeSeconds);
+    if (got.served) served.push(got.served);
+    if (got.outcome.kind !== "failed" || got.error === ErrorCode.BudgetExceeded) return { got, req, served };
+  }
+  let req = honestApplies(site.search(sq), sq);
+  let got = await fetchAndRead(engine, site, req, (p) => site.read(p, sq), scope, maxAgeSeconds);
+  const viaApi = await fetchFromApi(engine, site, sq, got, scope, maxAgeSeconds);
+  // The listing API applies its own filters; the report keeps the site's search URL.
+  if (viaApi) [got, req] = [viaApi.got, honestApplies({ ...req, applies: viaApi.applies }, sq)];
+  if (got.served) served.push(got.served);
+  return { got, req, served };
+}

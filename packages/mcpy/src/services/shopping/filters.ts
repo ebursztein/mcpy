@@ -1,8 +1,10 @@
 /**
  * What mcpy applies on the rows when a site does not: price bounds, sort and
- * the listing filters. A filter on a field no row states is reported as
- * ignored instead of emptying the page; rows that lack a field the others
- * state are dropped (they cannot be shown to match).
+ * the listing filters. A filter the site applied (SiteRequest.applies) is
+ * trusted. A filter on a field no row states is reported as ignored instead
+ * of emptying the page; rows that lack a field the others state are dropped
+ * (they cannot be shown to match). Category and attributes exist only on the
+ * site's side: a site that did not apply them reports them ignored.
  */
 
 import { RequestPart, type RequestPart as Part } from "../common.js";
@@ -32,7 +34,7 @@ export function applyFilters(rows: Listing[], input: ShoppingSearchQuery, req: S
   if (input.max_price !== undefined && !applies.maxPrice) {
     out = byField(out, (l) => l.price !== undefined, (l) => l.price!.amount <= input.max_price!, RequestPart.MaxPrice, ignored);
   }
-  if (input.condition) {
+  if (input.condition && !applies.condition) {
     const wanted = new Set(input.condition);
     out = byField(out, (l) => l.condition !== undefined, (l) => wanted.has(l.condition!), RequestPart.Condition, ignored);
   }
@@ -40,14 +42,24 @@ export function applyFilters(rows: Listing[], input: ShoppingSearchQuery, req: S
     const worst = CARD_CONDITION_ORDER.indexOf(input.card_condition);
     out = byField(out, (l) => l.card_condition !== undefined, (l) => CARD_CONDITION_ORDER.indexOf(l.card_condition!) <= worst, RequestPart.CardCondition, ignored);
   }
-  if (input.language) {
+  if (input.language && !applies.language) {
     const wanted = new Set<string>(input.language);
     out = byField(out, (l) => l.language !== undefined, (l) => wanted.has(l.language!), RequestPart.Language, ignored);
   }
-  if (input.format) {
+  if (input.format && !applies.format) {
     const wanted = new Set<string>(input.format);
     out = byField(out, (l) => l.format !== undefined, (l) => wanted.has(l.format!), RequestPart.Format, ignored);
   }
+  if (input.seller_country && !applies.sellerCountry) {
+    const wanted = new Set<string>(input.seller_country);
+    out = byField(out, (l) => l.country !== undefined, (l) => wanted.has(l.country!), RequestPart.SellerCountry, ignored);
+  }
+  if (input.seller && !applies.seller) {
+    const wanted = input.seller.toLowerCase();
+    out = byField(out, (l) => l.seller !== undefined, (l) => l.seller!.name.toLowerCase() === wanted, RequestPart.Seller, ignored);
+  }
+  if (input.category && !applies.category) ignored.push(RequestPart.Category);
+  if (input.attributes && !applies.attributes) ignored.push(RequestPart.Attributes);
   if (!applies.sort && input.sort !== ShoppingSort.Relevance) {
     const sorted = sortRows(out, input.sort);
     if (sorted) out = sorted;

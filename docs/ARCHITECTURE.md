@@ -71,6 +71,18 @@ MCP / REST -> Mcpy facade -> services/shopping -> sites/<site> -> engine.page() 
 - **Fetcher**: the engine's page path, unchanged: the universal cache
   (`max_age`), site routes, fallback chain, render providers. Sites prefer
   their own JSON APIs and embedded state (free) over rendering (paid).
+- **Feeds** (first): a site may declare a `feed`, a free source tried
+  before its search page (the eBay stores: eBay's Browse search, through
+  PicClick, with the store's country and currency). Any failure hands over
+  to the page; an empty answer stands. `searchSource` in `fetch-site.ts`
+  runs feed, page, listing API in that order.
+- **Generic filters**: every listing filter (`condition`, `format`,
+  `language`, `game`, `seller_country`, `seller`, `category`, `attributes`)
+  reaches the site in `SiteQuery`; the site claims what it applied in
+  `SiteRequest.applies`, and `filters.ts` filters the rest on the rows or
+  reports it in `ignored` (category and attributes exist only on the site's
+  side). A site may return `facets` (categories, item specifics with
+  counts), reported when the caller asks.
 - **Listing APIs** (last resort): a site may declare an `api` read (today the
   six eBay sites). When every page source failed for its search page
   (`blocked`, `timeout`, `upstream_failed`; not `redesigned` or `redirected`,

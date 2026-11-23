@@ -1,6 +1,6 @@
 # Shopping stores: status (2026-11-23)
 
-`shopping_search` covers 74 store keys behind one listing format. Each group
+`shopping_search` covers 75 store keys behind one listing format. Each group
 file next to this one records the path chosen per store and its live checks:
 [asia](stores-asia.md), [cards](stores-cards.md), [ebay-americas](stores-ebay-americas.md),
 [europe-a](stores-europe-a.md), [europe-b](stores-europe-b.md), [europe-c](stores-europe-c.md).
@@ -12,7 +12,7 @@ review fixes. The 6 empty ones were rechecked with a query their site has: Magic
 
 | Result | Count | Stores |
 | --- | --- | --- |
-| Working | 66 | every store not listed below; ebay_de is blocked on about one call in three (final sweep blocked; recheck: named 60 rows, floor 60 rows all >= 50 EUR, nonsense blocked) |
+| Working | 67 | every store not listed below (`ebay`, added 2026-11-23 after the sweep, checked live on its own; since then every eBay store reads eBay's Browse search first, free); ebay_de is blocked on about one call in three (final sweep blocked; recheck: named 60 rows, floor 60 rows all >= 50 EUR, nonsense blocked) |
 | Failed | 7 | mercadolivre_br, mercadolibre_ar, mercadolibre_mx, mercadolibre_cl, mercadolibre_co, coolstuffinc, sahibinden |
 | Failed (site) | 1 | locanto_it: the site's TLS certificate does not cover www.locanto.it, and http redirects to a 403 |
 

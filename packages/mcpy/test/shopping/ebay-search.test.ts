@@ -11,8 +11,9 @@ const ebayUs = site("ebay_us");
 const ebayDe = site("ebay_de");
 
 describe("ebay sites", () => {
-  it("has one site per domain, each in its own currency", () => {
+  it("has every eBay site in one store, then one site per domain", () => {
     expect(ebaySites.map((s) => [s.key, s.host, s.currency])).toEqual([
+      ["ebay", "picclick.com", "USD"],
       ["ebay_us", "www.ebay.com", "USD"],
       ["ebay_uk", "www.ebay.co.uk", "GBP"],
       ["ebay_de", "www.ebay.de", "EUR"],
@@ -25,7 +26,7 @@ describe("ebay sites", () => {
   it("applies sort, price, page size and page on the site", () => {
     const req = ebayDe.search(query({ query: "black lotus", minPrice: 50, maxPrice: 900, page: 3 }));
     expect(req.url).toBe("https://www.ebay.de/sch/i.html?_nkw=black+lotus&_sop=10&_udlo=50&_udhi=900&_ipg=60&_pgn=3&rt=nc");
-    expect(req.applies).toEqual({ sort: true, minPrice: true, maxPrice: true });
+    expect(req.applies).toMatchObject({ sort: true, minPrice: true, maxPrice: true });
     expect(req.render).toBeUndefined();
     expect(ebayUs.search(query({ sort: "price_low" })).url).toContain("_sop=15");
     expect(ebayUs.search(query({ sort: "ending_soon" })).url).toContain("_sop=1&");

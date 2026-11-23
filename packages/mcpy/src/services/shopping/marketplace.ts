@@ -8,6 +8,7 @@ import { z } from "zod";
 
 export const MARKETPLACES = [
   // eBay
+  "ebay",
   "ebay_us",
   "ebay_uk",
   "ebay_de",

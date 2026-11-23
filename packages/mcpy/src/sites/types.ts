@@ -14,7 +14,7 @@ import type { HttpMethod, PageFormat } from "../enums.js";
 import type { ListingPage, ListingRequest } from "../providers/listing-types.js";
 import type { Country, Currency, Language, SiteFailure } from "../services/common.js";
 import type { Marketplace } from "../services/shopping/marketplace.js";
-import type { CardCondition, Condition, Game, ListingFormat, ListingStatus, ShoppingSort } from "../services/shopping/schema.js";
+import type { CardCondition, Condition, Facets, Game, ListingFormat, ListingStatus, ShoppingSort } from "../services/shopping/schema.js";
 
 /** What a site is asked for, already validated. */
 export interface SiteQuery {
@@ -28,6 +28,35 @@ export interface SiteQuery {
   cursor?: string;
   /** Trading-card game asked for; unset: the site's first game. */
   game?: Game;
+  /**
+   * The listing filters, for a site that can apply them on its side. A site
+   * claims each one it applied in SiteRequest.applies; mcpy filters the rest
+   * on the rows, or reports them ignored.
+   */
+  condition?: readonly Condition[];
+  format?: readonly ListingFormat[];
+  language?: readonly Language[];
+  sellerCountry?: readonly Country[];
+  seller?: string;
+  category?: string;
+  attributes?: Readonly<Record<string, readonly string[]>>;
+  /** Ask the site for its categories and item specifics with counts. */
+  facets?: boolean;
+}
+
+/** Parts of a query a request applies on the site's side. Unset: not applied. */
+export interface Applied {
+  sort?: boolean;
+  minPrice?: boolean;
+  maxPrice?: boolean;
+  game?: boolean;
+  condition?: boolean;
+  format?: boolean;
+  language?: boolean;
+  sellerCountry?: boolean;
+  seller?: boolean;
+  category?: boolean;
+  attributes?: boolean;
 }
 
 /** One page fetch the site wants, and which requested parts its URL applies. */
@@ -42,8 +71,8 @@ export interface SiteRequest {
   headers?: Record<string, string>;
   /** Fetch as a visitor from this country, for sites that localize prices by IP (a hint to render providers). */
   country?: Country;
-  /** Parts of the query this request applies on the site's side. Unset: not applied. */
-  applies?: { sort?: boolean; minPrice?: boolean; maxPrice?: boolean };
+  /** Parts of the query this request applies on the site's side. */
+  applies?: Applied;
 }
 
 /** The fetched page as a site sees it. */
@@ -99,7 +128,7 @@ export interface ProductLink {
 }
 
 export type ReadOutcome =
-  | { kind: "results"; rows: RawListing[]; total?: number; products?: ProductLink[]; hasMore?: boolean; nextCursor?: string }
+  | { kind: "results"; rows: RawListing[]; total?: number; products?: ProductLink[]; hasMore?: boolean; nextCursor?: string; facets?: Facets }
   | { kind: "empty" }
   | { kind: "failed"; failure: SiteFailure; detail: string };
 
@@ -133,6 +162,12 @@ export interface ShoppingSite {
   pagesByCursor?: boolean;
   search(q: SiteQuery): SiteRequest;
   read(page: SitePage, q: SiteQuery): ReadOutcome;
+  /**
+   * A source tried before the search page, when it is free and fuller (eBay:
+   * its Browse API). When it fails for any reason the search page is read as
+   * usual; an empty answer stands.
+   */
+  feed?: { search(q: SiteQuery): SiteRequest; read(page: SitePage, q: SiteQuery): ReadOutcome };
   /** Sites whose search rows are products: how to read a product page's offers. */
   product?: { request(link: ProductLink): SiteRequest; read(page: SitePage, link: ProductLink): ReadOutcome };
   /**

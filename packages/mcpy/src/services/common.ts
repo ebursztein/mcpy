@@ -42,6 +42,11 @@ const requestPart = enumOf({
   Location: "location",
   Cursor: "cursor",
   Game: "game",
+  SellerCountry: "seller_country",
+  Seller: "seller",
+  Category: "category",
+  Attributes: "attributes",
+  Facets: "facets",
 } as const);
 export const RequestPart = requestPart.values;
 export const RequestPartSchema = requestPart.schema;
