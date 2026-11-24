@@ -24,6 +24,8 @@ export interface Env {
   AUTH_LIMITER?: RateLimiterLike;
   /** One Durable Object per client holding today's spend (see budget.ts). */
   BUDGET?: BudgetNamespaceLike;
+  /** One Durable Object holding every client's call log (see usage/log.ts). */
+  USAGE?: BudgetNamespaceLike;
   /** Runs fetch scripts; without it, fetch rejects `script`. */
   LOADER?: WorkerLoaderLike;
   /** Browser Rendering: enables the cloudflare_browser page provider with no API token. */

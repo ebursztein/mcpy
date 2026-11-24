@@ -226,7 +226,7 @@ export async function shoppingSearchOp(engine: Engine, input: ShoppingSearchQuer
     if (meter) r.report.cost_usd = roundUsd(meter.spentUsd);
     return r;
   });
-  const served = combined(sites.flatMap((s) => s.served));
+  const served = { ...combined(sites.flatMap((s) => s.served)), parts: Object.fromEntries(sites.flatMap((s) => (s.served[0] ? [[s.key, s.served[0].provider]] : []))) };
   const { results, consumed } = mergeSites(
     sites.map((s) => ({ key: s.key, pool: SITES[s.key]?.listingPool, rows: s.rows })),
     input.max_results,

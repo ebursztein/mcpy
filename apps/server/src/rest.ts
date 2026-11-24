@@ -3,6 +3,8 @@
  *
  *   GET|POST /v1/fetch   /v1/grep   /v1/search   /v1/papers    (same fields as the SDK)
  *   e.g. GET /v1/search?query=rust&type=news&recency=week&country=us&sites=github.com,lwn.net
+ *   GET|POST /v1/usage  /v1/usage/log              (the caller's own usage; admins may pass client)
+ *   GET      /v1/admin/dashboard                   (admin clients only: the dashboard's data)
  *   GET      /v1/admin/providers                   (admin clients only)
  *   GET      /v1/admin/spending                    (admin clients only: today's spend per client)
  *
@@ -14,6 +16,7 @@ import { ErrorCode, McpyError, RestRoute, type McpyApi } from "mcpy";
 import { ClientRole, type Client } from "./clients.js";
 import { secondsUntilReset } from "./budget.js";
 import type { ProviderSetup } from "./providers.js";
+import { dashboardData, UsageRoute, usageLogFor, usageSummary, type UsageDeps } from "./usage/api.js";
 
 export const AdminRoute = { Providers: "/v1/admin/providers", Spending: "/v1/admin/spending" } as const;
 
@@ -29,8 +32,8 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const errorResponse = (err: McpyError, headers: Record<string, string> = {}) => json(err.toJSON(), err.httpStatus, headers);
 
-const NUMERIC = new Set(["offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
-const BOOLEAN = new Set(["literal", "open_access"]);
+const NUMERIC = new Set(["limit", "days", "offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
+const BOOLEAN = new Set(["literal", "open_access", "paid_only", "errors_only", "cache_hits_only"]);
 const LIST = new Set(["sites", "exclude_sites"]);
 
 /**
@@ -66,7 +69,7 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.ShoppingItem]: (api, input) => api.shoppingItem(input as never),
 };
 
-export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView): Promise<Response> {
+export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView, usage?: UsageDeps): Promise<Response> {
   const isAdminRoute = Object.values(AdminRoute).includes(url.pathname as (typeof AdminRoute)[keyof typeof AdminRoute]);
   if (isAdminRoute && client.role !== ClientRole.Admin) return errorResponse(new McpyError(ErrorCode.Forbidden, "admin only"));
   if (url.pathname === AdminRoute.Spending) {
@@ -82,6 +85,16 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
       listings: providers.listings.map((p) => p.id),
       skipped: providers.skipped,
     });
+  }
+
+  if (url.pathname === UsageRoute.Summary || url.pathname === UsageRoute.Log || url.pathname === UsageRoute.Dashboard) {
+    if (!usage) return errorResponse(new McpyError(ErrorCode.NotFound, "usage is not recorded (no USAGE binding)"));
+    const read = url.pathname === UsageRoute.Summary ? usageSummary : url.pathname === UsageRoute.Log ? usageLogFor : dashboardData;
+    try {
+      return json(await read(client, await readInput(request, url), usage));
+    } catch (err) {
+      return errorResponse(err instanceof McpyError ? err : new McpyError(ErrorCode.Internal, "internal error"));
+    }
   }
 
   const operation = OPERATIONS[url.pathname as RestRoute];

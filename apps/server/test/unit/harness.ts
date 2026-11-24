@@ -7,7 +7,9 @@
 import { vi } from "vitest";
 import worker from "../../src/index.js";
 import type { Env } from "../../src/env.js";
+import { DatabaseSync } from "node:sqlite";
 import { ClientBudget, type BudgetNamespaceLike } from "../../src/budget.js";
+import { UsageLog, type SqlLike } from "../../src/usage/log.js";
 
 export const USER_KEY = "user-key-0123456789abcdef";
 export const ADMIN_KEY = "admin-key-0123456789abcdef";
@@ -188,6 +190,34 @@ export function budgetNamespace(): BudgetNamespaceLike & { objects: Map<string, 
         const data = new Map<string, unknown>();
         objects.set(name, new ClientBudget({ storage: { get: async <T>(k: string) => data.get(k) as T | undefined, put: async (k, v) => void data.set(k, v) } }));
       }
+      const object = objects.get(name)!;
+      return { fetch: (request: Request) => object.fetch(request) };
+    },
+  };
+}
+
+/** Durable Object SQL storage over an in-memory node:sqlite database. */
+export function memorySql(): SqlLike & { db: DatabaseSync } {
+  const db = new DatabaseSync(":memory:");
+  return {
+    db,
+    // Like Durable Object storage.sql: the statement runs at exec, not when rows are read.
+    exec: (query, ...bindings) => {
+      const rows = db.prepare(query).all(...(bindings as never[])) as Record<string, unknown>[];
+      return { toArray: () => rows };
+    },
+  };
+}
+
+/** Real UsageLog objects over in-memory SQLite, one per name. */
+export function usageNamespace(): BudgetNamespaceLike & { objects: Map<string, UsageLog> } {
+  const objects = new Map<string, UsageLog>();
+  return {
+    objects,
+    idFromName: (name) => name,
+    get(id) {
+      const name = id as unknown as string;
+      if (!objects.has(name)) objects.set(name, new UsageLog({ storage: { sql: memorySql() } }));
       const object = objects.get(name)!;
       return { fetch: (request: Request) => object.fetch(request) };
     },

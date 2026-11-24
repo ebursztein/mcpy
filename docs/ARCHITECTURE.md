@@ -158,6 +158,33 @@ operation reports what its attempts cost, failed ones included. The server's
 limit keeps each client's total for the UTC day in its own Durable Object
 (`ClientBudget`). Costs are the providers' per-call estimates.
 
+Usage: the server wraps the SDK it hands each request (usage/recorder.ts)
+so every call yields log rows from its input and result: tool, query (URL or
+search text), the other args as JSON (headers, body, script and cursor are
+never logged), domain, store (one row per store for shopping_search, with
+that store's cost), status, cache hit, attempts, duration and cost. The cost
+comes through a spend limit wrapping the client's own, so failed calls count
+too. Rows are written after the response to one `UsageLog` Durable Object
+(one SQLite table for every client, 30 days); the `usage` / `usage_log`
+tools and `/v1/usage` routes are SQL over it. A client sees only its own
+rows; admins may ask for one client or all. The backend that served a call
+comes from the SDK's `onServed` call-context hook (per store for shopping)
+and is stored as an opaque number; only admins are shown its name.
+
+Dashboard (apps/server/src/dashboard/): two static pages, `/dashboard` and
+`/dashboard/log`, styled after deepmine's UI (Inter, slate ink, Tailwind 500
+hues). They carry no data and no key: the viewer enters
+an admin key, kept in that browser, and the pages call the admin-only
+`/v1/admin/dashboard` (summary for every client, client x tool and day x tool
+stacks from usage/stacks.ts, today's spend per cap) and `/v1/usage/log`.
+Served with no-store, DENY framing and a CSP that allows only this origin.
+The charts are ECharts, bundled as deepmine does: dashboard/charts.browser.ts
+registers only the bar chart, grid, legend, tooltip and SVG renderer, and
+`npm run build` bundles it with esbuild to dist/public/dashboard/charts.js,
+which Cloudflare serves as a static asset (wrangler `assets`) without running
+the Worker; it is never part of the Worker's own code. Page attempt spans also
+carry the target host, so telemetry has cost per domain too.
+
 Owner alerts: the call context can also carry an `onQuota` sink. The chain
 calls it when a paid provider fails with 402 (`out_of_credits`) or 429
 (`rate_limited`); the alert names the provider, so it is for the host, never

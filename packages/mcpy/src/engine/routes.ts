@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { Attr } from "../telemetry/attributes.js";
 import type { Cache } from "./cache.js";
 
 const ROUTE_VERSION = "v1";
@@ -41,6 +42,15 @@ export function siteOf(url: string, format: string): string | undefined {
     return `${format}:${new URL(url).hostname.toLowerCase()}`;
   } catch {
     return undefined;
+  }
+}
+
+/** The attempt-span attribute naming a page request's host (none for a bad URL). */
+export function targetHostAttributes(url: string): Record<string, string> {
+  try {
+    return { [Attr.TargetHost]: new URL(url).host };
+  } catch {
+    return {};
   }
 }
 

@@ -65,7 +65,7 @@ describe("layering", () => {
   // workerd treats every named export as an entrypoint; Durable Object classes must be exported here.
   it("the Worker entry module exports only its default handler and its Durable Object classes", () => {
     const source = read(join(SERVER_SRC, "index.ts"));
-    const DURABLE_OBJECTS = ['export { ClientBudget } from "./budget.js";'];
+    const DURABLE_OBJECTS = ['export { ClientBudget } from "./budget.js";', 'export { UsageLog } from "./usage/log.js";'];
     const lines = source.split("\n").filter((l) => /^export\s+(?!default\b)/.test(l));
     expect(lines).toEqual(DURABLE_OBJECTS);
   });

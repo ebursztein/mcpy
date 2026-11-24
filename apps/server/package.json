@@ -5,8 +5,9 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build": "esbuild src/dashboard/charts.browser.ts --bundle --minify --format=iife --target=es2020 --legal-comments=linked --outfile=dist/public/dashboard/charts.js",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types"
   },
@@ -14,11 +15,13 @@
     "@cloudflare/puppeteer": "^1.4.0",
     "@modelcontextprotocol/server": "^2.3.1",
     "agents": "^0.30.0",
+    "echarts": "^6.1.0",
     "mcpy": "*",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261022.1",
+    "esbuild": "^0.28.2",
     "wrangler": "^4.152.0"
   }
 }

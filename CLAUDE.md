@@ -20,5 +20,5 @@ npm test            # unit, contract, regression, structure, perf
 npm run test:e2e    # boots the Worker locally and exercises MCP + REST against elie.net
 npm run test:live   # real provider APIs (needs keys in apps/server/.dev.vars)
 npm run typecheck
-npm run build       # builds the SDK to packages/mcpy/dist
+npm run build       # builds the SDK to packages/mcpy/dist and the dashboard charts
 ```

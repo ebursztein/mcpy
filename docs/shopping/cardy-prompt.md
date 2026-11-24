@@ -16,6 +16,14 @@ with how often a paid store is fetched, not with how many stores you use: search
 less often (a longer `max_age` serves a repeat from cache for free) rather than leaving them out.
 Read `cost_usd` on a few calls per store to set each store's frequency.
 
+**Your own usage** is one call away: the `usage` tool (or `GET /v1/usage`) gives today's spend,
+your cap and what is left, and your calls, paid calls, cache hit rate, errors, cost and time by
+tool, domain, store, search type and day (`days` up to 30). `usage_log` (or `GET /v1/usage/log`)
+lists your calls, newest first, with the query, args, domain, store, cost, cache hit and time;
+filter with `tool`, `domain`, `store`, `search_type`, `query`, `paid_only`, `errors_only` or
+`cache_hits_only`. A fetch is free only when the site answers a plain request: sites that block
+it or need JavaScript (TCGplayer product pages, Cardmarket) cost money.
+
 ## shopping_search: one call, many stores, one listing format
 
 Every result is **one listing on one store**: a seller's asking price (or current bid) for one item.

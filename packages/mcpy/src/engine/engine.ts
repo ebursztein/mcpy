@@ -21,7 +21,7 @@ import { capablePageProviders, noCapableProvider, pageCacheKey, routeSite } from
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
 import type { QuotaAlert } from "./quota.js";
-import { routeOrder, SiteRoutes } from "./routes.js";
+import { routeOrder, SiteRoutes, targetHostAttributes } from "./routes.js";
 import { PagePins, type Pinned } from "./pins.js";
 
 export { EngineLimitsSchema, type EngineLimits } from "./limits.js";
@@ -73,6 +73,8 @@ export interface Served<T> {
   cache: CacheStatus;
   attempts: number;
   provider: string;
+  /** The provider that served each part of a call that has parts (shopping_search: each store's search). */
+  parts?: Record<string, string>;
 }
 
 interface Cached<T> {
@@ -133,6 +135,8 @@ export class Engine {
         providers,
         attempt: (p, signal, timeoutMs, parent) => p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
         judge: assessPage,
+        // Which site each attempt was for, so hosts can report cost per domain.
+        attributes: targetHostAttributes(req.url),
         describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
         ...this.chainCommon(deadlineAt, scope),
       });
@@ -287,3 +291,4 @@ export class Engine {
     };
   }
 }
+

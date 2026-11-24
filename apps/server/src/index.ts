@@ -14,10 +14,16 @@ import { rateLimited } from "./rate-limit.js";
 import { alertHooks, pagerFor } from "./pager.js";
 import { errorResponse, handleRest, json } from "./rest.js";
 import { requestTelemetry, SERVICE_VERSION } from "./telemetry.js";
+import { registerUsageTools, writeRows, type UsageDeps } from "./usage/api.js";
+import { recordingApi } from "./usage/recorder.js";
+import { DASHBOARD_HTML } from "./dashboard/dashboard-page.js";
+import { LOG_HTML } from "./dashboard/log-page.js";
+import { PAGE_HEADERS } from "./dashboard/shared.js";
 
 export { ClientBudget } from "./budget.js";
+export { UsageLog } from "./usage/log.js";
 
-const Path = { Health: "/health", Mcp: "/mcp", ApiPrefix: "/v1/" } as const;
+const Path = { Health: "/health", Mcp: "/mcp", ApiPrefix: "/v1/", Dashboard: "/dashboard", DashboardLog: "/dashboard/log" } as const;
 
 async function authenticate(request: Request, url: URL, env: Env): Promise<Client | undefined> {
   const config = loadEnv(env);
@@ -31,6 +37,9 @@ export default {
     if (url.pathname === Path.Health) return json({ ok: true, name: "mcpy", version: SERVICE_VERSION });
 
     const isMcp = url.pathname === Path.Mcp;
+    // The dashboard pages are static and hold no data: their script asks for the admin key and calls the admin routes.
+    if (request.method === "GET" && url.pathname === Path.Dashboard) return new Response(DASHBOARD_HTML, { headers: PAGE_HEADERS });
+    if (request.method === "GET" && url.pathname === Path.DashboardLog) return new Response(LOG_HTML, { headers: PAGE_HEADERS });
     if (!isMcp && !url.pathname.startsWith(Path.ApiPrefix)) return errorResponse(new McpyError(ErrorCode.NotFound, "not found"));
 
     let config;
@@ -87,24 +96,40 @@ export default {
       const cap = capFor(client.name, config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD);
       if (cap !== undefined && !env.BUDGET) telemetry.log(LogLevel.Error, "spending cap set but no BUDGET binding: not enforced", {}, span.context);
       const alerts = alertHooks(pagerFor(env, config), client.name, cap, config.CAP_WARNING_PERCENT, telemetry);
-      const api = mcpy.with({
+      const context = {
         client: client.name,
         requestId,
         transport: isMcp ? Transport.Mcp : Transport.Rest,
         parent: span.context,
-        defer: (work) => ctx.waitUntil(work),
+        defer: (work: Promise<unknown>) => ctx.waitUntil(work),
         spendLimit: cap !== undefined && env.BUDGET ? dailySpendLimit(env.BUDGET, client.name, cap, undefined, alerts.capWatch) : undefined,
         onQuota: alerts.onQuota,
-      });
+      };
+      // Every call goes to the usage log after the response; a failed write is logged, never seen by the caller.
+      const usageLog = env.USAGE;
+      const api = usageLog
+        ? recordingApi(mcpy, context, (rows) =>
+            ctx.waitUntil(writeRows(usageLog, rows).catch((err: unknown) => telemetry.log(LogLevel.Error, "usage log write failed", { [Attr.Reason]: err instanceof Error ? err.message : String(err) }, span.context))),
+          )
+        : mcpy.with(context);
 
+      const usage: UsageDeps | undefined = usageLog
+        ? {
+            log: usageLog,
+            budget: env.BUDGET,
+            clients: parseClients(config.MCPY_CLIENTS).map((c) => c.name),
+            capFor: (name) => capFor(name, config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD),
+            caps: { defaultCap: config.DAILY_BUDGET_USD, overrides: config.CLIENT_DAILY_BUDGETS_USD },
+          }
+        : undefined;
       if (!isMcp) {
         const budget = env.BUDGET;
         const spending = budget
           ? () => spendingReport(budget, parseClients(config.MCPY_CLIENTS).map((c) => c.name), config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD)
           : undefined;
-        return finish(withHeaders(await handleRest(request, url, api, client, { providers, spending }), ids));
+        return finish(withHeaders(await handleRest(request, url, api, client, { providers, spending }, usage), ids));
       }
-      return finish(withHeaders(await mcpHandler(config, api)(stripUrlKey(request, url), env, ctx), ids));
+      return finish(withHeaders(await mcpHandler(config, api, usage && { client, deps: usage })(stripUrlKey(request, url), env, ctx), ids));
     } catch (err) {
       span.recordError(err);
       base.log(LogLevel.Error, "unhandled error", { [Attr.Reason]: err instanceof Error ? err.message : String(err) }, span.context);
@@ -113,11 +138,12 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-function mcpHandler(config: ServerEnv, api?: Parameters<typeof registerMcpyTools>[1]) {
+function mcpHandler(config: ServerEnv, api?: Parameters<typeof registerMcpyTools>[1], usage?: { client: Client; deps: UsageDeps }) {
   return createMcpHandler(
     () => {
       const server = new McpServer({ name: "mcpy", version: SERVICE_VERSION });
       if (api) registerMcpyTools(server, api);
+      if (usage) registerUsageTools(server, usage.client, usage.deps);
       return server;
     },
     {

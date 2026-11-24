@@ -7,6 +7,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Static files built by `npm run build` (the dashboard's chart bundle).
+  // Cloudflare serves a path that matches a file; everything else runs the Worker.
+  "assets": { "directory": "./dist/public" },
   // Invocation logs record full request URLs, which would capture `?key=`
   // API keys; our own structured logs never include query strings.
   "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
@@ -21,9 +24,18 @@
     // Failed authentications per client IP.
     { "name": "AUTH_LIMITER", "namespace_id": "1003", "simple": { "limit": 20, "period": 60 } }
   ],
-  // Today's spend per client, one object per client name (DAILY_BUDGET_USD).
-  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
-  "migrations": [{ "tag": "v1-budget", "new_sqlite_classes": ["ClientBudget"] }],
+  // BUDGET: today's spend per client, one object per client name (DAILY_BUDGET_USD).
+  // USAGE: one object holding every client's call log (the usage tools).
+  "durable_objects": {
+    "bindings": [
+      { "name": "BUDGET", "class_name": "ClientBudget" },
+      { "name": "USAGE", "class_name": "UsageLog" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1-budget", "new_sqlite_classes": ["ClientBudget"] },
+    { "tag": "v2-usage", "new_sqlite_classes": ["UsageLog"] }
+  ],
   // Runs fetch scripts (Workers cannot eval a string). Workers Paid plan.
   "worker_loaders": [{ "binding": "LOADER" }],
   // Browser Rendering for JavaScript pages (the cloudflare_browser provider), no API token.
@@ -53,7 +65,12 @@
         { "name": "RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } },
         { "name": "AUTH_LIMITER", "namespace_id": "1004", "simple": { "limit": 20, "period": 60 } }
       ],
-      "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "ClientBudget" }] },
+      "durable_objects": {
+        "bindings": [
+          { "name": "BUDGET", "class_name": "ClientBudget" },
+          { "name": "USAGE", "class_name": "UsageLog" }
+        ]
+      },
       "worker_loaders": [{ "binding": "LOADER" }],
       "browser": { "binding": "BROWSER" },
       "vars": {

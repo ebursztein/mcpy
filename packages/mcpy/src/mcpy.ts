@@ -87,6 +87,8 @@ export interface CallContext {
   spendLimit?: SpendLimit;
   /** Told when a paid source runs out of credits or quota; runs off the request path when `defer` is set. */
   onQuota?: QuotaAlertSink;
+  /** Told which provider served a successful call (and each part of it), for the host's own records; callers never see it. */
+  onServed?: (served: { provider: string; parts?: Record<string, string> }) => void;
 }
 
 /** The SDK. Implements the same McpyApi as the REST client. */
@@ -172,6 +174,7 @@ export class Mcpy implements McpyApi {
       };
       span.setAttributes(facts);
       span.end(SpanStatus.Ok);
+      this.context.onServed?.({ provider: served.provider, ...(served.parts ? { parts: served.parts } : {}) });
       withCost(result, meter.spentUsd);
       telemetry.log(LogLevel.Info, `${operation} ok`, facts, span.context);
       return result;

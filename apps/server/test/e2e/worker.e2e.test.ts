@@ -80,6 +80,16 @@ describe("worker basics", () => {
     expect(JSON.parse(text)).toMatchObject({ ok: true, name: "mcpy" });
   });
 
+  it("serves the dashboard page and its chart bundle from this Worker's static assets", async () => {
+    const page = await fetch(new URL("/dashboard", base));
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('<script src="/dashboard/charts.js"></script>');
+    const charts = await fetch(new URL("/dashboard/charts.js", base));
+    expect(charts.status).toBe(200);
+    expect(charts.headers.get("Content-Type")).toMatch(/javascript/);
+    expect(await charts.text()).toContain("echarts");
+  });
+
   it("rejects a missing or wrong key with 401", async () => {
     for (const key of [null, "x".repeat(30)]) {
       const { response, text } = await post(RestRoute.Fetch, { url: TARGET }, key);
@@ -128,6 +138,20 @@ describe("REST against elie.net", () => {
     expect(second.meta.latency_ms).toBeLessThan(BUDGET.cachedServerMs);
     expect(warm.wallMs).toBeLessThan(BUDGET.cachedWallMs);
     Object.assign(measured, { cachedWallMs: Math.round(warm.wallMs), cachedServerMs: second.meta.latency_ms });
+  });
+
+  it("logs the client's calls in the usage log, by domain", async () => {
+    await post("/v1/fetch", { url: TARGET, max_chars: 200 });
+    // Rows are written after the response: give the Durable Object a moment.
+    let log: { calls: { tool: string; query?: string; domain?: string }[] } = { calls: [] };
+    for (let i = 0; i < 20 && log.calls.length === 0; i++) {
+      log = JSON.parse((await api("/v1/usage/log?domain=elie.net&limit=5")).text);
+      if (log.calls.length === 0) await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(log.calls[0]).toMatchObject({ tool: "fetch", query: TARGET, domain: "elie.net" });
+    const usage = JSON.parse((await api("/v1/usage")).text) as { totals: { calls: number; cache_hit_rate: number }; by_domain: { key: string }[] };
+    expect(usage.totals.calls).toBeGreaterThan(0);
+    expect(usage.by_domain.map((d) => d.key)).toContain("elie.net");
   });
 
   it("runs a fetch script on the whole page and returns only its result", async () => {
@@ -183,13 +207,13 @@ describe("MCP against elie.net", () => {
 
   const INIT = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "mcpy-e2e", version: "0.0.0" } };
 
-  it("initializes and lists exactly web_fetch, web_grep, web_search, paper_search, shopping_search, shopping_item", async () => {
+  it("initializes and lists exactly the six mcpy tools plus usage and usage_log", async () => {
     const init = await rpc("initialize", INIT);
     expect(init.response.status).toBe(200);
     expect(init.message.result?.serverInfo).toMatchObject({ name: "mcpy" });
     const list = await rpc("tools/list", {});
     const names = ((list.message.result?.tools ?? []) as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem].sort());
+    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem, "usage", "usage_log"].sort());
   });
 
   it("accepts the key as ?key= on /mcp", async () => {

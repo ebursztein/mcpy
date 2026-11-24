@@ -50,6 +50,28 @@ which tool to use when, errors, and safety rules.
 - `method: "POST"` with a `body` (up to 100,000 characters) for APIs that take one; a JSON body without a `Content-Type` header is sent as `application/json`. Only a direct request sends a POST (no paid fallback), and it is never sent twice unless the target answers 408, 425 or 429. `headers`: up to 20 extra request headers (`Host`, `Content-Length` and connection headers are refused). Method, body, headers and `render` are all part of the cache key. These fields need POST /v1/fetch with a JSON body.
 - Long pages: pass the returned `next_offset` as `offset`, with the returned `version`, to read on (every part then comes from the same copy of the page), or pass a `script` (`export default (page) => value`) that runs on the whole page and returns only what it extracts, as JSON. Pages too long for one call come with a `tip` saying so.
 
+Every call is logged (the `USAGE` Durable Object, one SQLite table, 30 days):
+client, tool, query (the URL or the search text), the other args as JSON
+(never headers, bodies, scripts or cursors), domain, store, search type,
+status, cache hit, attempts, time taken, estimated cost and the backend that
+served it (an opaque `backend_id`; admins also get its name); a
+`shopping_search` logs one row per store with that store's cost. A client
+reads its own log: `GET /v1/usage` (calls, paid calls, cache hit rate,
+errors, cost and time by tool, domain, store, backend, search type and day, plus
+today's spend against its cap; `days=1..30`) and `GET /v1/usage/log` (rows,
+newest first; filter with `tool`, `domain`, `store`, `search_type`, `query`,
+`paid_only`, `errors_only`, `cache_hits_only`). MCP clients get the same as
+the `usage` and `usage_log` tools. Admin clients may pass `client=<name>`, or
+`client=*` for every client.
+
+A dashboard reads the same log: `/dashboard` (calls, cost, cache hit rate,
+errors and time; today's spend against each cap; calls and cost by tool, by
+client stacked by tool, by backend, by store and by domain; calls per day
+stacked by tool) and `/dashboard/log` (every client's calls, filterable; a
+row opens its args). The pages hold no data: they ask for an admin key,
+keep it in that browser, and call `GET /v1/admin/dashboard` and
+`/v1/usage/log`.
+
 Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
 (today's estimated spend and cap per client), admin clients only.
 

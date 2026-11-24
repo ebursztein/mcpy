@@ -51,6 +51,8 @@ export interface ChainOptions<P extends ChainProvider, T> {
   /** Run one attempt; `signal` fires on the attempt timeout or the deadline. */
   attempt: (provider: P, signal: AbortSignal, timeoutMs: number, parent: SpanContext) => Promise<T>;
   judge: (value: T) => Judgement;
+  /** Put on every attempt span when it starts, e.g. the target host. */
+  attributes?: Record<string, string>;
   /** Facts about a value worth putting on the attempt span. */
   describe?: (value: T) => Record<string, number>;
   attemptTimeoutMs: number;
@@ -130,7 +132,7 @@ export async function runChain<P extends ChainProvider, T>(o: ChainOptions<P, T>
 
     const timeoutMs = Math.min(Math.max(o.attemptTimeoutMs, provider.attemptTimeoutMs ?? 0), remaining);
     const started = Date.now();
-    const span = o.telemetry.startSpan(SpanName.Attempt, { [Attr.Provider]: provider.id, [Attr.CostUsd]: cost }, o.parent);
+    const span = o.telemetry.startSpan(SpanName.Attempt, { ...o.attributes, [Attr.Provider]: provider.id, [Attr.CostUsd]: cost }, o.parent);
     costUsd += cost;
     o.meter?.spend(cost);
     try {
