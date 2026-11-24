@@ -13,8 +13,13 @@ export const EngineLimitsSchema = z.object({
   pageTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(3_600),
   searchTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
   paperTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
-  /** How long a site's page provider is remembered before cheaper ones are tried first again. */
-  siteRouteTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(86_400),
+  /**
+   * How long a site's page provider is remembered before cheaper ones are tried first again.
+   * Short on purpose: while a later provider keeps serving, the cheaper ones are never tried,
+   * so one passing failure (a rate limit, a timeout) would otherwise pay for a whole day.
+   * Re-checking costs at most one failed attempt on each cheaper source, per site per period.
+   */
+  siteRouteTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
   /** Thorough mode: after the first provider answers, how long to wait for the others. */
   thoroughGraceMs: z.number().int().min(0).max(120_000).default(8_000),
 });

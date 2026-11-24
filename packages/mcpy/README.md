@@ -80,7 +80,7 @@ createMcpy({
   telemetry,                                 // see below
   limits: { attemptTimeoutMs: 20_000, deadlineMs: 45_000, maxResponseBytes: 5_000_000,
             pageTtlSeconds: 3_600, searchTtlSeconds: 900,
-            siteRouteTtlSeconds: 86_400 },       // how long a site's working source is remembered
+            siteRouteTtlSeconds: 900 },       // how long a site's working source is remembered
   retry: { retries: 2, baseDelayMs: 250, maxDelayMs: 4_000 },
   breaker: { failureThreshold: 5, cooldownMs: 30_000 },
   userAgent: { default: UserAgentProfile.Default, custom: "mybot/1.0 (+https://example.com)" },
