@@ -109,9 +109,9 @@ describe("coin facts", () => {
     for (const k of ["quoted_hashrate_unit", "miner_share_pct", "miner_fee_share_pct", "merge_mined_with", "hashprice_usd_per_hs_day"]) expect(rvn).not.toHaveProperty(k);
   });
 
-  it("works out KAS's complete-day hashprice from its scheduled subsidy, no source stating its fees", async () => {
+  it("works out KAS's complete-day hashprice from the issuance its source reads off the chain, no source stating its fees", async () => {
     const day0 = "2026-11-20"; // KAS paid 1.94454365 a block from 2026-11-04
-    const kas = past("kaspa", [{ symbol: "KAS", date: day0, networkHashrateHs: 3.2e17, blocks: 864_000 }]);
+    const kas = past("kaspa", [{ symbol: "KAS", date: day0, networkHashrateHs: 3.2e17, blocks: 864_000, issuedCoins: 1.94454365 * 864_000 }]);
     const prices = past("prices", [{ symbol: "KAS", date: day0, priceUsd: 0.027 }]);
     const { mcpy } = testMcpy({ crypto: [kas, prices] });
     const [day] = (await mcpy.cryptoCoin({ symbols: ["KAS"], from: day0, to: day0 })).coins[0].days;

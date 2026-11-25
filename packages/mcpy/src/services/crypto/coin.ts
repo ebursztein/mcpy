@@ -11,12 +11,13 @@ import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import { sha256Hex } from "../../http/url.js";
 import type { FoundCoinDay, FoundLiveCoin } from "../../providers/crypto-types.js";
 import { CoinDayStatus, coinWindow, cryptoMaxAgeOf, CryptoCoinResultSchema, MIN_CRYPTO_MAX_AGE_SECONDS, upperSymbols, type Coin, type CoinDay, type CryptoCoinQuery, type CryptoCoinResult } from "../../schemas-crypto.js";
+import { blockIssuance, lacksIssuance, minerPerBlockOf } from "./issuance.js";
 import { mergeHistories, mergeSnapshots, sourcesOf, type Merged } from "./merge.js";
 import { coinFacts, nowFigures } from "./market.js";
 import { hashprice, minerEarned, minerFees, minerSubsidy } from "./rules.js";
 import { askHistories, askSnapshots, noSources, sourcesFor } from "./sources.js";
 
-const CACHE_KEY_VERSION = "v1";
+const CACHE_KEY_VERSION = "v3";
 const DAY_MS = 86_400_000;
 /** Complete days are final once their sources have published them: a window ending this long ago is kept a day. */
 const SETTLED_AFTER_DAYS = 2;
@@ -33,7 +34,7 @@ const compact = <T extends object>(value: T): T => Object.fromEntries(Object.ent
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 export function completeDay(d: FoundCoinDay): CoinDay {
-  const subsidy = minerSubsidy(d.symbol, d.date, d.issuedCoins, d.blocks);
+  const subsidy = minerSubsidy(d.symbol, d);
   const fees = minerFees(d.symbol, d.date, d.feesCoins);
   return compact({
     date: d.date,
@@ -71,18 +72,24 @@ export function completeDay(d: FoundCoinDay): CoinDay {
   });
 }
 
-/** Today, with exactly a market row's figures. */
-export function liveDay(c: FoundLiveCoin, today: string): CoinDay {
-  return { date: today, status: CoinDayStatus.Live, as_of: c.asOf, ...nowFigures(c) };
+/** Today, with exactly a market row's figures; `minerPerBlock` as for nowFigures. */
+export function liveDay(c: FoundLiveCoin, today: string, minerPerBlock?: number): CoinDay {
+  return { date: today, status: CoinDayStatus.Live, as_of: c.asOf, ...nowFigures(c, minerPerBlock) };
 }
 
 /** One coin's output from its merged days and live reading; undefined when no source knew it. */
-export function coinOf(symbol: string, days: Map<string, Merged<FoundCoinDay>> | undefined, live: FoundLiveCoin | undefined, today: string): Coin | undefined {
+export function coinOf(
+  symbol: string,
+  days: Map<string, Merged<FoundCoinDay>> | undefined,
+  live: FoundLiveCoin | undefined,
+  today: string,
+  minerPerBlock?: number,
+): Coin | undefined {
   const complete = [...(days?.values() ?? [])].map((m) => m.value).sort((a, b) => a.date.localeCompare(b.date));
   if (!complete.length && !live) return undefined;
   return compact({
     ...coinFacts(symbol, live, complete.find((d) => d.name)?.name),
-    days: [...complete.map(completeDay), ...(live ? [liveDay(live, today)] : [])],
+    days: [...complete.map(completeDay), ...(live ? [liveDay(live, today, minerPerBlock)] : [])],
   });
 }
 
@@ -122,13 +129,22 @@ export async function cryptoCoinOp(
     );
     const snapshots = mergeSnapshots(run.a ?? []);
     const histories = mergeHistories(run.b ?? [], from, lastComplete);
+    // Coins per block for a live day whose issuance no source states: from the window's own days when it has them, else asked for.
+    const needing = [...snapshots.coins.values()].map((m) => m.value).filter(lacksIssuance);
+    const minerPerBlock: Record<string, number> = {};
+    for (const c of needing) {
+      const found = minerPerBlockOf(c.symbol, [...(histories.get(c.symbol)?.values() ?? [])].map((m) => m.value));
+      if (found !== undefined) minerPerBlock[c.symbol] = found;
+    }
+    const issuance = await blockIssuance(engine, needing.map((c) => c.symbol).filter((s) => !(s in minerPerBlock)), deadlineAt, scope);
+    Object.assign(minerPerBlock, issuance?.value.minerPerBlock);
     const parts: Record<string, string> = {};
     const coins: Coin[] = [];
     const missing: string[] = [];
     for (const symbol of symbols) {
       const days = histories.get(symbol);
       const now = snapshots.coins.get(symbol);
-      const coin = coinOf(symbol, days, now?.value, today);
+      const coin = coinOf(symbol, days, now?.value, today, minerPerBlock[symbol]);
       if (!coin) {
         missing.push(symbol);
         continue;
@@ -136,9 +152,16 @@ export async function cryptoCoinOp(
       coins.push(coin);
       const source = days ? sourcesOf(days.values()) : undefined;
       if (source) parts[`${symbol} complete`] = source;
-      if (now) parts[`${symbol} live`] = now.sources.join("+");
+      const estimatedBy = issuance?.value.sources[symbol];
+      if (now) parts[`${symbol} live`] = [...now.sources, ...(estimatedBy && !now.sources.includes(estimatedBy) ? [estimatedBy] : [])].join("+");
     }
-    return { value: { coins, missing, parts }, attempts: run.attempts, costUsd: run.costUsd, provider: run.provider, salvaged: false };
+    return {
+      value: { coins, missing, parts },
+      attempts: [...run.attempts, ...(issuance?.attempts ?? [])],
+      costUsd: run.costUsd + (issuance?.costUsd ?? 0),
+      provider: issuance ? `${run.provider}+${issuance.provider}` : run.provider,
+      salvaged: false,
+    };
   });
   const result = CryptoCoinResultSchema.parse({
     coins: served.value.coins,

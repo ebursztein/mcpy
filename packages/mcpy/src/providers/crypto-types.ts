@@ -100,6 +100,11 @@ export interface FoundCoinDay {
   difficulty?: number;
   blocks?: number;
   issuedCoins?: number;
+  /**
+   * What one block's coinbase paid out that day, read off the chain: its subsidy less any share
+   * the protocol withholds, plus fees, superblocks excepted (DASH: the 80% after the treasury's).
+   */
+  coinbasePerBlockCoins?: number;
   feesCoins?: number;
   txCount?: number;
   /** USD value of the day's new coins. */

@@ -116,8 +116,9 @@ describe("crypto_coin input", () => {
 });
 
 describe("miners' rules", () => {
-  it("knows DASH's scheduled subsidy and that its reported fees are not the miners'", () => {
-    expect(minerSubsidy("DASH", "2026-11-20", 999, 576)).toBeCloseTo(1.8479 * 576 * 0.2, 9);
+  it("gives DASH's miners a quarter of each block's coinbase payout, never its reported issuance, nor its reported fees", () => {
+    expect(minerSubsidy("DASH", { issuedCoins: 7_751, blocks: 545, coinbasePerBlockCoins: 1.64388266 })).toBeCloseTo(1.64388266 * 545 * 0.25, 9);
+    expect(minerSubsidy("DASH", { issuedCoins: 7_751, blocks: 545 })).toBeUndefined();
     expect(minerFees("DASH", "2026-11-20", 3)).toBeUndefined();
   });
   it("applies ZEC's fee share from NU7 only", () => {
@@ -125,7 +126,7 @@ describe("miners' rules", () => {
     expect(minerFees("ZEC", "2026-11-06", 10)).toBe(4);
   });
   it("leaves coins it has no rule for alone", () => {
-    expect(minerSubsidy("RVN", "2026-11-20", 1_800_000, 1440)).toBeUndefined();
+    expect(minerSubsidy("RVN", { issuedCoins: 1_800_000, blocks: 1440 })).toBeUndefined();
     expect(hashprice(1, undefined, 1)).toBeUndefined();
   });
 });

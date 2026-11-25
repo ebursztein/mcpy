@@ -37,7 +37,7 @@ describe("kaspa: request", () => {
   it("fetches the months in parallel and only for KAS", async () => {
     const { fetch, calls } = stubFetch(() => json(DAY));
     await kaspa().history!(req({ symbols: ["BTC", "kas"], from: "2026-10-30", to: "2026-11-24" }), providerCall(fetch));
-    expect(calls.map((c) => c.url).sort()).toEqual([historyUrl("2026-10"), historyUrl("2026-11")]);
+    expect(calls.map((c) => c.url).filter((u) => u.startsWith(historyUrl(""))).sort()).toEqual([historyUrl("2026-10"), historyUrl("2026-11")]);
   });
 
   it("makes no request without KAS", async () => {

@@ -89,7 +89,7 @@ const COIN_FACTS = {
   name: z.string(),
   algorithm: z.string().optional().describe("Proof-of-work algorithm, e.g. SHA-256, KawPow"),
   mined_with: MiningHardwareSchema.optional(),
-  block_time_target_s: amount.optional().describe("The protocol's target seconds between blocks"),
+  block_time_target_s: amount.optional().describe("The protocol's target seconds between blocks; absent unless the measured block time is within 2x of it (a stale target is left out)"),
   block_height: z.number().int().nonnegative().optional().describe("Latest block height"),
   hashrate_unit: HashrateUnitSchema.optional().describe("The unit of every *_hashrate_hs figure and of hashprice: H/s, or Sol/s for Equihash coins"),
   quoted_hashrate_unit: z.string().optional().describe("The unit miners usually quote this coin's hashrate in, e.g. TH/s for BTC, GSol/s for ZEC"),
@@ -138,6 +138,7 @@ const FIGURES = {
     .optional()
     .describe(
       `${HASHPRICE} Now: the latest price × the miners' share of the last 24 hours' new coins ÷ the current hashrate (fees not counted); ` +
+        "where no source states those coins (ZEC, DASH), they are what miners received per block on the latest complete day × 86,400 ÷ block_time_s; " +
         "a complete day: price_usd × (miner_subsidy_coins + miner_fees_coins) ÷ network_hashrate_hs, fees left out only for coins no source states them for (KAS, DASH). " +
         "Per hashrate_unit: multiply by quoted_hashrate_unit_hs for the quoted unit (BTC: USD per TH/s a day).",
     ),

@@ -58,7 +58,7 @@ describe("layering", () => {
 
   it("each built-in provider lives in its own folder with an index", () => {
     const dirs = readdirSync(join(SDK_SRC, "providers")).filter((d) => statSync(join(SDK_SRC, "providers", d)).isDirectory());
-    expect(dirs.sort()).toEqual(["arxiv", "brightdata", "cloudflare-browser", "coingecko", "coinmetrics", "direct", "firecrawl", "kaspa", "miningpoolstats", "openalex", "pubmed", "semantic-scholar", "serpent"]);
+    expect(dirs.sort()).toEqual(["arxiv", "brightdata", "cloudflare-browser", "coingecko", "coinmetrics", "dash", "direct", "firecrawl", "kaspa", "miningpoolstats", "openalex", "pubmed", "semantic-scholar", "serpent"]);
     for (const d of dirs) expect(statSync(join(SDK_SRC, "providers", d, "index.ts")).isFile()).toBe(true);
   });
 

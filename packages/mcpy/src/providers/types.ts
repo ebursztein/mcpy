@@ -22,6 +22,7 @@ export const ProviderId = {
   CoinMetrics: "coinmetrics",
   MiningPoolStats: "miningpoolstats",
   Kaspa: "kaspa",
+  Dash: "dash",
 } as const;
 export const ProviderIdSchema = z.enum([
   ProviderId.Direct,
@@ -37,6 +38,7 @@ export const ProviderIdSchema = z.enum([
   ProviderId.CoinMetrics,
   ProviderId.MiningPoolStats,
   ProviderId.Kaspa,
+  ProviderId.Dash,
 ]);
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 

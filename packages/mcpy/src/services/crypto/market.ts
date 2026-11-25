@@ -7,15 +7,18 @@ import { sha256Hex } from "../../http/url.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import type { FoundLiveCoin, FoundTotals } from "../../providers/crypto-types.js";
 import { cryptoMaxAgeOf, CryptoMarketResultSchema, HashrateUnit, MIN_CRYPTO_MAX_AGE_SECONDS, upperSymbols, type CryptoMarketQuery, type CryptoMarketResult, type MarketCoin } from "../../schemas-crypto.js";
+import { blockIssuance, coinsAtBlockTime, lacksIssuance } from "./issuance.js";
 import { mergeSnapshots } from "./merge.js";
 import { coinRule, hashprice, minerIssued } from "./rules.js";
 import { askSnapshots, noSources, sourcesFor } from "./sources.js";
 
-const CACHE_KEY_VERSION = "v1";
+const CACHE_KEY_VERSION = "v3";
 
 export interface MarketAnswer {
   totals?: FoundTotals;
   coins: FoundLiveCoin[];
+  /** Coins miners received per block lately, for coins whose live sources state no issuance (issuance.ts). */
+  minerPerBlock?: Record<string, number>;
 }
 
 const compact = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
@@ -23,6 +26,21 @@ const compact = <T extends object>(value: T): T => Object.fromEntries(Object.ent
 /** How much of the network the known pools account for, in percent; undefined without both figures. */
 export function poolShare(c: Pick<FoundLiveCoin, "poolHashrateHs" | "networkHashrateHs">): number | undefined {
   return c.poolHashrateHs !== undefined && c.networkHashrateHs ? (c.poolHashrateHs / c.networkHashrateHs) * 100 : undefined;
+}
+
+/**
+ * How far a measured block time may sit from a stated target before the target is taken as stale.
+ * Difficulty retargeting holds a live chain near its target; live 2026-11-25, a source's targets
+ * were off by 3x or more where the protocol had changed (ZEC 75 s against 25.1 s measured after
+ * NU7's 25 s; KAS 1 s against 0.1 s after Crescendo; ALPH, ALEO).
+ */
+const TARGET_TOLERANCE = 2;
+
+/** The source's block time target when the measured block time bears it out; undefined when stale or unchecked. */
+export function measuredTarget(targetS: number | undefined, blockTimeS: number | undefined): number | undefined {
+  if (targetS === undefined || !blockTimeS) return undefined;
+  const ratio = blockTimeS / targetS;
+  return ratio <= TARGET_TOLERANCE && ratio >= 1 / TARGET_TOLERANCE ? targetS : undefined;
 }
 
 /** Equihash-family coins count solutions; every other proof-of-work coin counts hashes. */
@@ -37,7 +55,7 @@ export function coinFacts(symbol: string, c: FoundLiveCoin | undefined, name?: s
     name: c?.name ?? name ?? symbol,
     algorithm: c?.algorithm,
     mined_with: c?.minedWith,
-    block_time_target_s: c?.blockTimeTargetS,
+    block_time_target_s: measuredTarget(c?.blockTimeTargetS, c?.blockTimeS),
     block_height: c?.blockHeight,
     hashrate_unit: c?.hashrateUnit ?? rule.hashrateUnit ?? (rule.quotedUnit ? HashrateUnit.HS : unitOfAlgorithm(c?.algorithm)),
     quoted_hashrate_unit: rule.quotedUnit,
@@ -48,8 +66,13 @@ export function coinFacts(symbol: string, c: FoundLiveCoin | undefined, name?: s
   });
 }
 
-/** A coin's figures now: a market row's and a live day's, field for field. */
-export function nowFigures(c: FoundLiveCoin) {
+/**
+ * A coin's figures now: a market row's and a live day's, field for field. Hashprice takes the
+ * miners' share of the issuance the sources state, else what miners received per block lately ×
+ * blocks a day at the live block time.
+ */
+export function nowFigures(c: FoundLiveCoin, minerPerBlock?: number) {
+  const minerCoins = c.issued24hCoins !== undefined ? minerIssued(c.symbol, c.issued24hCoins) : coinsAtBlockTime(minerPerBlock, c.blockTimeS);
   return compact({
     price_usd: c.priceUsd,
     price_change_24h_pct: c.priceChange24hPct,
@@ -73,13 +96,13 @@ export function nowFigures(c: FoundLiveCoin) {
     pool_hashrate_hs: c.poolHashrateHs,
     pool_share_pct: poolShare(c),
     issued_24h_coins: c.issued24hCoins,
-    hashprice_usd_per_hs_day: hashprice(c.priceUsd, minerIssued(c.symbol, c.issued24hCoins), c.networkHashrateHs),
+    hashprice_usd_per_hs_day: hashprice(c.priceUsd, minerCoins, c.networkHashrateHs),
   });
 }
 
 /** A merged live coin as a market row. */
-export function marketRow(c: FoundLiveCoin): MarketCoin {
-  return { ...coinFacts(c.symbol, c), ...nowFigures(c), as_of: c.asOf };
+export function marketRow(c: FoundLiveCoin, minerPerBlock?: number): MarketCoin {
+  return { ...coinFacts(c.symbol, c), ...nowFigures(c, minerPerBlock), as_of: c.asOf };
 }
 
 /** Coins in the order asked, else the largest market caps first; `missing` lists asked-for symbols nobody had. */
@@ -105,7 +128,16 @@ export async function cryptoMarketOp(
   const served = await engine.cached<MarketAnswer>(key, () => MIN_CRYPTO_MAX_AGE_SECONDS, cryptoMaxAgeOf(input.max_age), scope, async (deadlineAt) => {
     const asked = await askSnapshots(engine, providers, { symbols, limit: input.limit, totals: true }, deadlineAt, scope, cryptoMaxAgeOf(input.max_age));
     const merged = mergeSnapshots(asked.value);
-    return { ...asked, value: { totals: merged.totals, coins: [...merged.coins.values()].map((m) => m.value) } };
+    const coins = [...merged.coins.values()].map((m) => m.value);
+    const shown = pickCoins(coins, symbols, input.limit).coins;
+    const issuance = await blockIssuance(engine, shown.filter(lacksIssuance).map((c) => c.symbol), deadlineAt, scope);
+    return {
+      ...asked,
+      value: { totals: merged.totals, coins, minerPerBlock: issuance?.value.minerPerBlock },
+      attempts: [...asked.attempts, ...(issuance?.attempts ?? [])],
+      costUsd: asked.costUsd + (issuance?.costUsd ?? 0),
+      provider: issuance ? `${asked.provider}+${issuance.provider}` : asked.provider,
+    };
   });
   const picked = pickCoins(served.value.coins, symbols, input.limit);
   const totals = served.value.totals;
@@ -118,7 +150,7 @@ export async function cryptoMarketOp(
       total_market_cap_change_24h_pct: totals?.totalMarketCapChange24hPct,
       active_coins: totals?.activeCoins,
       markets: totals?.markets,
-      coins: picked.coins.map(marketRow),
+      coins: picked.coins.map((c) => marketRow(c, served.value.minerPerBlock?.[c.symbol])),
       missing: picked.missing,
       meta: { cache: served.cache, latency_ms: Date.now() - startedAt, attempts: served.attempts },
     }),

@@ -112,8 +112,9 @@ by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; ser
   calls a minute) for totals, prices of every coin and a year of daily closes, miningpoolstats
   for the live network of ~490 mined coins (its data file only answers with the `t` its homepage
   links to, so the homepage is read first; its whole table is kept 5 minutes and shared by every
-  call), Kaspa's public API for KAS's complete days (15-minute hashrate samples, averaged per day).
-  `CRYPTO_PROVIDERS` default: `coinmetrics,kaspa,coingecko,miningpoolstats`.
+  call), Kaspa's public API for KAS's complete days (15-minute hashrate samples, averaged per day;
+  the subsidy read off coinbases), Dash Core Group's Insight explorer for DASH's coinbase payout
+  per block. `CRYPTO_PROVIDERS` default: `coinmetrics,kaspa,dash,coingecko,miningpoolstats`.
 - **Merge**: every capable source is asked at once, each through its own chain; answers are
   merged field by field, the first source in configured order with a value winning. One source
   failing never fails the call while another answered.
@@ -126,9 +127,15 @@ by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; ser
   row and a live day carry exactly the same figures (built by one function), and a complete day
   uses the same names wherever the measure is the same. A test fails if the two tools drift.
 - **Miners and hashprice** (`rules.ts`): what miners receive is known per coin (carried over
-  from deepmine's registry: ZEC 80% of the subsidy and 40% of fees since NU7, DASH 20% of its
-  scheduled subsidy and no usable fee figure). Coins without a rule get no miner fields and no
+  from deepmine's registry: ZEC 80% of the subsidy and 40% of fees since NU7, DASH a quarter of
+  each block's coinbase payout and no usable fee figure). Coins without a rule get no miner fields and no
   hashprice, never a guess. Hashprice is USD a day per H/s; live days count new coins only.
+- **Block figures come from data** (`issuance.ts`, the kaspa and dash sources), never from a
+  schedule or constant in `rules.ts`. A reward is a step function, so a window is read with few
+  requests (`providers/step-fill.ts`): two equal readings settle every point between them. A source's block time target is reported only when the measured block time is
+  within 2× of it: a stale one (ZEC's 75 s after NU7's 25 s) is left out. Where no live source
+  states a coin's issuance (ZEC), it is the latest complete day's coins per block × 86,400 ÷ the
+  live block time.
 - **Bounds**: 40 day rows a call (coins × days; `from`/`to` for longer histories) and 40 market
   coins: a complete day with every figure at full precision is about 1,100 characters, a
   full market row about 1,060, so a full answer stays under the 50,000-character ceiling. Every answer is cached at least 5 minutes, whatever `max_age` says; a window ended two
@@ -143,7 +150,7 @@ by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; ser
 | --- | --- |
 | Provider down or blocked | Fallback chain: next provider on error, HTTP 401/403/429/5xx from the target, bot challenge (judged on page title, challenge markup on small pages, challenge wording on tiny pages), or an empty HTML shell |
 | Sites that block cheap providers | Site routes: once a later page provider serves a site (hostname + format), the next fetch starts with it, so a blocked direct fetch or browser attempt is not paid for on every call. The providers it skips move to the end of the chain, never out of it. Routes live in the cache for `siteRouteTtlSeconds` (default 15 minutes), then the cheap providers get another chance |
-| Definitive answers | 404/405/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
+| Definitive answers | 404/405/410 stop the chain; so does an API's own refusal (a 401/403 whose body is a small JSON value with no bot-wall markers, e.g. Kryptex's `{"detail":"You do not have permission..."}`), returned with its status and body; so do an unsafe target and an unsupported content type (no paid fallback) |
 | Thin but real pages | Short text, JSON or markdown is served as is. A short HTML page escalates; if no provider does better, the best one is returned and not cached |
 | Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After`; programming errors are never retried |
 | Slow providers | Per-attempt timeout enforced by the engine (even if a provider ignores its abort signal), capped by an overall deadline |

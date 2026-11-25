@@ -3,6 +3,7 @@ import { ProviderFailure } from "../../errors.js";
 import type { CryptoCapabilities, CryptoProvider, FoundCoinDay, HistoryRequest } from "../crypto-types.js";
 import { ProviderId, type ProviderCall } from "../types.js";
 import { HistoryResponseSchema, SampleSchema, type Sample } from "./schemas.js";
+import { issuedByDay } from "./subsidy.js";
 
 export interface KaspaOptions {
   costPerCall?: number;
@@ -71,6 +72,26 @@ export function blocksInDay(samples: Sample[]): number | undefined {
   return rate > 0 ? rate * DAY_SECONDS : undefined;
 }
 
+/** Each complete UTC day in from..to, before `today`, with its samples oldest first; days the samples do not cover are left out. */
+export function samplesByDay(raw: unknown[], from: string, to: string, today: string): Map<string, Sample[]> {
+  const byDay = new Map<string, Sample[]>();
+  for (const item of raw) {
+    const parsed = SampleSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const day = dayOf(parsed.data.timestamp);
+    if (day < from || day > to || day >= today) continue;
+    const list = byDay.get(day) ?? [];
+    list.push(parsed.data);
+    byDay.set(day, list);
+  }
+  const covered = new Map<string, Sample[]>();
+  for (const [date, unsorted] of byDay) {
+    const samples = dedupe(unsorted.sort((a, b) => a.timestamp - b.timestamp));
+    if (coversDay(date, samples)) covered.set(date, samples);
+  }
+  return covered;
+}
+
 /**
  * Complete UTC days in from..to, before `today`, from the samples (any order).
  *
@@ -82,20 +103,12 @@ export function blocksInDay(samples: Sample[]): number | undefined {
  * difficulty is the day's last sample's.
  */
 export function daysFromSamples(raw: unknown[], from: string, to: string, today: string): FoundCoinDay[] {
-  const byDay = new Map<string, Sample[]>();
-  for (const item of raw) {
-    const parsed = SampleSchema.safeParse(item);
-    if (!parsed.success) continue;
-    const day = dayOf(parsed.data.timestamp);
-    if (day < from || day > to || day >= today) continue;
-    const list = byDay.get(day) ?? [];
-    list.push(parsed.data);
-    byDay.set(day, list);
-  }
+  return daysOf(samplesByDay(raw, from, to, today));
+}
+
+function daysOf(byDay: ReadonlyMap<string, Sample[]>): FoundCoinDay[] {
   const days: FoundCoinDay[] = [];
-  for (const [date, unsorted] of byDay) {
-    const samples = dedupe(unsorted.sort((a, b) => a.timestamp - b.timestamp));
-    if (!coversDay(date, samples)) continue;
+  for (const [date, samples] of byDay) {
     const sum = samples.reduce((total, s) => total + s.hashrate_kh * 1000, 0);
     days.push({
       symbol: SYMBOL,
@@ -119,9 +132,10 @@ async function fetchPeriod(period: string, call: ProviderCall): Promise<unknown[
 }
 
 /**
- * Kaspa's public REST API (no key): KAS's network hashrate, difficulty and
- * block count for complete past days. No price, issuance or fees: those
- * come from other sources and the emission schedule.
+ * Kaspa's public REST API (no key): KAS's network hashrate, difficulty, block
+ * count and issuance for complete past days. Issuance is the day's blocks × the
+ * subsidy its coinbases state (subsidy.ts); if those reads fail, the days come
+ * without it. No price or fees.
  */
 export function kaspa(options: KaspaOptions = {}): CryptoProvider {
   return {
@@ -132,7 +146,11 @@ export function kaspa(options: KaspaOptions = {}): CryptoProvider {
       if (!req.symbols.some((s) => s.toUpperCase() === SYMBOL)) return [];
       const today = new Date().toISOString().slice(0, 10);
       const periods = await Promise.all(monthsBetween(req.from, req.to).map((m) => fetchPeriod(m, call)));
-      return daysFromSamples(periods.flat(), req.from, req.to, today);
+      const byDay = samplesByDay(periods.flat(), req.from, req.to, today);
+      const days = daysOf(byDay);
+      const blocks = new Map(days.map((d) => [d.date, d.blocks]));
+      const issued = await issuedByDay(byDay, (day) => blocks.get(day), call).catch(() => new Map<string, number>());
+      return days.map((d) => (issued.has(d.date) ? { ...d, issuedCoins: issued.get(d.date) } : d));
     },
   };
 }

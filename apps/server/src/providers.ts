@@ -8,6 +8,7 @@ import {
   coinMetrics,
   miningPoolStats,
   kaspa,
+  dash,
   type CryptoProvider,
   brightData,
   brightDataSearch,
@@ -72,6 +73,7 @@ const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
   [ProviderId.CoinMetrics]: () => UNSUPPORTED,
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
+  [ProviderId.Dash]: () => UNSUPPORTED,
 };
 
 const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
@@ -89,6 +91,7 @@ const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
   [ProviderId.CoinMetrics]: () => UNSUPPORTED,
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
+  [ProviderId.Dash]: () => UNSUPPORTED,
 };
 
 const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
@@ -106,6 +109,7 @@ const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
   [ProviderId.CoinMetrics]: () => UNSUPPORTED,
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
+  [ProviderId.Dash]: () => UNSUPPORTED,
 };
 
 const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
@@ -122,6 +126,7 @@ const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
   [ProviderId.CoinMetrics]: () => UNSUPPORTED,
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
+  [ProviderId.Dash]: () => UNSUPPORTED,
 };
 
 const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
@@ -139,6 +144,7 @@ const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
   [ProviderId.CoinMetrics]: () => coinMetrics(),
   [ProviderId.MiningPoolStats]: () => miningPoolStats(),
   [ProviderId.Kaspa]: () => kaspa(),
+  [ProviderId.Dash]: () => dash(),
 };
 
 const firecrawlOptions = (e: ServerEnv, apiKey: string) => ({ apiKey, apiUrl: e.FIRECRAWL_API_URL, usdPerCredit: e.FIRECRAWL_USD_PER_CREDIT });
