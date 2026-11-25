@@ -209,7 +209,7 @@ describe("admin", () => {
       search: [],
       papers: [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed],
       listings: [],
-      crypto: [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats],
+      crypto: [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.CoinGecko, ProviderId.MiningPoolStats],
       skipped: {
         pages: [],
         search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }],

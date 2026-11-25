@@ -112,7 +112,9 @@ export const EnvSchema = z.object({
   /** Marketplace listing APIs, the last resort for shopping sites no page source could fetch. */
   LISTING_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent]),
   /** Crypto market and network sources; the first with a value wins each field (network history first, then prices, then live network). */
-  CRYPTO_PROVIDERS: csv(ProviderIdSchema, [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats]),
+  // Not mempool: mempool.space does not answer fetches from Cloudflare Workers (2026-11-25: 41 s, three
+  // attempts, only a paid scraper got through), so it would slow every BTC/LTC day. Opt in with this var.
+  CRYPTO_PROVIDERS: csv(ProviderIdSchema, [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.CoinGecko, ProviderId.MiningPoolStats]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
