@@ -114,7 +114,9 @@ by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; ser
   links to, so the homepage is read first; its whole table is kept 5 minutes and shared by every
   call), Kaspa's public API for KAS's complete days (15-minute hashrate samples, averaged per day;
   the subsidy read off coinbases), Dash Core Group's Insight explorer for DASH's coinbase payout
-  per block. `CRYPTO_PROVIDERS` default: `coinmetrics,kaspa,dash,coingecko,miningpoolstats`.
+  per block, mempool.space (BTC) and litecoinspace.org (LTC) for a complete day's difficulty at its
+  last block (each coin's whole retarget history, one call: the last retarget timed before the next
+  UTC midnight). `CRYPTO_PROVIDERS` default: `coinmetrics,kaspa,dash,mempool,coingecko,miningpoolstats`.
 - **Merge**: every capable source is asked at once, each through its own chain; answers are
   merged field by field, the first source in configured order with a value winning. One source
   failing never fails the call while another answered.

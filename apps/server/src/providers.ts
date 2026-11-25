@@ -9,6 +9,7 @@ import {
   miningPoolStats,
   kaspa,
   dash,
+  mempool,
   type CryptoProvider,
   brightData,
   brightDataSearch,
@@ -74,6 +75,7 @@ const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
   [ProviderId.Dash]: () => UNSUPPORTED,
+  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
 const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
@@ -92,6 +94,7 @@ const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
   [ProviderId.Dash]: () => UNSUPPORTED,
+  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
 const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
@@ -110,6 +113,7 @@ const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
   [ProviderId.Dash]: () => UNSUPPORTED,
+  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
 const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
@@ -127,6 +131,7 @@ const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
   [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
   [ProviderId.Kaspa]: () => UNSUPPORTED,
   [ProviderId.Dash]: () => UNSUPPORTED,
+  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
 const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
@@ -145,6 +150,7 @@ const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
   [ProviderId.MiningPoolStats]: () => miningPoolStats(),
   [ProviderId.Kaspa]: () => kaspa(),
   [ProviderId.Dash]: () => dash(),
+  [ProviderId.Mempool]: () => mempool(),
 };
 
 const firecrawlOptions = (e: ServerEnv, apiKey: string) => ({ apiKey, apiUrl: e.FIRECRAWL_API_URL, usdPerCredit: e.FIRECRAWL_USD_PER_CREDIT });

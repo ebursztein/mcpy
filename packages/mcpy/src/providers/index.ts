@@ -44,6 +44,7 @@ export { ListingMarket, ListingMarketSchema, ListingSort, ListingSortSchema, typ
 export { coinGecko, COINGECKO_CAPABILITIES, type CoinGeckoOptions } from "./coingecko/index.js";
 export { kaspa, KASPA_CAPABILITIES } from "./kaspa/index.js";
 export { dash, DASH_CAPABILITIES } from "./dash/index.js";
+export { mempool, MEMPOOL_CAPABILITIES } from "./mempool/index.js";
 export { coinMetrics, COIN_METRICS_CAPABILITIES } from "./coinmetrics/index.js";
 export { miningPoolStats, MINING_POOL_STATS_CAPABILITIES } from "./miningpoolstats/index.js";
 export { isoFromUnix, type CryptoCapabilities, type CryptoProvider, type CryptoSnapshot, type FoundCoinDay, type FoundLiveCoin, type FoundTotals, type HistoryRequest, type SnapshotRequest } from "./crypto-types.js";

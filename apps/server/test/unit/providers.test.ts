@@ -37,7 +37,7 @@ describe("buildProviders", () => {
     // One Serpent key serves search and the eBay listing fallback.
     expect(ids(setup.listings)).toEqual([ProviderId.Serpent]);
     // Network history first, then prices, then the live network: the first with a value wins each field. None needs a key.
-    expect(ids(setup.crypto)).toEqual([ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.CoinGecko, ProviderId.MiningPoolStats]);
+    expect(ids(setup.crypto)).toEqual([ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats]);
     expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }], listings: [], crypto: [] });
   });
 
