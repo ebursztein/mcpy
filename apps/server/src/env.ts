@@ -112,7 +112,7 @@ export const EnvSchema = z.object({
   /** Marketplace listing APIs, the last resort for shopping sites no page source could fetch. */
   LISTING_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent]),
   /** Crypto market and network sources; the first with a value wins each field (network history first, then prices, then live network). */
-  CRYPTO_PROVIDERS: csv(ProviderIdSchema, [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.CoinGecko, ProviderId.MiningPoolStats]),
+  CRYPTO_PROVIDERS: csv(ProviderIdSchema, [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),

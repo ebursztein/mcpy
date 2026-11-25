@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CacheStatus, createMcpy, MemoryCache, PageFormat, PaperCollection, PaperSort, Recency, SearchType } from "mcpy";
-import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, openAlex, pubmed, serpentSearch } from "mcpy/providers";
+import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, mempool, openAlex, pubmed, serpentSearch } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
 const DEV_VARS = new URL("../../../../apps/server/.dev.vars", import.meta.url);
@@ -114,6 +114,20 @@ describe("paper indexes (live, no keys needed)", () => {
     const r = await sdk({ papers: [arxiv()], limits: { attemptTimeoutMs: 100_000, deadlineMs: 110_000 } }).papers({ query: "large language model agents", sort: PaperSort.Newest, max_results: 3, max_age: 0 });
     expect(r.results.length).toBeGreaterThan(0);
     for (const p of r.results) expect(p.pdf_url).toMatch(/^https:\/\/arxiv\.org\/pdf\//);
+  });
+});
+
+describe("retarget history (live, no keys needed)", () => {
+  it("gives BTC's and LTC's last 30 complete days their difficulty at the last block", async () => {
+    const mcpy = createMcpy({ cache: new MemoryCache(), crypto: [mempool()] });
+    const to = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    // One coin a call: 30 days each, under the 40 rows a call.
+    for (const [symbol, floor] of [["BTC", 1e13], ["LTC", 1e7]] as const) {
+      const [coin] = (await mcpy.cryptoCoin({ symbols: [symbol], from, to })).coins;
+      expect(coin.days).toHaveLength(30);
+      for (const day of coin.days) expect(day.difficulty).toBeGreaterThan(floor);
+    }
   });
 });
 
