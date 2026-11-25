@@ -1,8 +1,8 @@
 /**
  * Several sources report the same coin: their answers are merged field by
  * field, the first source in configured order that has a value winning.
- * The source behind each merged coin or day is kept for the host's usage log
- * (callers never see it).
+ * Every source that supplied at least one field of a merged coin or day is
+ * kept, in order, for the host's usage log (callers never see it).
  */
 
 import type { CryptoSnapshot, FoundCoinDay, FoundLiveCoin, FoundTotals } from "../../providers/crypto-types.js";
@@ -15,21 +15,26 @@ export interface Tagged<T> {
 
 export interface Merged<T> {
   value: T;
-  /** The source of the first value merged in. */
-  provider: string;
+  /** Every source that supplied at least one field, first one first. */
+  sources: string[];
 }
 
-/** Copy into `into` every field it lacks; existing values stand. */
-function fill<T extends object>(into: T, from: T): void {
+/** Copy into `into` every field it lacks; existing values stand. True when anything was copied. */
+function fill<T extends object>(into: T, from: T): boolean {
+  let filled = false;
   for (const [key, value] of Object.entries(from)) {
-    if (value !== undefined && (into as Record<string, unknown>)[key] === undefined) (into as Record<string, unknown>)[key] = value;
+    if (value !== undefined && (into as Record<string, unknown>)[key] === undefined) {
+      (into as Record<string, unknown>)[key] = value;
+      filled = true;
+    }
   }
+  return filled;
 }
 
 function mergeInto<T extends object>(map: Map<string, Merged<T>>, key: string, value: T, provider: string): void {
   const found = map.get(key);
-  if (found) fill(found.value, value);
-  else map.set(key, { value: { ...value }, provider });
+  if (!found) map.set(key, { value: { ...value }, sources: [provider] });
+  else if (fill(found.value, value) && !found.sources.includes(provider)) found.sources.push(provider);
 }
 
 /** Totals from the first source that had them; coins merged by symbol. */
@@ -61,11 +66,9 @@ export function mergeHistories(answers: Tagged<FoundCoinDay[]>[], from: string, 
   return bySymbol;
 }
 
-/** The source behind most of these merged entries (ties: the first seen). */
-export function mainSource(entries: Iterable<Merged<unknown>>): string | undefined {
-  const counts = new Map<string, number>();
-  for (const e of entries) counts.set(e.provider, (counts.get(e.provider) ?? 0) + 1);
-  let best: string | undefined;
-  for (const [provider, n] of counts) if (best === undefined || n > counts.get(best)!) best = provider;
-  return best;
+/** Every source behind these merged entries, in the order they first appear, joined for the log ("coinmetrics+kaspa"). */
+export function sourcesOf(entries: Iterable<Merged<unknown>>): string | undefined {
+  const all: string[] = [];
+  for (const e of entries) for (const s of e.sources) if (!all.includes(s)) all.push(s);
+  return all.length ? all.join("+") : undefined;
 }

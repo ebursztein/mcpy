@@ -11,7 +11,7 @@ import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import { sha256Hex } from "../../http/url.js";
 import type { FoundCoinDay, FoundLiveCoin } from "../../providers/crypto-types.js";
 import { CoinDayStatus, coinWindow, cryptoMaxAgeOf, CryptoCoinResultSchema, MIN_CRYPTO_MAX_AGE_SECONDS, upperSymbols, type Coin, type CoinDay, type CryptoCoinQuery, type CryptoCoinResult } from "../../schemas-crypto.js";
-import { mainSource, mergeHistories, mergeSnapshots, type Merged } from "./merge.js";
+import { mergeHistories, mergeSnapshots, sourcesOf, type Merged } from "./merge.js";
 import { coinFacts, nowFigures } from "./market.js";
 import { hashprice, minerEarned, minerFees, minerSubsidy } from "./rules.js";
 import { askHistories, askSnapshots, noSources, sourcesFor } from "./sources.js";
@@ -25,7 +25,7 @@ const SETTLED_TTL_SECONDS = 86_400;
 export interface CoinAnswer {
   coins: Coin[];
   missing: string[];
-  /** Source per "<SYMBOL> complete" / "<SYMBOL> live", for the usage log. */
+  /** Every source behind "<SYMBOL> complete" / "<SYMBOL> live", for the usage log. */
   parts: Record<string, string>;
 }
 
@@ -134,9 +134,9 @@ export async function cryptoCoinOp(
         continue;
       }
       coins.push(coin);
-      const source = days ? mainSource(days.values()) : undefined;
+      const source = days ? sourcesOf(days.values()) : undefined;
       if (source) parts[`${symbol} complete`] = source;
-      if (now) parts[`${symbol} live`] = now.provider;
+      if (now) parts[`${symbol} live`] = now.sources.join("+");
     }
     return { value: { coins, missing, parts }, attempts: run.attempts, costUsd: run.costUsd, provider: run.provider, salvaged: false };
   });

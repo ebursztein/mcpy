@@ -94,7 +94,7 @@ describe("crypto_coin", () => {
     const served: { provider: string; parts?: Record<string, string> }[] = [];
     const { mcpy } = testMcpy({ crypto: [past("history", [zecDay(dayBefore(1))]), network] });
     const r = await mcpy.with({ onServed: (s) => void served.push(s) }).cryptoCoin({ symbols: ["ZEC", "NOPE"], days: 2 });
-    expect(served[0].parts).toEqual({ "ZEC complete": "history", "ZEC live": "network" });
+    expect(served[0].parts).toEqual({ "ZEC complete": "history", "ZEC live": "network" }); // one source each here
     expect(JSON.stringify(r)).not.toMatch(/history|network"/);
     expect(r.missing).toEqual(["NOPE"]);
   });
