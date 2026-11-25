@@ -64,13 +64,10 @@ newest first; filter with `tool`, `domain`, `store`, `search_type`, `query`,
 the `usage` and `usage_log` tools. Admin clients may pass `client=<name>`, or
 `client=*` for every client.
 
-A dashboard reads the same log: `/dashboard` (calls, cost, cache hit rate,
-errors and time; today's spend against each cap; calls and cost by tool, by
-client stacked by tool, by backend, by store and by domain; calls per day
-stacked by tool) and `/dashboard/log` (every client's calls, filterable; a
-row opens its args). The pages hold no data: they ask for an admin key,
-keep it in that browser, and call `GET /v1/admin/dashboard` and
-`/v1/usage/log`.
+`GET /v1/admin/dashboard` (admin clients only) gives every client's usage at
+once, stacked by client x tool and day x tool, with today's spend against each
+cap. The maintainers' dashboard (dash.ly.tl, its own repository) reads it and
+`/v1/usage/log`; this server serves no pages.
 
 Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
 (today's estimated spend and cap per client), admin clients only.

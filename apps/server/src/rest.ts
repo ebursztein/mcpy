@@ -4,7 +4,7 @@
  *   GET|POST /v1/fetch   /v1/grep   /v1/search   /v1/papers    (same fields as the SDK)
  *   e.g. GET /v1/search?query=rust&type=news&recency=week&country=us&sites=github.com,lwn.net
  *   GET|POST /v1/usage  /v1/usage/log              (the caller's own usage; admins may pass client)
- *   GET      /v1/admin/dashboard                   (admin clients only: the dashboard's data)
+ *   GET      /v1/admin/dashboard                   (admin clients only: the data dash.ly.tl shows)
  *   GET      /v1/admin/providers                   (admin clients only)
  *   GET      /v1/admin/spending                    (admin clients only: today's spend per client)
  *

@@ -8,7 +8,7 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w mcpy && npm run build -w @mcpy/server",
+    "build": "npm run build -w mcpy",
     "typecheck": "npm run build && npm run typecheck -w mcpy && npm run typecheck -w @mcpy/server && tsc -p tsconfig.test.json",
     "test": "vitest run --project unit",
     "test:e2e": "npm run build && vitest run --project e2e",

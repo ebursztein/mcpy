@@ -16,14 +16,11 @@ import { errorResponse, handleRest, json } from "./rest.js";
 import { requestTelemetry, SERVICE_VERSION } from "./telemetry.js";
 import { registerUsageTools, writeRows, type UsageDeps } from "./usage/api.js";
 import { recordingApi } from "./usage/recorder.js";
-import { DASHBOARD_HTML } from "./dashboard/dashboard-page.js";
-import { LOG_HTML } from "./dashboard/log-page.js";
-import { PAGE_HEADERS } from "./dashboard/shared.js";
 
 export { ClientBudget } from "./budget.js";
 export { UsageLog } from "./usage/log.js";
 
-const Path = { Health: "/health", Mcp: "/mcp", ApiPrefix: "/v1/", Dashboard: "/dashboard", DashboardLog: "/dashboard/log" } as const;
+const Path = { Health: "/health", Mcp: "/mcp", ApiPrefix: "/v1/" } as const;
 
 async function authenticate(request: Request, url: URL, env: Env): Promise<Client | undefined> {
   const config = loadEnv(env);
@@ -37,9 +34,6 @@ export default {
     if (url.pathname === Path.Health) return json({ ok: true, name: "mcpy", version: SERVICE_VERSION });
 
     const isMcp = url.pathname === Path.Mcp;
-    // The dashboard pages are static and hold no data: their script asks for the admin key and calls the admin routes.
-    if (request.method === "GET" && url.pathname === Path.Dashboard) return new Response(DASHBOARD_HTML, { headers: PAGE_HEADERS });
-    if (request.method === "GET" && url.pathname === Path.DashboardLog) return new Response(LOG_HTML, { headers: PAGE_HEADERS });
     if (!isMcp && !url.pathname.startsWith(Path.ApiPrefix)) return errorResponse(new McpyError(ErrorCode.NotFound, "not found"));
 
     let config;

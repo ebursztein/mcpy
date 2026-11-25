@@ -80,14 +80,8 @@ describe("worker basics", () => {
     expect(JSON.parse(text)).toMatchObject({ ok: true, name: "mcpy" });
   });
 
-  it("serves the dashboard page and its chart bundle from this Worker's static assets", async () => {
-    const page = await fetch(new URL("/dashboard", base));
-    expect(page.status).toBe(200);
-    expect(await page.text()).toContain('<script src="/dashboard/charts.js"></script>');
-    const charts = await fetch(new URL("/dashboard/charts.js", base));
-    expect(charts.status).toBe(200);
-    expect(charts.headers.get("Content-Type")).toMatch(/javascript/);
-    expect(await charts.text()).toContain("echarts");
+  it("serves no dashboard pages or static files (they moved to dash.ly.tl)", async () => {
+    for (const path of ["/dashboard", "/dashboard/charts.js"]) expect((await fetch(new URL(path, base))).status, path).toBe(404);
   });
 
   it("rejects a missing or wrong key with 401", async () => {

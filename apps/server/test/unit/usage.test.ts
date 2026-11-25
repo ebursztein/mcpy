@@ -193,7 +193,7 @@ describe("usage over REST and MCP", () => {
   });
 });
 
-describe("dashboard", () => {
+describe("dashboard data", () => {
   beforeEach(() => {
     stubNetwork();
     vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -203,21 +203,12 @@ describe("dashboard", () => {
     vi.restoreAllMocks();
   });
 
-  it("serves both pages without a key, with no data in them and a strict CSP", async () => {
-    for (const path of ["/dashboard", "/dashboard/log"]) {
+  // The pages moved to dash.ly.tl (its own Worker, behind Cloudflare Access), 2026-11-25: this server serves none.
+  it("serves no dashboard page any more", async () => {
+    for (const path of ["/dashboard", "/dashboard/log", "/dashboard/charts.js"]) {
       const r = await call(path, { key: null });
-      expect(r.status).toBe(200);
-      expect(r.headers.get("Content-Type")).toMatch(/text\/html/);
-      expect(r.headers.get("Content-Security-Policy")).toContain("connect-src 'self'");
-      expect(r.headers.get("X-Frame-Options")).toBe("DENY");
-      const html = await r.text();
-      expect(html).toContain("mcpy usage");
-      expect(html).not.toMatch(/\$\{/);
-      // The charts come from this server's own static bundle, never a third-party host.
-      expect(html).toContain('<script src="/dashboard/charts.js"></script>');
-      expect(html).not.toMatch(/<script src="https?:/);
-      expect(r.headers.get("Content-Security-Policy")).toContain("script-src 'self' 'unsafe-inline';");
-      expect(r.headers.get("Content-Security-Policy")).not.toMatch(/https?:/);
+      expect(r.status, path).toBe(404);
+      expect(r.headers.get("Content-Type"), path).toMatch(/application\/json/);
     }
   });
 

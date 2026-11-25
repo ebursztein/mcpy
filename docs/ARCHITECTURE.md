@@ -209,19 +209,14 @@ rows; admins may ask for one client or all. The backend that served a call
 comes from the SDK's `onServed` call-context hook (per store for shopping)
 and is stored as an opaque number; only admins are shown its name.
 
-Dashboard (apps/server/src/dashboard/): two static pages, `/dashboard` and
-`/dashboard/log`, styled after deepmine's UI (Inter, slate ink, Tailwind 500
-hues). They carry no data and no key: the viewer enters
-an admin key, kept in that browser, and the pages call the admin-only
-`/v1/admin/dashboard` (summary for every client, client x tool and day x tool
-stacks from usage/stacks.ts, today's spend per cap) and `/v1/usage/log`.
-Served with no-store, DENY framing and a CSP that allows only this origin.
-The charts are ECharts, bundled as deepmine does: dashboard/charts.browser.ts
-registers only the bar chart, grid, legend, tooltip and SVG renderer, and
-`npm run build` bundles it with esbuild to dist/public/dashboard/charts.js,
-which Cloudflare serves as a static asset (wrangler `assets`) without running
-the Worker; it is never part of the Worker's own code. Page attempt spans also
-carry the target host, so telemetry has cost per domain too.
+Dashboard data: the admin-only `/v1/admin/dashboard` gives every client's
+summary, the client x tool and day x tool stacks (usage/stacks.ts) and today's
+spend per cap. The pages live elsewhere: the maintainers' dashboard (dash.ly.tl,
+its own repository, behind Cloudflare Access) reads this route and
+`/v1/usage/log` over a service binding with an admin key. This server serves
+no pages and no static assets (removed 2026-11-25), and the lytl deployment
+answers on tools.ly.tl only (`workers_dev` and `preview_urls` off). Page
+attempt spans also carry the target host, so telemetry has cost per domain too.
 
 Owner alerts: the call context can also carry an `onQuota` sink. The chain
 calls it when a paid provider fails with 402 (`out_of_credits`) or 429
