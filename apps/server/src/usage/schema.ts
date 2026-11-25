@@ -34,7 +34,7 @@ export const CallRowSchema = z.object({
   tool: OperationSchema,
   query: z.string().max(MAX_QUERY_CHARS).optional().describe("The URL (fetch, grep, shopping_item) or the search text"),
   domain: z.string().max(253).optional(),
-  store: z.string().max(64).optional().describe("shopping_search: the store key"),
+  store: z.string().max(64).optional().describe("shopping_search: the store key; crypto_coin: the coin and kind of day, e.g. \"BTC complete\""),
   search_type: SearchTypeSchema.optional(),
   args: z.record(z.string(), z.unknown()).describe("The other inputs as given (no headers, body, script or cursor)"),
   transport: TransportSchema.optional(),

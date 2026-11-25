@@ -20,6 +20,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
       search: providers.search,
       papers: providers.papers,
       listings: providers.listings,
+      crypto: providers.crypto,
       cache: env.CACHE ? new KvCache(env.CACHE) : isolateCache,
       scripts: env.LOADER ? workerLoaderScripts(env.LOADER) : undefined,
       limits: {

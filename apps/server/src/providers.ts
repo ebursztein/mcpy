@@ -4,6 +4,11 @@ import {
   pubmed,
   semanticScholar,
   type PaperProvider,
+  coinGecko,
+  coinMetrics,
+  miningPoolStats,
+  kaspa,
+  type CryptoProvider,
   brightData,
   brightDataSearch,
   cloudflareBrowser,
@@ -39,7 +44,8 @@ export interface ProviderSetup {
   search: SearchProvider[];
   papers: PaperProvider[];
   listings: ListingProvider[];
-  skipped: { pages: Skipped[]; search: Skipped[]; papers: Skipped[]; listings: Skipped[] };
+  crypto: CryptoProvider[];
+  skipped: { pages: Skipped[]; search: Skipped[]; papers: Skipped[]; listings: Skipped[]; crypto: Skipped[] };
 }
 
 type Build<P> = (env: ServerEnv, bindings: ProviderBindings) => P | null | typeof UNSUPPORTED;
@@ -62,6 +68,10 @@ const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
   [ProviderId.PubMed]: () => UNSUPPORTED,
+  [ProviderId.CoinGecko]: () => UNSUPPORTED,
+  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
+  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
+  [ProviderId.Kaspa]: () => UNSUPPORTED,
 };
 
 const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
@@ -75,6 +85,10 @@ const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
   [ProviderId.PubMed]: () => UNSUPPORTED,
+  [ProviderId.CoinGecko]: () => UNSUPPORTED,
+  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
+  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
+  [ProviderId.Kaspa]: () => UNSUPPORTED,
 };
 
 const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
@@ -88,6 +102,10 @@ const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
   [ProviderId.Arxiv]: () => arxiv(),
   [ProviderId.SemanticScholar]: (e) => (e.SEMANTIC_SCHOLAR_API_KEY ? semanticScholar({ apiKey: e.SEMANTIC_SCHOLAR_API_KEY }) : null),
   [ProviderId.PubMed]: (e) => pubmed({ apiKey: e.NCBI_API_KEY, email: e.NCBI_EMAIL }),
+  [ProviderId.CoinGecko]: () => UNSUPPORTED,
+  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
+  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
+  [ProviderId.Kaspa]: () => UNSUPPORTED,
 };
 
 const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
@@ -100,6 +118,27 @@ const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
   [ProviderId.Arxiv]: () => UNSUPPORTED,
   [ProviderId.SemanticScholar]: () => UNSUPPORTED,
   [ProviderId.PubMed]: () => UNSUPPORTED,
+  [ProviderId.CoinGecko]: () => UNSUPPORTED,
+  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
+  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
+  [ProviderId.Kaspa]: () => UNSUPPORTED,
+};
+
+const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
+  [ProviderId.Direct]: () => UNSUPPORTED,
+  [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
+  [ProviderId.Firecrawl]: () => UNSUPPORTED,
+  [ProviderId.BrightData]: () => UNSUPPORTED,
+  [ProviderId.Serpent]: () => UNSUPPORTED,
+  [ProviderId.OpenAlex]: () => UNSUPPORTED,
+  [ProviderId.Arxiv]: () => UNSUPPORTED,
+  [ProviderId.SemanticScholar]: () => UNSUPPORTED,
+  [ProviderId.PubMed]: () => UNSUPPORTED,
+  // Keyless works on a small shared limit; the demo key makes it dependable.
+  [ProviderId.CoinGecko]: (e) => coinGecko({ apiKey: e.COINGECKO_API_KEY }),
+  [ProviderId.CoinMetrics]: () => coinMetrics(),
+  [ProviderId.MiningPoolStats]: () => miningPoolStats(),
+  [ProviderId.Kaspa]: () => kaspa(),
 };
 
 const firecrawlOptions = (e: ServerEnv, apiKey: string) => ({ apiKey, apiUrl: e.FIRECRAWL_API_URL, usdPerCredit: e.FIRECRAWL_USD_PER_CREDIT });
@@ -127,11 +166,13 @@ export function buildProviders(env: ServerEnv, bindings: ProviderBindings = {}):
   const search = resolve(env.SEARCH_PROVIDERS, SEARCH_BUILDERS, env, bindings);
   const papers = resolve(env.PAPER_PROVIDERS, PAPER_BUILDERS, env, bindings);
   const listings = resolve(env.LISTING_PROVIDERS, LISTING_BUILDERS, env, bindings);
+  const crypto = resolve(env.CRYPTO_PROVIDERS, CRYPTO_BUILDERS, env, bindings);
   return {
     pages: pages.chain,
     search: search.chain,
     papers: papers.chain,
     listings: listings.chain,
-    skipped: { pages: pages.skipped, search: search.skipped, papers: papers.skipped, listings: listings.skipped },
+    crypto: crypto.chain,
+    skipped: { pages: pages.skipped, search: search.skipped, papers: papers.skipped, listings: listings.skipped, crypto: crypto.skipped },
   };
 }

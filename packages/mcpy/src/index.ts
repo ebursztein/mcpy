@@ -25,6 +25,7 @@ export { USER_AGENTS } from "./http/user-agents.js";
 export type { Telemetry } from "./telemetry/telemetry.js";
 export { EMPTY_SEARCH_TTL_SECONDS } from "./engine/engine.js";
 export * from "./schemas-papers.js";
+export * from "./schemas-crypto.js";
 export { MAX_ABSTRACT_CHARS } from "./api/papers.js";
 export * from "./services/common.js";
 export * from "./services/shopping/schema.js";

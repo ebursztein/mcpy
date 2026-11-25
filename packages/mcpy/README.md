@@ -12,12 +12,13 @@ npm install mcpy
 
 ```ts
 import { createMcpy, PaperSort, Recency, SearchMode, SearchType } from "mcpy";
-import { arxiv, direct, firecrawl, firecrawlSearch, openAlex } from "mcpy/providers";
+import { arxiv, coinGecko, coinMetrics, direct, firecrawl, firecrawlSearch, miningPoolStats, openAlex } from "mcpy/providers";
 
 const mcpy = createMcpy({
   pages: [direct(), firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })],
   search: [firecrawlSearch({ apiKey: process.env.FIRECRAWL_API_KEY! })],
   papers: [openAlex(), arxiv()],
+  crypto: [coinMetrics(), coinGecko({ apiKey: process.env.COINGECKO_API_KEY }), miningPoolStats()],
 });
 
 const page = await mcpy.fetch({ url: "https://elie.net", max_chars: 5_000 });
@@ -40,6 +41,11 @@ news.results[0].sources;          // how many sources returned it
 
 const papers = await mcpy.papers({ query: "diffusion models", sort: PaperSort.Citations, year_from: 2020, open_access: true });
 papers.results[0];                // { title, authors, year, venue, citations, abstract, doi, url, pdf_url, ... }
+
+const market = await mcpy.cryptoMarket({ symbols: ["BTC", "RVN"] });
+market.coins[0];                  // { price_usd, price_change_7d_pct, market_cap_usd, volume_24h_usd, network_hashrate_hs, difficulty, hashprice_usd_per_hs_day, ... }
+const zec = await mcpy.cryptoCoin({ symbols: ["ZEC"], days: 7 }); // or from/to; at most 40 day rows a call
+zec.coins[0].days;                // oldest first: complete days (final), then today live
 ```
 
 Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,

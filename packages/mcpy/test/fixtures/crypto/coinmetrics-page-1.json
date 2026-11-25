@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "asset": "btc",
+      "time": "2026-11-20T00:00:00.000000000Z",
+      "HashRate": "978510879.725157058725939387528794019798",
+      "PriceUSD": "58851.0193890006"
+    },
+    {
+      "asset": "btc",
+      "time": "2026-11-21T00:00:00.000000000Z",
+      "HashRate": "1099149207.230298802946790277256069019798",
+      "PriceUSD": "60122.6111387551"
+    },
+    {
+      "asset": "rvn",
+      "time": "2026-11-20T00:00:00.000000000Z",
+      "PriceUSD": "0.000952712048132862"
+    }
+  ],
+  "next_page_token": "1.MjAyNi0xMS0yMFQwMDowMDowMFo",
+  "next_page_url": "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc,rvn&metrics=PriceUSD,HashRate&frequency=1d&start_time=2026-11-20&end_time=2026-11-21&page_size=3&paging_from=start&ignore_unsupported_errors=true&next_page_token=1.MjAyNi0xMS0yMFQwMDowMDowMFo"
+}

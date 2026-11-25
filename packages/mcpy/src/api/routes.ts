@@ -6,6 +6,8 @@ export const RestRoute = {
   Papers: "/v1/papers",
   Shopping: "/v1/shopping",
   ShoppingItem: "/v1/shopping/item",
+  CryptoMarket: "/v1/crypto/market",
+  CryptoCoin: "/v1/crypto/coin",
 } as const;
 export type RestRoute = (typeof RestRoute)[keyof typeof RestRoute];
 
@@ -17,5 +19,7 @@ export const ToolName = {
   Papers: "paper_search",
   Shopping: "shopping_search",
   ShoppingItem: "shopping_item",
+  CryptoMarket: "crypto_market",
+  CryptoCoin: "crypto_coin",
 } as const;
 export type ToolName = (typeof ToolName)[keyof typeof ToolName];

@@ -11,6 +11,21 @@ const ctx = { client: "cardy", callId: "c1", started: Date.parse("2026-11-23T10:
 const meta = (over: object = {}) => ({ cache: "miss", latency_ms: 5, attempts: 2, cost_usd: 0.0038, ...over });
 
 describe("call rows", () => {
+  it("logs crypto_coin as one row per coin and kind of day, naming the source of each, the cost on the first", () => {
+    const parts = { "ZEC complete": "coinmetrics", "ZEC live": "miningpoolstats" };
+    const rows = rowsFor(Operation.CryptoCoin, { symbols: ["ZEC"], days: 7 }, { result: { coins: [], meta: meta() }, costUsd: 0.001, served: { provider: "coinmetrics+miningpoolstats", parts } }, ctx);
+    expect(rows.map((r) => [r.store, r.backend, r.cost_usd, r.query])).toEqual([
+      ["ZEC complete", "coinmetrics", 0.001, "ZEC"],
+      ["ZEC live", "miningpoolstats", 0, "ZEC"],
+    ]);
+    expect(rows.every((r) => r.call_id === "c1" && r.attempts === undefined)).toBe(true);
+  });
+
+  it("logs crypto_market's symbols as its query", () => {
+    const [row] = rowsFor(Operation.CryptoMarket, { symbols: ["BTC", "RVN"] }, { result: { coins: [], meta: meta() }, costUsd: 0 }, ctx);
+    expect(row).toMatchObject({ tool: Operation.CryptoMarket, query: "BTC,RVN", status: "ok" });
+  });
+
   it("logs the URL as query, its host as domain, the other args as JSON, never headers, body or script", () => {
     const input = { url: "https://www.tcgplayer.com/product/42382?x=1", format: "html", max_age: 0, headers: { Authorization: "Bearer s3cret" }, body: "secret", script: "export default 1" };
     const [row] = rowsFor(Operation.Fetch, input, { result: { meta: meta() }, costUsd: 0.0038 }, ctx);
@@ -204,6 +219,15 @@ describe("dashboard", () => {
       expect(r.headers.get("Content-Security-Policy")).toContain("script-src 'self' 'unsafe-inline';");
       expect(r.headers.get("Content-Security-Policy")).not.toMatch(/https?:/);
     }
+  });
+
+  // Deepmine, 2026-11-25: a figure that looks wrong must be traceable to its source, which only the log names.
+  it("returns each call's log id in meta, matching its log row", async () => {
+    const e = makeEnv({ USAGE: usageNamespace() });
+    const body = (await (await call(RestRoute.Fetch, { env: e, body: { url: articleUrl("trace") } })).json()) as { meta: { call_id?: string } };
+    expect(body.meta.call_id).toMatch(/^[0-9a-f-]{36}$/);
+    const log = UsageLogResultSchema.parse(await (await call(UsageRoute.Log, { env: e })).json());
+    expect(log.calls.map((c) => c.call_id)).toContain(body.meta.call_id);
   });
 
   it("gives admins every client's usage stacked by tool, today's caps, and refuses others", async () => {

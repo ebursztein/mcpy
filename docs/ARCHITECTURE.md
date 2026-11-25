@@ -1,6 +1,6 @@
 # mcpy architecture
 
-mcpy gives agents web tools (fetch, grep, search) and scholarly paper search through one SDK. The SDK
+mcpy gives agents web tools (fetch, grep, search), scholarly paper search, shopping and crypto market data through one SDK. The SDK
 hides which backend serves a request; the hosted server and the MCP endpoint
 are thin layers on top of it.
 
@@ -99,12 +99,50 @@ MCP / REST -> Mcpy facade -> services/shopping -> sites/<site> -> engine.page() 
   whole-call deadline (a site still running is reported as timed out).
 - Every store's chosen path and live verdict is recorded in `docs/shopping/`.
 
+## Crypto: market and coin days
+
+`crypto_market` (`mcpy.cryptoMarket`, `/v1/crypto/market`) lists coins as they are now with the
+whole-market totals; `crypto_coin` (`mcpy.cryptoCoin`, `/v1/crypto/coin`) gives a few coins day
+by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; service:
+`services/crypto/`.
+
+- **Sources** (all free):
+  Coin Metrics' community API for complete days (network for BTC, BCH, LTC, DOGE, ZEC, XMR, ETC,
+  DASH; prices for more), CoinGecko (`COINGECKO_API_KEY`, a demo key shared with deepmine: 30
+  calls a minute) for totals, prices of every coin and a year of daily closes, miningpoolstats
+  for the live network of ~490 mined coins (its data file only answers with the `t` its homepage
+  links to, so the homepage is read first; its whole table is kept 5 minutes and shared by every
+  call), Kaspa's public API for KAS's complete days (15-minute hashrate samples, averaged per day).
+  `CRYPTO_PROVIDERS` default: `coinmetrics,kaspa,coingecko,miningpoolstats`.
+- **Merge**: every capable source is asked at once, each through its own chain; answers are
+  merged field by field, the first source in configured order with a value winning. One source
+  failing never fails the call while another answered.
+- **Days**: each is `complete` (the UTC day is over; final) or `live` (today, with `as_of`).
+  A complete day's hashrate comes from its own blocks; a live one is the network's estimate.
+  Callers sum complete days only. Two volumes never share a name: `volume_24h_usd` is trading volume
+  across all tracked markets (complete and live days alike), `reported_spot_volume_usd` the spot
+  volume exchanges report (complete days), counted differently and several times lower.
+- **One name per measure**: `schemas-crypto.ts` defines a coin's facts and figures once; a market
+  row and a live day carry exactly the same figures (built by one function), and a complete day
+  uses the same names wherever the measure is the same. A test fails if the two tools drift.
+- **Miners and hashprice** (`rules.ts`): what miners receive is known per coin (carried over
+  from deepmine's registry: ZEC 80% of the subsidy and 40% of fees since NU7, DASH 20% of its
+  scheduled subsidy and no usable fee figure). Coins without a rule get no miner fields and no
+  hashprice, never a guess. Hashprice is USD a day per H/s; live days count new coins only.
+- **Bounds**: 40 day rows a call (coins × days; `from`/`to` for longer histories) and 40 market
+  coins: a complete day with every figure at full precision is about 1,100 characters, a
+  full market row about 1,060, so a full answer stays under the 50,000-character ceiling. Every answer is cached at least 5 minutes, whatever `max_age` says; a window ended two
+  days ago is kept a day.
+- **Tracing**: the usage log writes one `crypto_coin` row per coin and kind of day
+  (`store` = "ZEC complete") with the source behind it; every result's `meta.call_id` is its log
+  id, so a caller can have an admin look a figure's source up.
+
 ## Reliability
 
 | Concern | Mechanism |
 | --- | --- |
 | Provider down or blocked | Fallback chain: next provider on error, HTTP 401/403/429/5xx from the target, bot challenge (judged on page title, challenge markup on small pages, challenge wording on tiny pages), or an empty HTML shell |
-| Sites that block cheap providers | Site routes: once a later page provider serves a site (hostname + format), the next fetch starts with it, so a blocked direct fetch or browser attempt is not paid for on every call. The providers it skips move to the end of the chain, never out of it. Routes live in the cache for `siteRouteTtlSeconds` (default 1 day), then the cheap providers get another chance |
+| Sites that block cheap providers | Site routes: once a later page provider serves a site (hostname + format), the next fetch starts with it, so a blocked direct fetch or browser attempt is not paid for on every call. The providers it skips move to the end of the chain, never out of it. Routes live in the cache for `siteRouteTtlSeconds` (default 15 minutes), then the cheap providers get another chance |
 | Definitive answers | 404/405/410 stop the chain; so do an unsafe target and an unsupported content type (no paid fallback) |
 | Thin but real pages | Short text, JSON or markdown is served as is. A short HTML page escalates; if no provider does better, the best one is returned and not cached |
 | Transient failures | Retry with exponential backoff and jitter on network errors, 408, 429, 5xx; honors `Retry-After`; programming errors are never retried |

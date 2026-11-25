@@ -111,6 +111,8 @@ export const EnvSchema = z.object({
   PAPER_PROVIDERS: csv(ProviderIdSchema, [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed, ProviderId.SemanticScholar]),
   /** Marketplace listing APIs, the last resort for shopping sites no page source could fetch. */
   LISTING_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent]),
+  /** Crypto market and network sources; the first with a value wins each field (network history first, then prices, then live network). */
+  CRYPTO_PROVIDERS: csv(ProviderIdSchema, [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.CoinGecko, ProviderId.MiningPoolStats]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
@@ -160,6 +162,8 @@ export const EnvSchema = z.object({
   SERPENT_API_KEY: secret,
   /** Optional: OpenAlex works without it, on a small budget shared per IP. */
   OPENALEX_API_KEY: secret,
+  /** CoinGecko demo key (free; shared with deepmine, 30 calls a minute). Keyless works on a small shared limit. */
+  COINGECKO_API_KEY: secret,
   /** Semantic Scholar is enabled only with a key (anonymous calls are rate-limited). */
   SEMANTIC_SCHOLAR_API_KEY: secret,
   /** Optional: PubMed works without it (3 requests/s); a free NCBI key allows 10. */

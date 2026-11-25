@@ -34,7 +34,7 @@ export const errorResponse = (err: McpyError, headers: Record<string, string> = 
 
 const NUMERIC = new Set(["limit", "days", "offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
 const BOOLEAN = new Set(["literal", "open_access", "paid_only", "errors_only", "cache_hits_only"]);
-const LIST = new Set(["sites", "exclude_sites"]);
+const LIST = new Set(["sites", "exclude_sites", "symbols"]);
 
 /**
  * Query strings are untyped: coerce the known numeric, boolean and list
@@ -67,6 +67,8 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.Papers]: (api, input) => api.papers(input as never),
   [RestRoute.Shopping]: (api, input) => api.shopping(input as never),
   [RestRoute.ShoppingItem]: (api, input) => api.shoppingItem(input as never),
+  [RestRoute.CryptoMarket]: (api, input) => api.cryptoMarket(input as never),
+  [RestRoute.CryptoCoin]: (api, input) => api.cryptoCoin(input as never),
 };
 
 export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView, usage?: UsageDeps): Promise<Response> {
@@ -83,6 +85,7 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
       search: providers.search.map((p) => p.id),
       papers: providers.papers.map((p) => p.id),
       listings: providers.listings.map((p) => p.id),
+      crypto: providers.crypto.map((p) => p.id),
       skipped: providers.skipped,
     });
   }

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "type": "forbidden",
+    "message": "Requested metric 'DiffMean' with frequency '1d' for asset 'btc' is not available with supplied credentials."
+  }
+}

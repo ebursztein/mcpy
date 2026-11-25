@@ -36,7 +36,9 @@ describe("buildProviders", () => {
     // Semantic Scholar needs a key; OpenAlex, arXiv and PubMed work without one.
     // One Serpent key serves search and the eBay listing fallback.
     expect(ids(setup.listings)).toEqual([ProviderId.Serpent]);
-    expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }], listings: [] });
+    // Network history first, then prices, then the live network: the first with a value wins each field. None needs a key.
+    expect(ids(setup.crypto)).toEqual([ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.CoinGecko, ProviderId.MiningPoolStats]);
+    expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }], listings: [], crypto: [] });
   });
 
   it("runs the browser on the Browser Rendering binding when bound, with no API token", () => {

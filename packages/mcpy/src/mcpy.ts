@@ -15,6 +15,10 @@ import {
 import { PaperSearchInputSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 import type { PaperProvider } from "./providers/paper-types.js";
 import type { ListingProvider } from "./providers/listing-types.js";
+import type { CryptoProvider } from "./providers/crypto-types.js";
+import { CryptoCoinInputSchema, CryptoMarketInputSchema, type CryptoCoinInput, type CryptoCoinResult, type CryptoMarketInput, type CryptoMarketResult } from "./schemas-crypto.js";
+import { cryptoCoinOp } from "./services/crypto/coin.js";
+import { cryptoMarketOp } from "./services/crypto/market.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
 import { MemoryCache, type Cache } from "./engine/cache.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
@@ -65,6 +69,8 @@ export interface McpyOptions extends McpyConfig {
   papers?: PaperProvider[];
   /** Marketplace listing APIs, the last resort for shopping sites whose pages no page source could fetch. */
   listings?: ListingProvider[];
+  /** Crypto market and network sources, merged field by field in this order. */
+  crypto?: CryptoProvider[];
   /** Defaults to an in-memory cache. */
   cache?: Cache;
   /** Defaults to no telemetry. */
@@ -136,6 +142,14 @@ export class Mcpy implements McpyApi {
 
   shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult> {
     return this.run(Operation.ShoppingItem, ShoppingItemInputSchema, input, (i, scope) => shoppingItemOp(this.engine, i, scope));
+  }
+
+  cryptoMarket(input: CryptoMarketInput): Promise<CryptoMarketResult> {
+    return this.run(Operation.CryptoMarket, CryptoMarketInputSchema, input, (i, scope) => cryptoMarketOp(this.engine, i, scope));
+  }
+
+  cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult> {
+    return this.run(Operation.CryptoCoin, CryptoCoinInputSchema, input, (i, scope) => cryptoCoinOp(this.engine, i, scope));
   }
 
   /** Validation, span, structured log line and error mapping for every operation. */
@@ -250,6 +264,7 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
     searchProviders: options.search ?? [],
     paperProviders: options.papers ?? [],
     listingProviders: options.listings ?? [],
+    cryptoProviders: options.crypto ?? [],
     cache: options.cache ?? new MemoryCache(),
     http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
     breaker: new CircuitBreaker(config.breaker),

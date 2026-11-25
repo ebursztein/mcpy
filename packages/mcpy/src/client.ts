@@ -25,6 +25,16 @@ import {
 } from "./schemas.js";
 import { PaperSearchInputSchema, PaperSearchResultSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 import {
+  CryptoCoinInputSchema,
+  CryptoCoinResultSchema,
+  CryptoMarketInputSchema,
+  CryptoMarketResultSchema,
+  type CryptoCoinInput,
+  type CryptoCoinResult,
+  type CryptoMarketInput,
+  type CryptoMarketResult,
+} from "./schemas-crypto.js";
+import {
   ShoppingItemInputSchema,
   ShoppingItemResultSchema,
   ShoppingSearchInputSchema,
@@ -77,6 +87,14 @@ export class McpyClient implements McpyApi {
 
   shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult> {
     return this.post(RestRoute.ShoppingItem, ShoppingItemInputSchema, ShoppingItemResultSchema, input);
+  }
+
+  cryptoMarket(input: CryptoMarketInput): Promise<CryptoMarketResult> {
+    return this.post(RestRoute.CryptoMarket, CryptoMarketInputSchema, CryptoMarketResultSchema, input);
+  }
+
+  cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult> {
+    return this.post(RestRoute.CryptoCoin, CryptoCoinInputSchema, CryptoCoinResultSchema, input);
   }
 
   private async post<I extends z.ZodType, O extends z.ZodType>(route: RestRoute, inSchema: I, outSchema: O, input: unknown): Promise<z.infer<O>> {

@@ -5,6 +5,7 @@ import { sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
 import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
+import type { CryptoProvider } from "../providers/crypto-types.js";
 import type { ListingPage, ListingProvider, ListingRequest } from "../providers/listing-types.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
@@ -12,7 +13,8 @@ import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
 import type { EngineLimits } from "./limits.js";
 import { isYoungEnough, type Cache } from "./cache.js";
-import { runChain, type ChainResult } from "./chain.js";
+import { runChain, type ChainProvider, type ChainResult, type Judgement } from "./chain.js";
+import { EMPTY_SEARCH_TTL_SECONDS, emptyMovesOn, searchCost } from "./judgements.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
 import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
@@ -28,12 +30,16 @@ export { EngineLimitsSchema, type EngineLimits } from "./limits.js";
 
 const CACHE_VERSION = "v2";
 
+export { EMPTY_SEARCH_TTL_SECONDS };
+
 export interface EngineDeps {
   pageProviders: PageProvider[];
   searchProviders: SearchProvider[];
   paperProviders: PaperProvider[];
   /** Marketplace listing APIs: the last resort for sites whose pages no source could fetch. */
   listingProviders?: ListingProvider[];
+  /** Crypto market and network sources (services/crypto). */
+  cryptoProviders?: CryptoProvider[];
   cache: Cache;
   http: HttpClient;
   breaker: CircuitBreaker;
@@ -51,21 +57,6 @@ export interface CallScope {
   meter?: SpendMeter;
   onQuota?: (alert: QuotaAlert) => void; // a paid source refused a call for account reasons
 }
-
-/**
- * Search judgement: results are final; no results move on to the next
- * source (seen live: one source found nothing for a site-restricted news
- * search). If every source is empty, the empty answer is still returned.
- */
-function emptyMovesOn(hits: unknown[]): { outcome: AttemptOutcome; reason?: string; salvageable?: boolean } {
-  return hits.length ? { outcome: AttemptOutcome.Ok } : { outcome: AttemptOutcome.Escalate, reason: "no results", salvageable: true };
-}
-
-/** What one attempt at this search costs on a provider. */
-const searchCost = (req: SearchRequest) => (p: SearchProvider) => p.costOf?.(req) ?? p.costPerCall;
-
-/** Empty search results may be a transient upstream hiccup: keep them briefly. */
-export const EMPTY_SEARCH_TTL_SECONDS = 60;
 
 /** Engine result. `provider` is for telemetry only; cost is totalled by the scope's meter. */
 export interface Served<T> {
@@ -100,7 +91,17 @@ export class Engine {
       search: this.deps.searchProviders.map((p) => p.id),
       papers: this.deps.paperProviders.map((p) => p.id),
       listings: (this.deps.listingProviders ?? []).map((p) => p.id),
+      crypto: this.cryptoProviders.map((p) => p.id),
     };
+  }
+
+  get cryptoProviders(): CryptoProvider[] {
+    return this.deps.cryptoProviders ?? [];
+  }
+
+  /** Tunables an operation kept in its own module needs (grace period, cache lifetimes). */
+  get limits(): EngineLimits {
+    return this.deps.limits;
   }
 
   private pageKey(req: PageRequest): Promise<string> {
@@ -197,13 +198,7 @@ export class Engine {
     const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
     const ttl = (hits: MergedPaper[]) => (hits.length ? this.deps.limits.paperTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
     const chain = (ps: PaperProvider[], deadlineAt: number) =>
-      runChain({
-        providers: ps,
-        attempt: (p, signal, timeoutMs, parent) => p.searchPapers(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
-        judge: emptyMovesOn,
-        describe: (hits) => ({ [Attr.ContentChars]: hits.length }),
-        ...this.chainCommon(deadlineAt, scope),
-      });
+      this.chain(ps, (p, call) => p.searchPapers(req, call), emptyMovesOn, deadlineAt, scope, (hits) => ({ [Attr.ContentChars]: hits.length }));
     return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       if (mode === SearchMode.Thorough) {
         return fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort), this.deps.limits.thoroughGraceMs);
@@ -234,6 +229,11 @@ export class Engine {
     );
   }
 
+  /** One fallback chain over `providers`, with the engine's timeouts, breaker, telemetry and spending limit. */
+  chain<P extends ChainProvider, T>(providers: P[], attempt: (p: P, call: ProviderCall) => Promise<T>, judge: (value: T) => Judgement, deadlineAt: number, scope: CallScope, describe?: (value: T) => Record<string, number>): Promise<ChainResult<T>> {
+    return runChain({ providers, attempt: (p, signal, timeoutMs, parent) => attempt(p, this.call(signal, timeoutMs, deadlineAt, scope, parent)), judge, describe, ...this.chainCommon(deadlineAt, scope) });
+  }
+
   private chainCommon(deadlineAt: number, scope: CallScope) {
     return {
       attemptTimeoutMs: this.deps.limits.attemptTimeoutMs,
@@ -261,7 +261,7 @@ export class Engine {
    * challenge pages never reach the cache); salvaged thin pages are returned
    * but not cached. The write is deferred off the request path when possible.
    */
-  private async cached<T>(
+  async cached<T>(
     key: string,
     /** Seconds to cache the result, or undefined to not cache it. */
     ttl: (value: T, salvaged: boolean) => number | undefined,

@@ -14,7 +14,7 @@
  */
 
 import { fileURLToPath } from "node:url";
-import { CacheStatus, ErrorBodySchema, ErrorCode, FetchResultSchema, GrepResultSchema, PaperSearchResultSchema, RestRoute, ToolName } from "mcpy";
+import { CacheStatus, CryptoCoinResultSchema, CryptoMarketResultSchema, ErrorBodySchema, ErrorCode, FetchResultSchema, GrepResultSchema, PaperSearchResultSchema, RestRoute, ToolName } from "mcpy";
 import { ProviderId } from "mcpy/providers";
 import { unstable_startWorker } from "wrangler";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -115,6 +115,23 @@ describe("worker basics", () => {
   });
 });
 
+describe("crypto from a real Worker (free public sources)", () => {
+  it("reads the market and a coin's days, at no cost", async () => {
+    const market = await post(RestRoute.CryptoMarket, { symbols: ["BTC", "ZEC"] });
+    expect(market.response.status, market.text).toBe(200);
+    const m = CryptoMarketResultSchema.parse(JSON.parse(market.text));
+    expect(m.coins.map((c) => c.symbol)).toEqual(["BTC", "ZEC"]);
+    expect(m.coins[0].price_usd).toBeGreaterThan(0);
+    expect(m.meta.cost_usd ?? 0).toBe(0);
+
+    const coin = await post(RestRoute.CryptoCoin, { symbols: ["BTC"], days: 3 });
+    expect(coin.response.status, coin.text).toBe(200);
+    const days = CryptoCoinResultSchema.parse(JSON.parse(coin.text)).coins[0].days;
+    expect(days.at(-1)?.status).toBe("live");
+    expect(days.some((d) => d.status === "complete" && (d.network_hashrate_hs ?? 0) > 0)).toBe(true);
+  });
+});
+
 describe("REST against elie.net", () => {
   it("fetches cold, then serves the repeat from cache within budget", async () => {
     const cold = await post(RestRoute.Fetch, { url: TARGET, max_chars: 2_000 });
@@ -207,13 +224,13 @@ describe("MCP against elie.net", () => {
 
   const INIT = { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "mcpy-e2e", version: "0.0.0" } };
 
-  it("initializes and lists exactly the six mcpy tools plus usage and usage_log", async () => {
+  it("initializes and lists exactly the eight mcpy tools plus usage and usage_log", async () => {
     const init = await rpc("initialize", INIT);
     expect(init.response.status).toBe(200);
     expect(init.message.result?.serverInfo).toMatchObject({ name: "mcpy" });
     const list = await rpc("tools/list", {});
     const names = ((list.message.result?.tools ?? []) as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem, "usage", "usage_log"].sort());
+    expect(names).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem, ToolName.CryptoMarket, ToolName.CryptoCoin, "usage", "usage_log"].sort());
   });
 
   it("accepts the key as ?key= on /mcp", async () => {

@@ -33,6 +33,9 @@ function argsOf(input: Input): Record<string, unknown> {
 
 /** What every row of one call shares. */
 function baseRow(tool: Operation, input: Input, ctx: { client: string; callId: string; started: number; transport?: CallContext["transport"] }) {
+  // crypto calls name coins, not a URL or a query: their symbols stand in for the query.
+  const symbols = Array.isArray(input["symbols"]) ? input["symbols"].filter((s): s is string => typeof s === "string").join(",") : undefined;
+  input = input["url"] === undefined && input["query"] === undefined && symbols ? { ...input, query: symbols } : input;
   const searchType = SearchTypeSchema.safeParse(input["type"] ?? (tool === Operation.Search ? "web" : undefined));
   return {
     time: new Date(ctx.started).toISOString(),
@@ -70,6 +73,12 @@ export function rowsFor(
   const cache = parsed.success ? parsed.data : undefined;
   const backend = (name: string | undefined) => (name && name !== "none" ? { backend: name } : {});
   const shared = { ...base, ...(cache ? { cache } : {}), cache_hit: cache === CacheStatus.Hit, ...(typeof meta.attempts === "number" ? { attempts: meta.attempts } : {}) };
+  const parts = Object.entries(outcome.served?.parts ?? {});
+  if (tool === Operation.CryptoCoin && parts.length) {
+    // One row per coin and kind of day ("BTC complete", "BTC live") with the source behind it; the cost goes on the first.
+    const { attempts: _all, ...perPart } = shared as typeof shared & { attempts?: number };
+    return parts.map(([part, provider], i) => ({ ...perPart, store: part.slice(0, 64), ...backend(provider), status: CallStatus.Ok, cost_usd: i === 0 ? round(outcome.costUsd) : 0 }));
+  }
   const reports = outcome.result["marketplaces"] as Report[] | undefined;
   if (tool !== Operation.Shopping || !Array.isArray(reports) || reports.length === 0) {
     return [{ ...shared, ...backend(outcome.served?.provider), status: CallStatus.Ok, cost_usd: round(outcome.costUsd), ...(resultCount(outcome.result) !== undefined ? { results: resultCount(outcome.result) } : {}) }];
@@ -113,6 +122,8 @@ const METHODS: Record<keyof McpyApi, Operation> = {
   papers: Operation.Papers,
   shopping: Operation.Shopping,
   shoppingItem: Operation.ShoppingItem,
+  cryptoMarket: Operation.CryptoMarket,
+  cryptoCoin: Operation.CryptoCoin,
 };
 
 /** The SDK for one request, with every call logged as `client`. */
@@ -126,6 +137,8 @@ export function recordingApi(mcpy: Mcpy, context: CallContext & { client: string
     const args = input && typeof input === "object" && !Array.isArray(input) ? (input as Input) : {};
     try {
       const result = (await (api[method] as (i: unknown) => Promise<unknown>)(input)) as Input;
+      const meta = result["meta"];
+      if (meta && typeof meta === "object") (meta as Record<string, unknown>)["call_id"] = ctx.callId; // the caller can trace an answer back to its log rows
       write(rowsFor(METHODS[method], args, { result, costUsd: spend.spent(), served }, ctx));
       return result;
     } catch (error) {

@@ -7,6 +7,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { ToolName } from "./api/routes.js";
 import { toMcpyError } from "./errors.js";
+import { registerCryptoTools } from "./mcp-crypto.js";
 import {
   FetchInputSchema,
   FetchResultSchema,
@@ -216,4 +217,6 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
     },
     async (input) => api.shoppingItem(input).then((r) => ok(r, renderShoppingItem(r)), fail),
   );
+
+  registerCryptoTools(server, api);
 }

@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import type { PaperSearchInput, PaperSearchResult } from "./schemas-papers.js";
+import type { CryptoCoinInput, CryptoCoinResult, CryptoMarketInput, CryptoMarketResult } from "./schemas-crypto.js";
 import type { ShoppingItemInput, ShoppingItemResult, ShoppingSearchInput, ShoppingSearchResult } from "./services/shopping/schema.js";
 import {
   CacheStatusSchema,
@@ -148,6 +149,7 @@ export const ResultMetaSchema = z.object({
   latency_ms: z.number().nonnegative(),
   attempts: z.number().int().nonnegative().describe("Upstream requests made (0 when served from cache)"),
   cost_usd: z.number().nonnegative().optional().describe("Estimated USD this call counted against your daily allowance (0: cache and free sources only)"),
+  call_id: z.string().max(64).optional().describe("This call's id in the server's usage log, for tracing an answer back"),
 });
 
 export const FetchResultSchema = z.object({
@@ -230,4 +232,8 @@ export interface McpyApi {
   papers(input: PaperSearchInput): Promise<PaperSearchResult>;
   shopping(input: ShoppingSearchInput): Promise<ShoppingSearchResult>;
   shoppingItem(input: ShoppingItemInput): Promise<ShoppingItemResult>;
+  /** crypto.market: totals and many coins now. */
+  cryptoMarket(input: CryptoMarketInput): Promise<CryptoMarketResult>;
+  /** crypto.coin: a few coins day by day. */
+  cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult>;
 }

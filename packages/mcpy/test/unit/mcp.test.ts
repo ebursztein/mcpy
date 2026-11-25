@@ -43,13 +43,17 @@ const failing: McpyApi = {
   papers: () => Promise.reject(new McpyError(ErrorCode.NoProviders, "no paper indexes are configured")),
   shopping: () => Promise.reject(new McpyError(ErrorCode.InvalidInput, "invalid input")),
   shoppingItem: () => Promise.reject(new McpyError(ErrorCode.UpstreamFailed, "could not read the listing")),
+  cryptoMarket: () => Promise.reject(new McpyError(ErrorCode.NoProviders, "no crypto source is configured for market data")),
+  cryptoCoin: () => Promise.reject(new McpyError(ErrorCode.InvalidInput, "invalid input")),
 };
 
 describe("registerMcpyTools registration", () => {
   const tools = capture(sdk());
 
-  it("registers exactly the fetch, grep, search, paper and shopping tools", () => {
-    expect([...tools.keys()].sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem].sort());
+  it("registers exactly the fetch, grep, search, paper, shopping and crypto tools", () => {
+    expect([...tools.keys()].sort()).toEqual(
+      [ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem, ToolName.CryptoMarket, ToolName.CryptoCoin].sort(),
+    );
   });
 
   it.each([
@@ -159,11 +163,11 @@ describe("real McpServer over an in-memory transport", () => {
     return { client, close: () => Promise.all([client.close(), server.close()]) };
   }
 
-  it("lists the six tools with JSON schemas and annotations", async () => {
+  it("lists the eight tools with JSON schemas and annotations", async () => {
     const { client, close } = await connect(sdk());
     try {
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem].sort());
+      expect(tools.map((t) => t.name).sort()).toEqual([ToolName.Fetch, ToolName.Grep, ToolName.Search, ToolName.Papers, ToolName.Shopping, ToolName.ShoppingItem, ToolName.CryptoMarket, ToolName.CryptoCoin].sort());
       const fetchTool = tools.find((t) => t.name === ToolName.Fetch)!;
       expect(fetchTool.inputSchema.type).toBe("object");
       expect(fetchTool.inputSchema.required).toEqual(["url"]);
