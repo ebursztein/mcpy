@@ -4,7 +4,8 @@ import type { FetchedPage } from "../providers/types.js";
 /**
  * How the engine judges a page a provider returned:
  * - Ok:       usable page, stop here
- * - Final:    definitive answer (404/405/410); escalating would only burn money
+ * - Final:    definitive answer (404/405/410, or an API's own JSON 401/403);
+ *             escalating would only burn money
  * - Escalate: blocked, challenged or empty; try the next provider.
  *             `salvageable` marks a real but thin page (e.g. a short HTML
  *             page): if no provider does better, it is returned as is.
@@ -20,6 +21,31 @@ export type Verdict =
  * sales API paid two sources for the same 405).
  */
 const DEFINITIVE_STATUS = new Set([404, 405, 410]);
+
+/**
+ * An API refusing the request itself: a 401 or 403 whose body is a small JSON
+ * value from the site, not a CDN's or bot wall's. Every source would get the
+ * same answer (Kryptex's pool API, 2026-11-25: a worker chart closed to this
+ * account answered 403 {"detail":"You do not have permission to perform this
+ * action."} to the direct fetch and to three paid sources, which then reported
+ * 502 and used up the client's daily budget).
+ */
+const REFUSAL_STATUS = new Set([401, 403]);
+const MAX_REFUSAL_CHARS = 2_000;
+/** Bot walls that answer in JSON (Cloudflare's error 1020 with Accept: application/json, ...). */
+const WALL_JSON = /cloudflare|\bray[_ ]?id\b|akamai|incapsula|imperva|perimeterx|datadome|captcha|\bbot\b|access denied/i;
+
+function isApiRefusal(page: FetchedPage): boolean {
+  if (!REFUSAL_STATUS.has(page.status) || page.kind !== ContentKind.Json) return false;
+  const body = page.content.trim();
+  if (!body || body.length > MAX_REFUSAL_CHARS || WALL_JSON.test(body)) return false;
+  try {
+    const value: unknown = JSON.parse(body);
+    return typeof value === "object" && value !== null;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Non-standard success codes that bot walls answer with: Reblaze's 247
@@ -100,6 +126,7 @@ export function isChallenge(page: FetchedPage): boolean {
 
 export function assessPage(page: FetchedPage): Verdict {
   if (DEFINITIVE_STATUS.has(page.status)) return { outcome: AttemptOutcome.Final, reason: `HTTP ${page.status}` };
+  if (isApiRefusal(page) && !isChallenge(page)) return { outcome: AttemptOutcome.Final, reason: `HTTP ${page.status} (the site's own refusal)` };
   if (BOT_WALL_STATUS.has(page.status)) return { outcome: AttemptOutcome.Escalate, reason: `HTTP ${page.status} (bot check)`, salvageable: false };
   if (page.status >= 400) return { outcome: AttemptOutcome.Escalate, reason: `HTTP ${page.status}`, salvageable: false };
   if (isChallenge(page)) return { outcome: AttemptOutcome.Escalate, reason: "bot challenge detected", salvageable: false };
