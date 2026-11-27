@@ -6,9 +6,11 @@ import type { FetchedPage } from "../providers/types.js";
  * - Ok:       usable page, stop here
  * - Final:    definitive answer (404/405/410, or an API's own JSON 401/403);
  *             escalating would only burn money
- * - Escalate: blocked, challenged or empty; try the next provider.
- *             `salvageable` marks a real but thin page (e.g. a short HTML
- *             page): if no provider does better, it is returned as is.
+ * - Escalate: blocked or challenged; try the next provider.
+ * Anything else the site answered is the answer, however short: the HTTP
+ * status says what it is. A page that needs its JavaScript run is fetched
+ * with `render: true`; mcpy does not guess that from the page's length (a
+ * 200 from example.com was paid to a browser on every call, 2026-11-27).
  */
 export type Verdict =
   | { outcome: typeof AttemptOutcome.Ok }
@@ -97,9 +99,6 @@ const CHALLENGE_WORDING = [
 ];
 const WORDING_SCAN_LIMIT = 3_000;
 
-/** HTML pages below this many characters are treated as JS app shells. */
-export const MIN_HTML_CONTENT_CHARS = 200;
-
 /**
  * Where a request lands when a site sends bots to a verification or captcha
  * page with HTTP 200 (MercadoLibre's /gz/account-verification and
@@ -130,11 +129,5 @@ export function assessPage(page: FetchedPage): Verdict {
   if (BOT_WALL_STATUS.has(page.status)) return { outcome: AttemptOutcome.Escalate, reason: `HTTP ${page.status} (bot check)`, salvageable: false };
   if (page.status >= 400) return { outcome: AttemptOutcome.Escalate, reason: `HTTP ${page.status}`, salvageable: false };
   if (isChallenge(page)) return { outcome: AttemptOutcome.Escalate, reason: "bot challenge detected", salvageable: false };
-
-  // Short text, JSON or native markdown is just short. Only HTML can be an
-  // empty shell that a real browser would fill in.
-  if (page.kind === ContentKind.Html && page.content.trim().length < MIN_HTML_CONTENT_CHARS) {
-    return { outcome: AttemptOutcome.Escalate, reason: "content too short (likely JS-rendered)", salvageable: true };
-  }
   return { outcome: AttemptOutcome.Ok };
 }

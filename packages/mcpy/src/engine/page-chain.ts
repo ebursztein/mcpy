@@ -64,7 +64,7 @@ export async function runPageChain(c: PageChainContext): Promise<ChainResult<Fet
     if (freeOnly) throw new McpyError(err.code, `${err.message} (free_only: paid sources were not tried)`, err.details);
     throw err;
   }
-  if (c.site && !result.salvaged) await learnRoute(c, preferred, result.provider);
+  if (c.site) await learnRoute(c, preferred, result.provider);
   return result;
 }
 

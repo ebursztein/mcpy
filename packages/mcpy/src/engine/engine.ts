@@ -128,8 +128,7 @@ export class Engine {
     if (capable.length === 0) throw noCapableProvider(req);
     if (policy.freeOnly && !capable.some(isFree)) throw noFreeProvider();
     const key = await this.pageKey(req);
-    // A salvaged thin page may be a JS shell nobody could render: never cache it.
-    const ttl = (_page: FetchedPage, salvaged: boolean) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds);
+    const ttl = () => this.deps.limits.pageTtlSeconds;
     return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       runPageChain({
         capable,
@@ -258,7 +257,7 @@ export class Engine {
   /**
    * Serve from cache when possible; otherwise run the chain and cache the
    * result. The chain only returns usable or definitive results (blocked and
-   * challenge pages never reach the cache); salvaged thin pages are returned
+   * challenge pages never reach the cache); salvaged results are returned
    * but not cached. The write is deferred off the request path when possible.
    */
   async cached<T>(

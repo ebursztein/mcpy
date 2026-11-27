@@ -23,14 +23,17 @@ describe("#3 short but valid pages are served, not escalated to failure", () => 
     expect(paid.calls).toHaveLength(0);
   });
 
-  it("returns a thin HTML page when no provider does better, without caching it", async () => {
+  // Was: a thin HTML page escalated and, if nothing did better, was served uncached. Since
+  // 2026-11-27 a 200 is the site's answer however short (see thin-page-paid-once.test.ts).
+  it("serves a thin HTML page from the first source and caches it", async () => {
     const thin = fakePages("thin", page({ kind: ContentKind.Html, content: "Hello." }));
     const alsoThin = fakePages("also", page({ kind: ContentKind.Html, content: "Hello!" }));
     const { mcpy } = testMcpy({ pages: [thin, alsoThin] });
     const first = await mcpy.fetch({ url: URL_A });
     expect(first.content).toBe("Hello.");
     const second = await mcpy.fetch({ url: URL_A });
-    expect(second.meta.cache).toBe(CacheStatus.Miss);
+    expect(second.meta.cache).toBe(CacheStatus.Hit);
+    expect(alsoThin.calls).toHaveLength(0);
   });
 });
 
