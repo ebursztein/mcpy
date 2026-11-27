@@ -206,6 +206,8 @@ and the cache still answer; if nothing does, `budget_exceeded`). Every
 operation reports what its attempts cost, failed ones included. The server's
 limit keeps each client's total for the UTC day in its own Durable Object
 (`ClientBudget`). Costs are the providers' per-call estimates.
+REST operation responses carry the call's cache status and cost, and the client's
+spend, cap, remaining and reset as headers (`apps/server/src/call-headers.ts`; README lists them).
 
 Usage: the server wraps the SDK it hands each request (usage/recorder.ts)
 so every call yields log rows from its input and result: tool, query (URL or

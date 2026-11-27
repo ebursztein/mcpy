@@ -15,6 +15,7 @@
 import { ErrorCode, McpyError, RestRoute, type McpyApi } from "mcpy";
 import { ClientRole, type Client } from "./clients.js";
 import { secondsUntilReset } from "./budget.js";
+import { budgetHeaders, resultHeaders, type CallBudget } from "./call-headers.js";
 import type { ProviderSetup } from "./providers.js";
 import { dashboardData, UsageRoute, usageLogFor, usageSummary, type UsageDeps } from "./usage/api.js";
 
@@ -71,7 +72,7 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.CryptoCoin]: (api, input) => api.cryptoCoin(input as never),
 };
 
-export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView, usage?: UsageDeps): Promise<Response> {
+export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView, usage?: UsageDeps, budget?: CallBudget): Promise<Response> {
   const isAdminRoute = Object.values(AdminRoute).includes(url.pathname as (typeof AdminRoute)[keyof typeof AdminRoute]);
   if (isAdminRoute && client.role !== ClientRole.Admin) return errorResponse(new McpyError(ErrorCode.Forbidden, "admin only"));
   if (url.pathname === AdminRoute.Spending) {
@@ -107,12 +108,20 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
     return json(err.toJSON(), 405, { Allow: "GET, POST" });
   }
 
+  // Read today's spend while the call runs: the budget headers never wait on it alone.
+  const spent = budget?.spentToday().catch(() => undefined);
+  const budgetOf = async (costUsd: number) => {
+    const before = await spent;
+    return budget && before !== undefined ? budgetHeaders(budget.capUsd, before, costUsd) : {};
+  };
   try {
-    return json(await operation(api, await readInput(request, url)));
+    const result = await operation(api, await readInput(request, url));
+    const { headers, costUsd } = resultHeaders(result);
+    return json(result, 200, { ...headers, ...(await budgetOf(costUsd)) });
   } catch (err) {
     const error = err instanceof McpyError ? err : new McpyError(ErrorCode.Internal, "internal error");
     // Caps reset at midnight UTC: tell callers when retrying is worth it.
     const headers: Record<string, string> = error.code === ErrorCode.BudgetExceeded ? { "Retry-After": String(secondsUntilReset(new Date())) } : {};
-    return errorResponse(error, headers);
+    return errorResponse(error, { ...headers, ...(await budgetOf(0)) });
   }
 }

@@ -121,6 +121,23 @@ gets `budget_exceeded` (429) with `Retry-After` until midnight UTC. Totals
 live in the `BUDGET` Durable Object, one per client; requests already in
 flight when the cap is crossed still finish.
 
+Every REST operation's response says where the client stands, so it can
+pace itself without calling `/v1/usage`:
+
+| Header | Value |
+| --- | --- |
+| `X-Mcpy-Cache` | `hit`, `miss` or `bypass` (answered calls) |
+| `X-Mcpy-Cost-Usd` | what this call counted against the cap (answered calls) |
+| `X-Mcpy-Budget-Used-Usd` | today's spend, this call included (clients with a cap) |
+| `X-Mcpy-Budget-Limit-Usd` | the daily cap |
+| `X-Mcpy-Budget-Remaining-Usd` | what is left of it today |
+| `X-Mcpy-Budget-Reset` | seconds until 00:00 UTC, when the cap resets |
+| `RateLimit-Policy`, `X-RateLimit-Limit` | the per-key request limit (360 a minute) |
+
+Today's spend is read while the call runs, so calls running at the same time
+may not count each other. The request limit's own count is not reported:
+Cloudflare's rate-limit binding only answers whether a request may run.
+
 ### Alerts
 
 With `PUSHOVER_TOKEN` and `PUSHOVER_USER` set (secrets), the server sends the

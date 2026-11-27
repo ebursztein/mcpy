@@ -7,10 +7,11 @@ import { ErrorCode, LogLevel, McpyError, SpanName, SpanStatus, Transport } from 
 import { registerMcpyTools } from "mcpy/mcp";
 import { Attr, parseTraceparent } from "mcpy/telemetry";
 import { ANONYMOUS, extractKey, findClient, parseClients, stripUrlKey, type Client } from "./clients.js";
-import { capFor, dailySpendLimit, spendingReport } from "./budget.js";
+import { capFor, dailySpendLimit, spendingReport, spentToday } from "./budget.js";
 import { ConfigError, loadEnv, type Env, type ServerEnv } from "./env.js";
 import { sdkFor } from "./mcpy.js";
 import { rateLimited } from "./rate-limit.js";
+import { rateLimitPolicyHeaders } from "./call-headers.js";
 import { alertHooks, pagerFor } from "./pager.js";
 import { errorResponse, handleRest, json } from "./rest.js";
 import { requestTelemetry, SERVICE_VERSION } from "./telemetry.js";
@@ -121,7 +122,8 @@ export default {
         const spending = budget
           ? () => spendingReport(budget, parseClients(config.MCPY_CLIENTS).map((c) => c.name), config.DAILY_BUDGET_USD, config.CLIENT_DAILY_BUDGETS_USD)
           : undefined;
-        return finish(withHeaders(await handleRest(request, url, api, client, { providers, spending }, usage), ids));
+        const callBudget = cap !== undefined && budget ? { capUsd: cap, spentToday: () => spentToday(budget, client.name) } : undefined;
+        return finish(withHeaders(await handleRest(request, url, api, client, { providers, spending }, usage, callBudget), { ...ids, ...rateLimitPolicyHeaders() }));
       }
       return finish(withHeaders(await mcpHandler(config, api, usage && { client, deps: usage })(stripUrlKey(request, url), env, ctx), ids));
     } catch (err) {
