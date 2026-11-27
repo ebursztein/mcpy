@@ -33,7 +33,7 @@ describe("direct: POST and headers", () => {
   });
 
   it("declares what it can send", () => {
-    expect(direct().capabilities).toEqual({ post: true, headers: true });
+    expect(direct().capabilities).toEqual({ methods: [HttpMethod.Head, HttpMethod.Post, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete], headers: true });
     expect(brightData({ apiKey: "k", zone: "z" }).capabilities).toBeUndefined();
   });
 });

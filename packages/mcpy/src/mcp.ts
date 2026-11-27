@@ -146,7 +146,7 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
     {
       title: "Web Fetch",
       description:
-        "Fetch a web page as clean markdown (or raw HTML). Handles blocked pages automatically. For pages that load their content with JavaScript (an app shell, prices missing), pass render: true, and wait_ms if it needs time. For APIs, pass method POST with a body (JSON or form) and headers. Long pages come in parts: pass next_offset as offset and the version to continue, or pass script to run JavaScript on the whole page and get back only what it returns.",
+        "Fetch a web page as clean markdown (or raw HTML). Handles blocked pages automatically. For pages that load their content with JavaScript (an app shell, prices missing), pass render: true, and wait_ms if it needs time. For APIs, pass method (POST, PUT, PATCH, DELETE, HEAD) with a body (JSON or form) and headers; a write reaches the site every time unless you pass max_age. Long pages come in parts: pass next_offset as offset and the version to continue, or pass script to run JavaScript on the whole page and get back only what it returns.",
       inputSchema: FetchInputSchema,
       outputSchema: FetchResultSchema,
       annotations: READ_ONLY,

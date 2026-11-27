@@ -5,9 +5,10 @@
 
 import { ErrorCode, HttpMethod, type PageFormat, type UserAgentProfile } from "../enums.js";
 import { McpyError } from "../errors.js";
+import { isSafeMethod } from "../http/methods.js";
 import { assertPublicHttpUrl } from "../http/url.js";
 import type { PageRequest } from "../providers/types.js";
-import { MAX_REQUEST_HEADERS } from "../schemas.js";
+import { DEFAULT_MAX_AGE_SECONDS, DEFAULT_WRITE_MAX_AGE_SECONDS, MAX_REQUEST_HEADERS } from "../schemas.js";
 
 /**
  * Headers a caller may not set: they describe the connection or the body
@@ -66,22 +67,30 @@ function checkedHeaders(headers: Record<string, string> | undefined): Record<str
 
 export function pageRequestOf(input: PageInput, defaultUserAgent: UserAgentProfile): PageRequest {
   const url = assertPublicHttpUrl(input.url).toString();
-  const post = input.method === HttpMethod.Post;
-  if (input.body !== undefined && !post) throw invalid("body needs method POST");
-  if (input.render && post) throw invalid("render works with GET only");
+  const write = !isSafeMethod(input.method);
+  if (input.body !== undefined && !write) throw invalid(`a ${input.method} takes no body: use POST, PUT, PATCH or DELETE`);
+  if (input.render && input.method !== HttpMethod.Get) throw invalid("render works with GET only");
   if (input.wait_ms !== undefined && !input.render) throw invalid("wait_ms needs render: true");
 
   const headers = checkedHeaders(input.headers);
   const typed = Object.keys(headers).some((name) => name.toLowerCase() === "content-type");
-  if (post && input.body !== undefined && !typed && isJson(input.body)) headers["Content-Type"] = "application/json";
+  if (write && input.body !== undefined && !typed && isJson(input.body)) headers["Content-Type"] = "application/json";
   return {
     url,
     format: input.format,
     userAgent: input.user_agent ?? defaultUserAgent,
-    ...(post ? { method: HttpMethod.Post } : {}),
+    ...(input.method !== HttpMethod.Get ? { method: input.method } : {}),
     ...(input.body !== undefined ? { body: input.body } : {}),
     ...(Object.keys(headers).length ? { headers } : {}),
     ...(input.render ? { render: true } : {}),
     ...(input.wait_ms !== undefined ? { waitMs: input.wait_ms } : {}),
   };
+}
+
+/**
+ * The oldest cached answer a page call accepts: the caller's max_age, else an
+ * hour for a read and none for a write, so a write always reaches the site.
+ */
+export function pageMaxAgeOf(input: { method: HttpMethod; max_age?: number }): number {
+  return input.max_age ?? (isSafeMethod(input.method) ? DEFAULT_MAX_AGE_SECONDS.page : DEFAULT_WRITE_MAX_AGE_SECONDS);
 }

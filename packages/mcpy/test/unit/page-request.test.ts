@@ -81,7 +81,7 @@ describe("page routing and cache keys", () => {
   });
 
   it("sends each request only to providers that can do what it asks", () => {
-    const direct = able("direct", { post: true, headers: true });
+    const direct = able("direct", { methods: [HttpMethod.Post], headers: true });
     const browser = able("browser", { render: true, headers: true });
     const unblocker = able("unblocker", {});
     const all = [direct, browser, unblocker];
@@ -93,14 +93,14 @@ describe("page routing and cache keys", () => {
   });
 
   it("fetch with render skips sources that cannot render, and says so when none can", async () => {
-    const direct = able("direct", { post: true, headers: true });
+    const direct = able("direct", { methods: [HttpMethod.Post], headers: true });
     const browser = able("browser", { render: true });
     const { mcpy } = testMcpy({ pages: [direct, browser] });
     await mcpy.fetch({ url: "https://example.com/app", render: true, wait_ms: 1_500 });
     expect(direct.calls).toHaveLength(0);
     expect(browser.calls[0]).toMatchObject({ render: true, waitMs: 1_500 });
 
-    const { mcpy: noBrowser } = testMcpy({ pages: [able("direct", { post: true })] });
+    const { mcpy: noBrowser } = testMcpy({ pages: [able("direct", { methods: [HttpMethod.Post] })] });
     const err = await noBrowser.fetch({ url: "https://example.com/app", render: true }).then(
       () => undefined,
       (e: McpyError) => e,
@@ -110,12 +110,12 @@ describe("page routing and cache keys", () => {
     expect(err.message).toBe("no source on this server can render pages");
   });
 
-  it("fetch with POST hands the body and headers to a source that can send them, and caches by body", async () => {
-    const direct = able("direct", { post: true, headers: true });
+  it("fetch with POST hands the body and headers to a source that can send them, and caches by body within its max_age", async () => {
+    const direct = able("direct", { methods: [HttpMethod.Post], headers: true });
     const unblocker = able("unblocker", {}, 0.002);
     const { mcpy } = testMcpy({ pages: [direct, unblocker] });
     const ask = (limit: number) =>
-      mcpy.fetch({ url: "https://example.com/api", method: HttpMethod.Post, body: JSON.stringify({ limit }), headers: { Origin: "https://example.com" } });
+      mcpy.fetch({ url: "https://example.com/api", method: HttpMethod.Post, body: JSON.stringify({ limit }), headers: { Origin: "https://example.com" }, max_age: 60 });
     await ask(5);
     await ask(5);
     await ask(25);

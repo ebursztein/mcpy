@@ -177,7 +177,14 @@ export class Mcpy implements McpyApi {
       }
       const target = targetAttributes(parsed.data);
       span.setAttributes(target);
-      const { result, served, outputChars } = await fn(parsed.data, { telemetry, parent: span.context, defer: this.context.defer, meter, onQuota: this.quotaReporter(telemetry, span.context) });
+      const { result, served, outputChars } = await fn(parsed.data, {
+        telemetry,
+        parent: span.context,
+        defer: this.context.defer,
+        meter,
+        onQuota: this.quotaReporter(telemetry, span.context),
+        ...(this.context.client ? { client: this.context.client } : {}),
+      });
       const facts = {
         [Attr.Cache]: served.cache,
         [Attr.Attempts]: served.attempts,

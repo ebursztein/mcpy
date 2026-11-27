@@ -48,9 +48,9 @@ export interface PageRequest {
   url: string;
   format: PageFormat;
   userAgent: UserAgentProfile;
-  /** Default GET. The engine only hands a POST to providers with `capabilities.post`. */
+  /** Default GET. The engine only hands another method to providers whose `capabilities.methods` list it. */
   method?: HttpMethod;
-  /** Request body, with `method` POST. */
+  /** Request body, with a write method (POST, PUT, PATCH, DELETE). */
   body?: string;
   /** Extra request headers (validated names), for providers with `capabilities.headers`. */
   headers?: Record<string, string>;
@@ -70,8 +70,8 @@ export interface PageRequest {
 export interface PageCapabilities {
   /** Runs the page's JavaScript in a real browser. */
   render?: boolean;
-  /** Sends POST requests with a body to the target. */
-  post?: boolean;
+  /** The methods besides GET it sends to the target, with the caller's body. */
+  methods?: readonly HttpMethod[];
   /** Sends the caller's extra request headers to the target. */
   headers?: boolean;
 }

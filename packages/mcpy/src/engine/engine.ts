@@ -58,6 +58,8 @@ export interface CallScope {
   /** Totals what the operation spends and enforces the caller's spending limit. */
   meter?: SpendMeter;
   onQuota?: (alert: QuotaAlert) => void; // a paid source refused a call for account reasons
+  /** The caller's client name: a write's cached answer is kept for it alone. */
+  client?: string;
 }
 
 /** Engine result. `provider` is for telemetry only; cost is totalled by the scope's meter. */
@@ -108,18 +110,18 @@ export class Engine {
     return this.deps.limits;
   }
 
-  private pageKey(req: PageRequest): Promise<string> {
-    return pageCacheKey(CACHE_VERSION, req);
+  private pageKey(req: PageRequest, scope: Pick<CallScope, "client">): Promise<string> {
+    return pageCacheKey(CACHE_VERSION, req, scope.client);
   }
 
   /** Keep this copy of a page so its later parts come from it; returns its version. */
-  async pinPage(req: PageRequest, served: Served<FetchedPage>): Promise<string> {
-    return this.pins.pin(await this.pageKey(req), served.value, served.provider);
+  async pinPage(req: PageRequest, served: Served<FetchedPage>, scope: Pick<CallScope, "client">): Promise<string> {
+    return this.pins.pin(await this.pageKey(req, scope), served.value, served.provider);
   }
 
   /** The pinned copy of a page with this version, if it is still kept. */
-  async pinnedPage(req: PageRequest, version: string): Promise<Pinned | undefined> {
-    return this.pins.recall(await this.pageKey(req), version);
+  async pinnedPage(req: PageRequest, version: string, scope: Pick<CallScope, "client">): Promise<Pinned | undefined> {
+    return this.pins.recall(await this.pageKey(req, scope), version);
   }
 
   /** `maxAgeSeconds` (every cached operation): oldest cached answer to serve; 0 skips the cache. */
@@ -127,7 +129,7 @@ export class Engine {
     const capable = capablePageProviders(this.deps.pageProviders, req);
     if (capable.length === 0) throw noCapableProvider(req);
     if (policy.freeOnly && !capable.some(isFree)) throw noFreeProvider();
-    const key = await this.pageKey(req);
+    const key = await this.pageKey(req, scope);
     const ttl = () => this.deps.limits.pageTtlSeconds;
     return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       runPageChain({

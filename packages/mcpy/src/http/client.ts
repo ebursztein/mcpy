@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { ErrorCode, HttpMethod, SpanName, SpanStatus } from "../enums.js";
+import { isIdempotentMethod } from "./methods.js";
 import { ProviderFailure } from "../errors.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
@@ -87,14 +88,15 @@ export class HttpClient {
 
   /**
    * One request (no redirect following), retried on transient failures. Body unread.
-   * A caller's POST to a target may not be safe to repeat: it is retried only
-   * when the answer says it was not processed (408, 425, 429), never after a
-   * 5xx or a lost connection. mcpy's own JSON calls to providers retry as GETs do.
+   * A caller's POST or PATCH to a target may not be safe to repeat: it is
+   * retried only when the answer says it was not processed (408, 425, 429),
+   * never after a 5xx or a lost connection. Idempotent methods (GET, HEAD, PUT,
+   * DELETE) and mcpy's own JSON calls to providers retry as GETs do.
    */
   private async withRetries(req: HttpRequest, ctx: HttpContext): Promise<Response> {
     const { retry } = this.options;
     const target = new URL(req.url);
-    const unsafe = req.method === HttpMethod.Post && req.json === undefined;
+    const unsafe = !isIdempotentMethod(req.method) && req.json === undefined;
     for (let attempt = 0; ; attempt++) {
       const span = ctx.telemetry.startSpan(
         SpanName.HttpClient,
@@ -179,12 +181,13 @@ export class HttpClient {
 /**
  * Next request in a redirect chain. The target must pass the same guard as
  * the caller's URL (throws McpyError invalid_target), so a public page cannot
- * bounce us to localhost or a metadata endpoint. 303, and 301/302 after a
- * POST, become GETs without a body, as browsers do.
+ * bounce us to localhost or a metadata endpoint. A 303 (but after a HEAD), and
+ * a 301/302 after a POST, become GETs without a body, as browsers do
+ * (RFC 9110 15.4); every other redirect keeps the method and body.
  */
 function nextHop(req: HttpRequest, status: number, url: string): HttpRequest {
   assertPublicHttpUrl(url);
-  const toGet = status === 303 || ((status === 301 || status === 302) && req.method === HttpMethod.Post);
+  const toGet = (status === 303 && req.method !== HttpMethod.Head) || ((status === 301 || status === 302) && req.method === HttpMethod.Post);
   if (!toGet) return { ...req, url };
   const headers = req.headers && Object.fromEntries(Object.entries(req.headers).filter(([name]) => name.toLowerCase() !== "content-type"));
   return { ...req, url, method: HttpMethod.Get, json: undefined, body: undefined, headers };

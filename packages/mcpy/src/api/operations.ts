@@ -20,7 +20,7 @@ import {
 } from "../schemas.js";
 import { CacheStatus, ErrorCode, GrepMode, type UserAgentProfile } from "../enums.js";
 import { McpyError } from "../errors.js";
-import { pageRequestOf } from "./page-input.js";
+import { pageMaxAgeOf, pageRequestOf } from "./page-input.js";
 import { runScript, scriptTip, type ScriptRunner } from "./script.js";
 import type { MergedPage } from "../engine/merge.js";
 import { pageVersion } from "../engine/pins.js";
@@ -46,13 +46,13 @@ export async function fetchOp(
   const startedAt = Date.now();
   const req = pageRequestOf(input, defaultUserAgent);
   const policy = { freeOnly: input.free_only === true };
-  const served = input.version ? await servePinned(engine, req, input.version, scope, policy) : await engine.page(req, scope, input.max_age, policy);
+  const served = input.version ? await servePinned(engine, req, input.version, scope, policy) : await engine.page(req, scope, pageMaxAgeOf(input), policy);
   const page = served.value;
   const content = input.script
     ? await runScript(scripts, input.script, { url: page.url, final_url: page.finalUrl, status: page.status, title: page.title, content: page.content })
     : page.content;
   const { chunk, total, end, hasMore } = paginate(content, input.offset, input.max_chars);
-  const version = input.version ?? (hasMore ? await engine.pinPage(req, served) : undefined);
+  const version = input.version ?? (hasMore ? await engine.pinPage(req, served, scope) : undefined);
   const result = FetchResultSchema.parse({
     url: page.url,
     final_url: page.finalUrl,
@@ -72,7 +72,7 @@ export async function fetchOp(
 
 /** The copy of a page that earlier parts came from. */
 async function servePinned(engine: Engine, req: PageRequest, version: string, scope: CallScope, policy: PagePolicy): Promise<Served<FetchedPage>> {
-  const pinned = await engine.pinnedPage(req, version);
+  const pinned = await engine.pinnedPage(req, version, scope);
   if (pinned) return { value: pinned.page, cache: CacheStatus.Hit, attempts: 0, provider: pinned.provider };
   // The pin may not have reached this location yet; the shared entry may still be that copy.
   const served = await engine.page(req, scope, Number.MAX_SAFE_INTEGER, policy);
@@ -87,7 +87,7 @@ export async function grepOp(
   scope: CallScope,
 ): Promise<{ result: GrepResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
-  const served = await engine.page(pageRequestOf(input, defaultUserAgent), scope, input.max_age, { freeOnly: input.free_only === true });
+  const served = await engine.page(pageRequestOf(input, defaultUserAgent), scope, pageMaxAgeOf(input), { freeOnly: input.free_only === true });
   const lines = served.value.content.split("\n");
   const grep = grepLines(lines, input.pattern, input.context, input.max_matches, input.literal ? GrepMode.Literal : GrepMode.Regex);
   const truncated = grep.output.length > MAX_GREP_OUTPUT_CHARS;

@@ -1,6 +1,6 @@
 import { htmlTitle, htmlToMarkdown, splitFrontmatter } from "../../content/extract.js";
 import { contentKindOf } from "../../content/kind.js";
-import { PageFormat, UserAgentProfile } from "../../enums.js";
+import { HttpMethod, PageFormat, UserAgentProfile } from "../../enums.js";
 import type { HttpResponse } from "../../http/client.js";
 import { isHtml, isMarkdown, isTextual } from "../../http/url.js";
 import { ProviderId, type FetchedPage, type PageProvider, type PageRequest, type ProviderCall } from "../types.js";
@@ -57,7 +57,7 @@ export function direct(options: DirectOptions = {}): PageProvider {
     // A failing direct fetch means the target is down or blocking, not that
     // fetch is unhealthy: never open its circuit.
     circuitBreaker: false,
-    capabilities: { post: true, headers: true },
+    capabilities: { methods: [HttpMethod.Head, HttpMethod.Post, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete], headers: true },
     async fetchPage(req, call) {
       let res = await send(req, req.userAgent, call);
       const ownAgent = Object.keys(req.headers ?? {}).some((name) => name.toLowerCase() === "user-agent");

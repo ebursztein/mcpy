@@ -39,21 +39,25 @@ const url = z.string().url().max(4096).describe("Absolute http(s) URL");
 
 /** Default `max_age` of each cached operation, in seconds. */
 export const DEFAULT_MAX_AGE_SECONDS = { page: 3_600, search: 900, papers: 86_400 } as const;
+/** Default `max_age` of a write (POST, PUT, PATCH, DELETE): it always reaches the site. */
+export const DEFAULT_WRITE_MAX_AGE_SECONDS = 0;
+
+const maxAgeSeconds = z.number().int().min(0).max(30 * 86_400);
+const MAX_AGE_HINT = "86400 for data that changes daily, 60 for live data, 0 to skip the cache";
 
 /**
  * How old a cached answer a call accepts, in seconds; 0 skips the cache.
  * Every cached operation takes this one field, with its own default.
  */
 export function maxAgeField(defaultSeconds: number) {
-  return z
-    .number()
-    .int()
-    .min(0)
-    .max(30 * 86_400)
-    .default(defaultSeconds)
-    .describe(`Oldest cached answer to accept, in seconds (default ${defaultSeconds}): 86400 for data that changes daily, 60 for live data, 0 to skip the cache`);
+  return maxAgeSeconds.default(defaultSeconds).describe(`Oldest cached answer to accept, in seconds (default ${defaultSeconds}): ${MAX_AGE_HINT}`);
 }
-const pageMaxAge = maxAgeField(DEFAULT_MAX_AGE_SECONDS.page);
+/** A page's max_age: its default depends on the method, so the operation resolves it (pageMaxAgeOf). */
+const pageMaxAge = maxAgeSeconds
+  .optional()
+  .describe(
+    `Oldest cached answer to accept, in seconds: ${MAX_AGE_HINT}. Default ${DEFAULT_MAX_AGE_SECONDS.page} for GET and HEAD; for POST, PUT, PATCH and DELETE ${DEFAULT_WRITE_MAX_AGE_SECONDS}: they reach the site unless you pass one (a JSON-RPC read, say)`,
+  );
 const freeOnly = z
   .boolean()
   .optional()
@@ -71,12 +75,12 @@ const pageRequestFields = {
     .default(false)
     .describe("Run the page's JavaScript in a real browser first, for pages that load their content with scripts (slower; GET only)"),
   wait_ms: z.number().int().min(0).max(MAX_RENDER_WAIT_MS).optional().describe("With render: extra time to let the page finish loading, in ms"),
-  method: HttpMethodSchema.default(HttpMethod.Get).describe("GET, or POST to send a body (for APIs that take a JSON or form body)"),
+  method: HttpMethodSchema.default(HttpMethod.Get).describe("GET (default), HEAD, or POST, PUT, PATCH, DELETE to send a body (for APIs that take a JSON or form body)"),
   body: z
     .string()
     .max(MAX_REQUEST_BODY_CHARS)
     .optional()
-    .describe("With method POST: the request body, e.g. a JSON string. A JSON body without a content-type header is sent as application/json"),
+    .describe("With POST, PUT, PATCH or DELETE: the request body, e.g. a JSON string. A JSON body without a content-type header is sent as application/json"),
   headers: z
     .record(headerName, z.string().max(2_000))
     .optional()
