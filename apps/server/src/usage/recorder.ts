@@ -7,7 +7,7 @@
  * `write` after the call; recording never changes or delays the answer.
  */
 
-import { CacheStatus, CacheStatusSchema, ErrorCode, McpyError, Operation, SearchTypeSchema, type CallContext, type Mcpy, type McpyApi, type SpendLimit } from "mcpy";
+import { CacheStatus, CacheStatusSchema, ErrorCode, McpyError, Operation, runFetchBatch, SearchTypeSchema, type CallContext, type Mcpy, type McpyApi, type SpendLimit } from "mcpy";
 import { CallStatus, CallStatusSchema, type CallStatus as Status, MAX_ARGS_CHARS, MAX_QUERY_CHARS, UNLOGGED_ARGS, type CallRow } from "./schema.js";
 
 type Input = Record<string, unknown>;
@@ -115,7 +115,9 @@ function counting(limit: SpendLimit | undefined): SpendLimit & { spent: () => nu
   };
 }
 
-const METHODS: Record<keyof McpyApi, Operation> = {
+type Logged = Exclude<keyof McpyApi, "fetchBatch">;
+
+const METHODS: Record<Logged, Operation> = {
   fetch: Operation.Fetch,
   grep: Operation.Grep,
   search: Operation.Search,
@@ -126,9 +128,12 @@ const METHODS: Record<keyof McpyApi, Operation> = {
   cryptoCoin: Operation.CryptoCoin,
 };
 
-/** The SDK for one request, with every call logged as `client`. */
+/**
+ * The SDK for one request, with every call logged as `client`. A batch is its
+ * fetches, each logged as a fetch of its own; their rows are written together.
+ */
 export function recordingApi(mcpy: Mcpy, context: CallContext & { client: string }, write: (rows: CallRow[]) => void): McpyApi {
-  const call = (method: keyof McpyApi) => async (input: unknown) => {
+  const call = (method: Logged, writeRows: (rows: CallRow[]) => void) => async (input: unknown) => {
     const started = Date.now();
     const spend = counting(context.spendLimit);
     let served: { provider: string; parts?: Record<string, string> } | undefined;
@@ -139,12 +144,22 @@ export function recordingApi(mcpy: Mcpy, context: CallContext & { client: string
       const result = (await (api[method] as (i: unknown) => Promise<unknown>)(input)) as Input;
       const meta = result["meta"];
       if (meta && typeof meta === "object") (meta as Record<string, unknown>)["call_id"] = ctx.callId; // the caller can trace an answer back to its log rows
-      write(rowsFor(METHODS[method], args, { result, costUsd: spend.spent(), served }, ctx));
+      writeRows(rowsFor(METHODS[method], args, { result, costUsd: spend.spent(), served }, ctx));
       return result;
     } catch (error) {
-      write(rowsFor(METHODS[method], args, { error, costUsd: spend.spent() }, ctx));
+      writeRows(rowsFor(METHODS[method], args, { error, costUsd: spend.spent() }, ctx));
       throw error;
     }
   };
-  return Object.fromEntries(Object.keys(METHODS).map((m) => [m, call(m as keyof McpyApi)])) as unknown as McpyApi;
+  const api = Object.fromEntries(Object.keys(METHODS).map((m) => [m, call(m as Logged, write)])) as unknown as McpyApi;
+  api.fetchBatch = async (input) => {
+    const rows: CallRow[] = [];
+    const fetch = call("fetch", (r) => rows.push(...r)) as McpyApi["fetch"];
+    try {
+      return await runFetchBatch(fetch, input);
+    } finally {
+      if (rows.length) write(rows);
+    }
+  };
+  return api;
 }

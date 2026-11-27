@@ -2,6 +2,7 @@
  * REST front door, built only on the public SDK.
  *
  *   GET|POST /v1/fetch   /v1/grep   /v1/search   /v1/papers    (same fields as the SDK)
+ *   POST     /v1/fetch/batch {requests: [fetch input, ...]}  (each request counts against the rate limit)
  *   e.g. GET /v1/search?query=rust&type=news&recency=week&country=us&sites=github.com,lwn.net
  *   GET|POST /v1/usage  /v1/usage/log              (the caller's own usage; admins may pass client)
  *   GET      /v1/admin/dashboard                   (admin clients only: the data dash.ly.tl shows)
@@ -12,11 +13,12 @@
  * URL-only agents can call it. Responses are JSON; errors use ErrorBody.
  */
 
-import { ErrorCode, McpyError, RestRoute, type McpyApi } from "mcpy";
+import { ErrorCode, FETCH_BATCH_MAX_REQUESTS, McpyError, RestRoute, type McpyApi } from "mcpy";
 import { ClientRole, type Client } from "./clients.js";
 import { secondsUntilReset } from "./budget.js";
 import { budgetHeaders, resultHeaders, type CallBudget } from "./call-headers.js";
 import type { ProviderSetup } from "./providers.js";
+import { batchSize, rateLimited } from "./rate-limit.js";
 import { dashboardData, UsageRoute, usageLogFor, usageSummary, type UsageDeps } from "./usage/api.js";
 
 export const AdminRoute = { Providers: "/v1/admin/providers", Spending: "/v1/admin/spending" } as const;
@@ -63,6 +65,7 @@ async function readInput(request: Request, url: URL): Promise<unknown> {
 const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<unknown>> = {
   // The SDK validates input with zod; `never` hands it the raw value.
   [RestRoute.Fetch]: (api, input) => api.fetch(input as never),
+  [RestRoute.FetchBatch]: (api, input) => api.fetchBatch(input as never),
   [RestRoute.Grep]: (api, input) => api.grep(input as never),
   [RestRoute.Search]: (api, input) => api.search(input as never),
   [RestRoute.Papers]: (api, input) => api.papers(input as never),
@@ -72,7 +75,22 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.CryptoCoin]: (api, input) => api.cryptoCoin(input as never),
 };
 
-export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, admin: AdminView, usage?: UsageDeps, budget?: CallBudget): Promise<Response> {
+/** What a REST call is served with besides the SDK. */
+export interface RestOptions {
+  admin: AdminView;
+  /** Undefined when no USAGE binding is configured. */
+  usage?: UsageDeps;
+  /** The client's cap, for the budget headers; undefined without one. */
+  budget?: CallBudget;
+  /**
+   * Counts more requests against the client's rate limit (the call itself was
+   * counted on arrival); false when that is over it.
+   */
+  chargeCalls?: (calls: number) => Promise<boolean>;
+}
+
+export async function handleRest(request: Request, url: URL, api: McpyApi, client: Client, options: RestOptions): Promise<Response> {
+  const { admin, usage, budget } = options;
   const isAdminRoute = Object.values(AdminRoute).includes(url.pathname as (typeof AdminRoute)[keyof typeof AdminRoute]);
   if (isAdminRoute && client.role !== ClientRole.Admin) return errorResponse(new McpyError(ErrorCode.Forbidden, "admin only"));
   if (url.pathname === AdminRoute.Spending) {
@@ -115,7 +133,14 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
     return budget && before !== undefined ? budgetHeaders(budget.capUsd, before, costUsd) : {};
   };
   try {
-    const result = await operation(api, await readInput(request, url));
+    const input = await readInput(request, url);
+    // A batch of N counts N against the rate limit; one too large is refused by the SDK, uncounted.
+    const size = url.pathname === RestRoute.FetchBatch ? batchSize(input) : 0;
+    if (size > 1 && size <= FETCH_BATCH_MAX_REQUESTS && options.chargeCalls && !(await options.chargeCalls(size - 1))) {
+      const refusal = rateLimited();
+      return errorResponse(refusal.error, refusal.headers);
+    }
+    const result = await operation(api, input);
     const { headers, costUsd } = resultHeaders(result);
     return json(result, 200, { ...headers, ...(await budgetOf(costUsd)) });
   } catch (err) {

@@ -23,6 +23,7 @@ import {
   type SearchInput,
   type SearchResult,
 } from "./schemas.js";
+import { FetchBatchInputSchema, FetchBatchResultSchema, type FetchBatchInput, type FetchBatchResult } from "./schemas-batch.js";
 import { PaperSearchInputSchema, PaperSearchResultSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
 import {
   CryptoCoinInputSchema,
@@ -67,6 +68,10 @@ export class McpyClient implements McpyApi {
 
   fetch(input: FetchInput): Promise<FetchResult> {
     return this.post(RestRoute.Fetch, FetchInputSchema, FetchResultSchema, input);
+  }
+
+  fetchBatch(input: FetchBatchInput): Promise<FetchBatchResult> {
+    return this.post(RestRoute.FetchBatch, FetchBatchInputSchema, FetchBatchResultSchema, input);
   }
 
   grep(input: GrepInput): Promise<GrepResult> {

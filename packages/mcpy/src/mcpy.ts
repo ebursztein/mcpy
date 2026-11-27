@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { fetchOp, grepOp, searchOp } from "./api/operations.js";
+import { runFetchBatch } from "./api/batch.js";
+import type { FetchBatchInput, FetchBatchResult } from "./schemas-batch.js";
 import type { ScriptRunner } from "./api/script.js";
 import { papersOp } from "./api/papers.js";
 import { shoppingItemOp } from "./services/shopping/item.js";
@@ -122,6 +124,11 @@ export class Mcpy implements McpyApi {
 
   fetch(input: FetchInput): Promise<FetchResult> {
     return this.run(Operation.Fetch, FetchInputSchema, input, (i, scope) => fetchOp(this.engine, i, this.defaultUserAgent, scope, this.scripts));
+  }
+
+  /** Each request is a fetch of its own: its own cache, spending, span and log line. */
+  fetchBatch(input: FetchBatchInput): Promise<FetchBatchResult> {
+    return runFetchBatch((request) => this.fetch(request), input);
   }
 
   grep(input: GrepInput): Promise<GrepResult> {

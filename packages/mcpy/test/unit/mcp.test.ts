@@ -45,6 +45,7 @@ const failing: McpyApi = {
   shoppingItem: () => Promise.reject(new McpyError(ErrorCode.UpstreamFailed, "could not read the listing")),
   cryptoMarket: () => Promise.reject(new McpyError(ErrorCode.NoProviders, "no crypto source is configured for market data")),
   cryptoCoin: () => Promise.reject(new McpyError(ErrorCode.InvalidInput, "invalid input")),
+  fetchBatch: () => Promise.reject(new McpyError(ErrorCode.InvalidInput, "invalid input")),
 };
 
 describe("registerMcpyTools registration", () => {

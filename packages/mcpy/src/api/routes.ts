@@ -1,6 +1,7 @@
 /** REST routes shared by the server and the REST client. */
 export const RestRoute = {
   Fetch: "/v1/fetch",
+  FetchBatch: "/v1/fetch/batch",
   Grep: "/v1/grep",
   Search: "/v1/search",
   Papers: "/v1/papers",

@@ -4,6 +4,7 @@
  */
 
 import { z } from "zod";
+import type { FetchBatchInput, FetchBatchResult } from "./schemas-batch.js";
 import type { PaperSearchInput, PaperSearchResult } from "./schemas-papers.js";
 import type { CryptoCoinInput, CryptoCoinResult, CryptoMarketInput, CryptoMarketResult } from "./schemas-crypto.js";
 import type { ShoppingItemInput, ShoppingItemResult, ShoppingSearchInput, ShoppingSearchResult } from "./services/shopping/schema.js";
@@ -246,4 +247,6 @@ export interface McpyApi {
   cryptoMarket(input: CryptoMarketInput): Promise<CryptoMarketResult>;
   /** crypto.coin: a few coins day by day. */
   cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult>;
+  /** fetch_batch: many fetches in one call, each answered on its own. */
+  fetchBatch(input: FetchBatchInput): Promise<FetchBatchResult>;
 }

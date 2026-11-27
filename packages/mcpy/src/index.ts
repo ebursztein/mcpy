@@ -26,6 +26,8 @@ export type { Telemetry } from "./telemetry/telemetry.js";
 export { EMPTY_SEARCH_TTL_SECONDS } from "./engine/engine.js";
 export * from "./schemas-papers.js";
 export * from "./schemas-crypto.js";
+export * from "./schemas-batch.js";
+export { FETCH_BATCH_CONCURRENCY, FETCH_BATCH_DEADLINE_MS, FETCH_BATCH_PER_SITE, runFetchBatch, type FetchBatchOptions } from "./api/batch.js";
 export { MAX_ABSTRACT_CHARS } from "./api/papers.js";
 export * from "./services/common.js";
 export * from "./services/shopping/schema.js";
