@@ -235,11 +235,11 @@ describe("rate limiting and misconfiguration", () => {
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("60");
     // The refusal says what to pace to, in the body and the headers.
-    expect(response.headers.get("RateLimit-Policy")).toBe("120;w=60");
-    expect(response.headers.get("X-RateLimit-Limit")).toBe("120");
+    expect(response.headers.get("RateLimit-Policy")).toBe("360;w=60");
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("360");
     const error = await errorOf(response);
     expect(error.code).toBe(ErrorCode.RateLimited);
-    expect(error.message).toContain("120 requests per 60 s");
+    expect(error.message).toContain("360 requests per 60 s");
     expect(limit).toHaveBeenCalledWith({ key: "alice" });
     expect(net.upstream).toEqual([]);
   });

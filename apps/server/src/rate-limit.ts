@@ -5,7 +5,7 @@ import { ErrorCode, McpyError } from "mcpy";
  * report its own settings, so this mirrors wrangler.jsonc (a unit test keeps
  * them equal) and lets a refusal tell the caller what to pace itself to.
  */
-export const CLIENT_RATE_LIMIT = { requests: 120, periodSeconds: 60 } as const;
+export const CLIENT_RATE_LIMIT = { requests: 360, periodSeconds: 60 } as const;
 
 /** The 429 a client over its rate limit gets: the limit in the message, details and headers. */
 export function rateLimited(): { error: McpyError; headers: Record<string, string> } {
