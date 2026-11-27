@@ -36,6 +36,37 @@ export class SiteRoutes {
 
 const key = (site: string) => `route:${ROUTE_VERSION}:${site}`;
 
+/**
+ * Sites whose paid sources all just failed. A call that paid for every
+ * escalation and still got nothing would pay for the same failures on the
+ * next call, and on every call after it (a poll every minute pays all day).
+ * For a while after such a failure the site gets its free sources only; when
+ * the memory expires, the paid ones get one more chance.
+ */
+export class PaidFailures {
+  constructor(
+    private readonly cache: Cache,
+    private readonly ttlSeconds: number,
+  ) {}
+
+  get seconds(): number {
+    return this.ttlSeconds;
+  }
+
+  /** Whether the site's paid sources all failed within the last `seconds`. */
+  async recent(site: string): Promise<boolean> {
+    return PaidFailureSchema.safeParse(await this.cache.get(failureKey(site))).success;
+  }
+
+  /** Remember that every paid source just failed for `site`. */
+  remember(site: string): Promise<void> {
+    return this.cache.put(failureKey(site), { at: Date.now() }, this.ttlSeconds);
+  }
+}
+
+const PaidFailureSchema = z.object({ at: z.number() });
+const failureKey = (site: string) => `paid-failed:${ROUTE_VERSION}:${site}`;
+
 /** The site a page request belongs to: its format and lowercase hostname. */
 export function siteOf(url: string, format: string): string | undefined {
   try {

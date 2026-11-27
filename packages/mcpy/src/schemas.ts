@@ -54,6 +54,10 @@ export function maxAgeField(defaultSeconds: number) {
     .describe(`Oldest cached answer to accept, in seconds (default ${defaultSeconds}): 86400 for data that changes daily, 60 for live data, 0 to skip the cache`);
 }
 const pageMaxAge = maxAgeField(DEFAULT_MAX_AGE_SECONDS.page);
+const freeOnly = z
+  .boolean()
+  .optional()
+  .describe("Never use a paid source: only the cache and free sources answer, and if they cannot the call fails (upstream_failed). For live reads a caller can get elsewhere");
 const userAgent = UserAgentProfileSchema.optional().describe("Browser to present as (default: an honest mcpy user agent)");
 const format = PageFormatSchema.default(PageFormat.Markdown).describe("markdown (readable text) or html (raw page)");
 
@@ -105,6 +109,7 @@ export const FetchInputSchema = z.object({
   user_agent: userAgent,
   ...pageRequestFields,
   max_age: pageMaxAge,
+  free_only: freeOnly,
 });
 
 export const GrepInputSchema = z.object({
@@ -117,6 +122,7 @@ export const GrepInputSchema = z.object({
   user_agent: userAgent,
   ...pageRequestFields,
   max_age: pageMaxAge,
+  free_only: freeOnly,
 });
 
 export const SearchInputSchema = z

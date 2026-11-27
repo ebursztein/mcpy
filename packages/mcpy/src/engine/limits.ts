@@ -20,6 +20,11 @@ export const EngineLimitsSchema = z.object({
    * Re-checking costs at most one failed attempt on each cheaper source, per site per period.
    */
   siteRouteTtlSeconds: z.number().int().min(60).max(30 * 86_400).default(900),
+  /**
+   * How long a site whose paid page sources all failed gets its free sources only, so a
+   * failed escalation is not paid for again on every call. Then the paid ones get another try.
+   */
+  paidFailureTtlSeconds: z.number().int().min(60).max(86_400).default(900),
   /** Thorough mode: after the first provider answers, how long to wait for the others. */
   thoroughGraceMs: z.number().int().min(0).max(120_000).default(8_000),
 });

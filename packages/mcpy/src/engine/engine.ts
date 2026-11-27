@@ -23,10 +23,12 @@ import { capablePageProviders, noCapableProvider, pageCacheKey, routeSite } from
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
 import type { QuotaAlert } from "./quota.js";
-import { routeOrder, SiteRoutes, targetHostAttributes } from "./routes.js";
+import { PaidFailures, SiteRoutes, targetHostAttributes } from "./routes.js";
+import { isFree, noFreeProvider, runPageChain, type PagePolicy } from "./page-chain.js";
 import { PagePins, type Pinned } from "./pins.js";
 
 export { EngineLimitsSchema, type EngineLimits } from "./limits.js";
+export type { PagePolicy } from "./page-chain.js";
 
 const CACHE_VERSION = "v2";
 
@@ -79,10 +81,12 @@ interface Cached<T> {
 export class Engine {
   private readonly routes: SiteRoutes;
   private readonly pins: PagePins;
+  private readonly paidFailures: PaidFailures;
 
   constructor(private readonly deps: EngineDeps) {
     this.routes = new SiteRoutes(deps.cache, deps.limits.siteRouteTtlSeconds);
     this.pins = new PagePins(deps.cache, deps.limits.pageTtlSeconds);
+    this.paidFailures = new PaidFailures(deps.cache, deps.limits.paidFailureTtlSeconds);
   }
 
   get providerIds() {
@@ -119,40 +123,36 @@ export class Engine {
   }
 
   /** `maxAgeSeconds` (every cached operation): oldest cached answer to serve; 0 skips the cache. */
-  async page(req: PageRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<FetchedPage>> {
+  async page(req: PageRequest, scope: CallScope, maxAgeSeconds: number, policy: PagePolicy = {}): Promise<Served<FetchedPage>> {
     const capable = capablePageProviders(this.deps.pageProviders, req);
     if (capable.length === 0) throw noCapableProvider(req);
+    if (policy.freeOnly && !capable.some(isFree)) throw noFreeProvider();
     const key = await this.pageKey(req);
-    const site = routeSite(req);
     // A salvaged thin page may be a JS shell nobody could render: never cache it.
     const ttl = (_page: FetchedPage, salvaged: boolean) => (salvaged ? undefined : this.deps.limits.pageTtlSeconds);
-    return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
-      const preferred = site ? await this.routes.recall(site) : undefined;
-      const providers = routeOrder(capable, preferred);
-      if (providers[0] !== capable[0]) {
-        scope.telemetry.log(LogLevel.Debug, "site route", { [Attr.Provider]: providers[0].id }, scope.parent);
-      }
-      const result = await runChain({
-        providers,
-        attempt: (p, signal, timeoutMs, parent) => p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
-        judge: assessPage,
-        // Which site each attempt was for, so hosts can report cost per domain.
-        attributes: targetHostAttributes(req.url),
-        describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
-        ...this.chainCommon(deadlineAt, scope),
-      });
-      if (site && !result.salvaged) await this.learnRoute(site, preferred, result.provider, capable[0].id, scope);
-      return result;
-    });
-  }
-
-  /** Remember which provider served a site, when that changes what the next call tries first (`first`: the chain's own first). */
-  private async learnRoute(site: string, preferred: string | undefined, served: string, first: string, scope: CallScope): Promise<void> {
-    const isDefault = served === first;
-    if (served === preferred || (preferred === undefined && isDefault)) return;
-    const write = this.routes.remember(site, served).catch(() => undefined);
-    if (scope.defer) scope.defer(write);
-    else await write;
+    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
+      runPageChain({
+        capable,
+        site: routeSite(req),
+        policy,
+        routes: this.routes,
+        failures: this.paidFailures,
+        scope,
+        run: (providers, onAttempt) =>
+          runChain({
+            providers,
+            attempt: (p, signal, timeoutMs, parent) => {
+              onAttempt(p);
+              return p.fetchPage(req, this.call(signal, timeoutMs, deadlineAt, scope, parent));
+            },
+            judge: assessPage,
+            // Which site each attempt was for, so hosts can report cost per domain.
+            attributes: targetHostAttributes(req.url),
+            describe: (page) => ({ [Attr.TargetStatus]: page.status, [Attr.ContentChars]: page.content.length }),
+            ...this.chainCommon(deadlineAt, scope),
+          }),
+      }),
+    );
   }
 
   /**

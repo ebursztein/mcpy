@@ -86,7 +86,10 @@
         // deepmine is our own mining operation; its daily pricing runs cost well under $0.50 (Nov 2026).
         // Raised to $1 on 2026-11-25 (owner): its normal day is about $0.24 (wemine's daily product pages),
         // and $0.50 left no room once Kryptex's refused chart reads were paid for (fixed the same day).
-        "CLIENT_DAILY_BUDGETS_USD": "cardy:1,deepmine:1",
+        // Raised to $5 on 2026-11-27 (owner): deepmine's live price polls (api.binance.com every minute,
+        // blocked direct, served by Firecrawl) passed $1 by 17:00 UTC and its reads failed over the cap.
+        // deepmine should send free_only on live reads; its other sources answer those for free.
+        "CLIENT_DAILY_BUDGETS_USD": "cardy:1,deepmine:5",
         // Answers are kept a day; each call says how old a copy it accepts (max_age).
         "PAGE_CACHE_TTL_SECONDS": "86400",
         "SEARCH_CACHE_TTL_SECONDS": "86400",

@@ -5,7 +5,7 @@
 
 import type { z } from "zod";
 import { clip, grepLines, paginate } from "../content/text.js";
-import type { CallScope, Engine, Served } from "../engine/engine.js";
+import type { CallScope, Engine, PagePolicy, Served } from "../engine/engine.js";
 import {
   FetchResultSchema,
   GrepResultSchema,
@@ -45,7 +45,8 @@ export async function fetchOp(
 ): Promise<{ result: FetchResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
   const req = pageRequestOf(input, defaultUserAgent);
-  const served = input.version ? await servePinned(engine, req, input.version, scope) : await engine.page(req, scope, input.max_age);
+  const policy = { freeOnly: input.free_only === true };
+  const served = input.version ? await servePinned(engine, req, input.version, scope, policy) : await engine.page(req, scope, input.max_age, policy);
   const page = served.value;
   const content = input.script
     ? await runScript(scripts, input.script, { url: page.url, final_url: page.finalUrl, status: page.status, title: page.title, content: page.content })
@@ -70,11 +71,11 @@ export async function fetchOp(
 }
 
 /** The copy of a page that earlier parts came from. */
-async function servePinned(engine: Engine, req: PageRequest, version: string, scope: CallScope): Promise<Served<FetchedPage>> {
+async function servePinned(engine: Engine, req: PageRequest, version: string, scope: CallScope, policy: PagePolicy): Promise<Served<FetchedPage>> {
   const pinned = await engine.pinnedPage(req, version);
   if (pinned) return { value: pinned.page, cache: CacheStatus.Hit, attempts: 0, provider: pinned.provider };
   // The pin may not have reached this location yet; the shared entry may still be that copy.
-  const served = await engine.page(req, scope, Number.MAX_SAFE_INTEGER);
+  const served = await engine.page(req, scope, Number.MAX_SAFE_INTEGER, policy);
   if ((await pageVersion(served.value)) === version) return served;
   throw new McpyError(ErrorCode.VersionExpired, "the copy of this page the earlier parts came from is gone; fetch it again from offset 0 without version");
 }
@@ -86,7 +87,7 @@ export async function grepOp(
   scope: CallScope,
 ): Promise<{ result: GrepResult; served: Served<unknown>; outputChars: number }> {
   const startedAt = Date.now();
-  const served = await engine.page(pageRequestOf(input, defaultUserAgent), scope, input.max_age);
+  const served = await engine.page(pageRequestOf(input, defaultUserAgent), scope, input.max_age, { freeOnly: input.free_only === true });
   const lines = served.value.content.split("\n");
   const grep = grepLines(lines, input.pattern, input.context, input.max_matches, input.literal ? GrepMode.Literal : GrepMode.Regex);
   const truncated = grep.output.length > MAX_GREP_OUTPUT_CHARS;
