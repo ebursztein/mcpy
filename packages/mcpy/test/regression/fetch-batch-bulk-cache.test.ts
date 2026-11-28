@@ -47,3 +47,30 @@ describe("fetch_batch reads the cache in bulk", () => {
     expect(kv.bulkGets[0]).toHaveLength(64);
   });
 });
+
+/**
+ * Regression (2026-11-27, owner): the cache is one per isolate, shared by every request it
+ * serves, and gathering reads over a few turns of the event loop let one request's reads join
+ * another's bulk get. A Worker's I/O belongs to the request that started it and is cancelled
+ * when that request ends, so the joining read could fail or hang. Reads are gathered per
+ * request (its request id), never across.
+ */
+describe("bulk KV gets stay within one request", () => {
+  it("never puts two requests' reads in one get, and still gathers each one's", async () => {
+    const { mcpy, kv } = cachedSite();
+    const [a, b] = [mcpy.with({ requestId: "request-a" }), mcpy.with({ requestId: "request-b" })];
+    await Promise.all([
+      a.fetchBatch({ requests: urls.slice(0, 3).map((url) => ({ url })) }),
+      b.fetchBatch({ requests: urls.slice(3, 5).map((url) => ({ url })) }),
+    ]);
+    const pageGets = kv.bulkGets.filter((keys) => keys.some((k) => k.includes(":page:")));
+    expect(pageGets.map((keys) => keys.length).sort()).toEqual([2, 3]);
+  });
+
+  it("reads alone for the admin's cache inspection", async () => {
+    const kv = fakeKv();
+    const { mcpy } = testMcpy({ cache: new LayeredCache({ kv, memory: false }) });
+    await Promise.all([mcpy.inspectCache("v2:page:x"), mcpy.inspectCache("v2:page:y")]);
+    expect(kv.bulkGets).toEqual([["v2:page:x"], ["v2:page:y"]]);
+  });
+});

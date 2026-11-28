@@ -7,8 +7,11 @@
  *   route and paused flag in one KV round trip, not two, and a batch's 64
  *   lookups go in one. Together means until a turn of the event loop passes
  *   with no new key (at most GATHER_TURNS): each fetch hashes its key first,
- *   asynchronously, so concurrent fetches reach KV a few moments apart. A KV
- *   hit is copied to memory.
+ *   asynchronously, so concurrent fetches reach KV a few moments apart. Only
+ *   reads of one request are gathered (`group`, its request id): one isolate
+ *   serves many requests, and a Worker's I/O belongs to the request that
+ *   started it, cancelled when that request ends, so a read that joined
+ *   another request's get could fail or hang. A KV hit is copied to memory.
  * - Writes go to both. With KV behind it, memory keeps an entry at most
  *   `memoryTtlSeconds` (default 60, KV's own propagation delay), so another
  *   isolate's change shows as soon as KV would show it.
@@ -66,7 +69,8 @@ export class LayeredCache {
   private readonly memory: MemoryStore | undefined;
   private readonly kv: KvStore | undefined;
   private readonly memoryTtlSeconds: number;
-  private pending: { keys: Set<string>; texts: Promise<Map<string, string | null>> } | undefined;
+  /** The bulk get gathering keys, per request (undefined: reads that name none, e.g. a process's own). */
+  private readonly pending = new Map<string | undefined, { keys: Set<string>; texts: Promise<Map<string, string | null>> }>();
 
   constructor(options: LayeredCacheOptions = {}) {
     this.memory = options.memory === false ? undefined : new MemoryStore(options.memory);
@@ -74,12 +78,15 @@ export class LayeredCache {
     this.memoryTtlSeconds = options.memoryTtlSeconds ?? 60;
   }
 
-  /** @internal The value under `key`, if any (SharedCache reads through this). May reject when KV fails. */
-  read(key: string): Promise<Found | undefined> {
+  /**
+   * @internal The value under `key`, if any (SharedCache reads through this). May reject when KV fails.
+   * `group` names the request the read is for: KV reads are gathered only with reads of the same one.
+   */
+  read(key: string, group?: string): Promise<Found | undefined> {
     const near = this.memory?.get(key);
     if (near !== undefined) return Promise.resolve({ value: near, tier: CacheTier.Memory });
     if (!this.kv) return Promise.resolve(undefined);
-    return this.fromKv(key).then((text) => {
+    return this.fromKv(key, group).then((text) => {
       if (text === null) return undefined;
       const value = deepFreeze(JSON.parse(text) as unknown);
       this.memory?.put(key, value, text.length, this.memoryTtlSeconds);
@@ -95,16 +102,17 @@ export class LayeredCache {
     await this.kv?.put(key, body, ttlSeconds);
   }
 
-  /** Keys asked for together go to KV in one bulk get. */
-  private fromKv(key: string): Promise<string | null> {
-    let batch = this.pending;
+  /** Keys one request asks for together go to KV in one bulk get. */
+  private fromKv(key: string, group: string | undefined): Promise<string | null> {
+    let batch = this.pending.get(group);
     if (!batch) {
       const keys = new Set<string>();
       const texts = gathered(keys).then(() => {
-        this.pending = undefined;
+        this.pending.delete(group);
         return this.kv!.getMany([...keys]);
       });
-      batch = this.pending = { keys, texts };
+      batch = { keys, texts };
+      this.pending.set(group, batch);
     }
     batch.keys.add(key);
     return batch.texts.then((found) => found.get(key) ?? null);

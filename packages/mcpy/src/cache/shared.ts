@@ -58,6 +58,8 @@ export interface CacheContext {
   defer?: (work: Promise<unknown>) => void;
   /** Counts this call's reads. */
   reads?: CacheReads;
+  /** The request this call serves (its id): KV reads are gathered only within one request. */
+  group?: string;
 }
 
 /** What a read returns: the value, the provider that produced it and its write time (absent on old entries). */
@@ -87,7 +89,7 @@ export class SharedCache {
     const key = cacheKey(space, id);
     if (maxAgeSeconds <= 0) return void report(ctx, space, key, CacheEvent.Bypass);
     // Called before any await, so reads issued together share one KV request.
-    const lookup = this.store.read(key);
+    const lookup = this.store.read(key, ctx?.group);
     const missed = (event: CacheEvent, extra: Attributes = {}) => {
       if (ctx?.reads) ctx.reads.missed++;
       report(ctx, space, key, event, extra);

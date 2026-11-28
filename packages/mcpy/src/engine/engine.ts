@@ -12,7 +12,7 @@ import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
 import type { EngineLimits } from "./limits.js";
 import type { LayeredCache } from "../cache/layered.js";
-import { hashedId, SharedCache, type CacheReads } from "../cache/shared.js";
+import { hashedId, SharedCache, type CacheContext } from "../cache/shared.js";
 import type { CacheSpace } from "../cache/spaces.js";
 import { ListingsSpace, PageSpace, PapersSpace, SearchSpace } from "./spaces.js";
 import { runChain, type ChainProvider, type ChainResult, type Judgement } from "./chain.js";
@@ -50,18 +50,14 @@ export interface EngineDeps {
 }
 
 /** Telemetry scope and parent span of the operation being served. */
-export interface CallScope {
+export interface CallScope extends CacheContext {
   telemetry: Telemetry;
   parent: SpanContext;
-  /** Runs background work after the response (e.g. a Worker's ctx.waitUntil). */
-  defer?: (work: Promise<unknown>) => void;
   /** Totals what the operation spends and enforces the caller's spending limit. */
   meter?: SpendMeter;
   onQuota?: (alert: QuotaAlert) => void; // a paid source refused a call for account reasons
   /** The caller's client name: a write's cached answer is kept for it alone. */
   client?: string;
-  /** Counts the operation's cache reads by layer, for hit rates. */
-  reads?: CacheReads;
   /** Waits for leave to call a site, after the cache could not answer (a batch's pacing). */
   admit?: Admit;
 }

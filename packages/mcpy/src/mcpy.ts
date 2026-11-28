@@ -207,6 +207,7 @@ export class Mcpy implements McpyApi {
         reads,
         ...(this.context.client ? { client: this.context.client } : {}),
         ...(this.context.admit ? { admit: this.context.admit } : {}),
+        ...(this.context.requestId ? { group: this.context.requestId } : {}),
       });
       const facts = {
         ...reads.attributes(),

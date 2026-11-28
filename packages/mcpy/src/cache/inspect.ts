@@ -50,7 +50,7 @@ export async function inspectEntry(store: LayeredCache, key: string): Promise<Ca
   const head = { key, ...parsed, current: parsed !== undefined && CACHE_VERSIONS[parsed.name] === parsed.version };
   let found: Awaited<ReturnType<LayeredCache["read"]>>;
   try {
-    found = await store.read(key);
+    found = await store.read(key, crypto.randomUUID()); // alone: never in another request's get
   } catch (err) {
     return CacheInspectionSchema.parse({ ...head, found: false, error: err instanceof Error ? err.message : String(err) });
   }
