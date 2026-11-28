@@ -26,6 +26,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
       papers: providers.papers,
       listings: providers.listings,
       crypto: providers.crypto,
+      stocks: providers.stocks,
       cache: new LayeredCache({ kv: env.CACHE, memory: MEMORY }),
       scripts: env.LOADER ? workerLoaderScripts(env.LOADER) : undefined,
       limits: {

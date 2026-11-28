@@ -36,6 +36,20 @@ import {
   type CryptoMarketResult,
 } from "./schemas-crypto.js";
 import {
+  StockFundamentalsInputSchema,
+  StockFundamentalsResultSchema,
+  StockHistoryInputSchema,
+  StockHistoryResultSchema,
+  StockQuoteInputSchema,
+  StockQuoteResultSchema,
+  type StockFundamentalsInput,
+  type StockFundamentalsResult,
+  type StockHistoryInput,
+  type StockHistoryResult,
+  type StockQuoteInput,
+  type StockQuoteResult,
+} from "./schemas-stocks.js";
+import {
   ShoppingItemInputSchema,
   ShoppingItemResultSchema,
   ShoppingSearchInputSchema,
@@ -100,6 +114,18 @@ export class McpyClient implements McpyApi {
 
   cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult> {
     return this.post(RestRoute.CryptoCoin, CryptoCoinInputSchema, CryptoCoinResultSchema, input);
+  }
+
+  stockQuote(input: StockQuoteInput): Promise<StockQuoteResult> {
+    return this.post(RestRoute.StockQuote, StockQuoteInputSchema, StockQuoteResultSchema, input);
+  }
+
+  stockHistory(input: StockHistoryInput): Promise<StockHistoryResult> {
+    return this.post(RestRoute.StockHistory, StockHistoryInputSchema, StockHistoryResultSchema, input);
+  }
+
+  stockFundamentals(input: StockFundamentalsInput): Promise<StockFundamentalsResult> {
+    return this.post(RestRoute.StockFundamentals, StockFundamentalsInputSchema, StockFundamentalsResultSchema, input);
   }
 
   private async post<I extends z.ZodType, O extends z.ZodType>(route: RestRoute, inSchema: I, outSchema: O, input: unknown): Promise<z.infer<O>> {

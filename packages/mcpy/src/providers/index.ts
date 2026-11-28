@@ -49,6 +49,13 @@ export { coinMetrics, COIN_METRICS_CAPABILITIES } from "./coinmetrics/index.js";
 export { miningPoolStats, MINING_POOL_STATS_CAPABILITIES } from "./miningpoolstats/index.js";
 export { isoFromUnix, type CryptoCapabilities, type CryptoProvider, type CryptoSnapshot, type FoundCoinDay, type FoundLiveCoin, type FoundTotals, type HistoryRequest, type SnapshotRequest } from "./crypto-types.js";
 
+// Stock quotes, history and fundamentals.
+export { yahoo, YAHOO_CAPABILITIES } from "./yahoo/index.js";
+export { nasdaq, NASDAQ_CAPABILITIES } from "./nasdaq/index.js";
+export { alphaVantage, ALPHAVANTAGE_CAPABILITIES } from "./alphavantage/index.js";
+export { edgar, EDGAR_CAPABILITIES, EDGAR_USER_AGENT, type EdgarOptions } from "./edgar/index.js";
+export { localDay, roundPrice, type FiledFact, type FoundBar, type FoundFundamentals, type FoundHistory, type FoundQuote, type FundamentalMeasure, type StockCapabilities, type StockHistoryRequest, type StockProvider } from "./stock-types.js";
+
 // Paper indexes.
 export { openAlex, OPENALEX_CAPABILITIES, type OpenAlexOptions } from "./openalex/index.js";
 export { arxiv, ARXIV_CAPABILITIES, type ArxivOptions } from "./arxiv/index.js";

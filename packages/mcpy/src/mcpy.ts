@@ -15,25 +15,31 @@ import {
   type ShoppingSearchResult,
 } from "./services/shopping/schema.js";
 import { PaperSearchInputSchema, type PaperSearchInput, type PaperSearchResult } from "./schemas-papers.js";
-import type { PaperProvider } from "./providers/paper-types.js";
-import type { ListingProvider } from "./providers/listing-types.js";
-import type { CryptoProvider } from "./providers/crypto-types.js";
 import { CryptoCoinInputSchema, CryptoMarketInputSchema, type CryptoCoinInput, type CryptoCoinResult, type CryptoMarketInput, type CryptoMarketResult } from "./schemas-crypto.js";
 import { cryptoCoinOp } from "./services/crypto/coin.js";
 import { cryptoMarketOp } from "./services/crypto/market.js";
-import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
+import {
+  StockFundamentalsInputSchema,
+  StockHistoryInputSchema,
+  StockQuoteInputSchema,
+  type StockFundamentalsInput,
+  type StockFundamentalsResult,
+  type StockHistoryInput,
+  type StockHistoryResult,
+  type StockQuoteInput,
+  type StockQuoteResult,
+} from "./schemas-stocks.js";
+import { stockFundamentalsOp } from "./services/stocks/fundamentals.js";
+import { stockHistoryOp } from "./services/stocks/history.js";
+import { stockQuoteOp } from "./services/stocks/quote.js";
 import type { CacheInspection } from "./cache/inspect.js";
-import { LayeredCache } from "./cache/layered.js";
 import { CacheReads } from "./cache/shared.js";
 import { targetAttributes, withCost } from "./api/call-meta.js";
-import { Engine, EngineLimitsSchema, type Admit, type CallScope, type Served } from "./engine/engine.js";
+import type { Admit, CallScope, Engine, Served } from "./engine/engine.js";
 import { SpendMeter, type SpendLimit } from "./engine/meter.js";
 import type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
-import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
+import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
-import { HttpClient } from "./http/client.js";
-import { RetryPolicySchema } from "./http/retry.js";
-import type { PageProvider, SearchProvider } from "./providers/types.js";
 import {
   FetchInputSchema,
   GrepInputSchema,
@@ -49,42 +55,6 @@ import {
 import { Attr } from "./telemetry/attributes.js";
 import { Telemetry } from "./telemetry/telemetry.js";
 import type { SpanContext } from "./telemetry/types.js";
-
-/** Tunables, validated with zod; every field has a default. */
-export const McpyConfigSchema = z.object({
-  limits: EngineLimitsSchema.default(EngineLimitsSchema.parse({})),
-  retry: RetryPolicySchema.default(RetryPolicySchema.parse({})),
-  breaker: BreakerPolicySchema.default(BreakerPolicySchema.parse({})),
-  userAgent: z
-    .object({
-      default: UserAgentProfileSchema.default(UserAgentProfile.Default),
-      /** Replaces the `mcpy` profile string, e.g. to add your contact URL. */
-      custom: z.string().min(1).max(512).optional(),
-    })
-    .default({ default: UserAgentProfile.Default }),
-});
-export type McpyConfig = z.input<typeof McpyConfigSchema>;
-
-export interface McpyOptions extends McpyConfig {
-  /** Page sources, tried in order. */
-  pages?: PageProvider[];
-  /** Search sources, tried in order. */
-  search?: SearchProvider[];
-  /** Paper indexes, tried in order. */
-  papers?: PaperProvider[];
-  /** Marketplace listing APIs, the last resort for shopping sites whose pages no page source could fetch. */
-  listings?: ListingProvider[];
-  /** Crypto market and network sources, merged field by field in this order. */
-  crypto?: CryptoProvider[];
-  /** Defaults to a memory-only LayeredCache; give it `kv` to share entries across isolates. */
-  cache?: LayeredCache;
-  /** Defaults to no telemetry. */
-  telemetry?: Telemetry;
-  /** Defaults to the global fetch. */
-  fetch?: typeof fetch;
-  /** Runs fetch scripts; without one, fetch rejects `script`. */
-  scripts?: ScriptRunner;
-}
 
 /** Who is calling and how; lands on every span and log record. */
 export interface CallContext {
@@ -162,6 +132,18 @@ export class Mcpy implements McpyApi {
 
   cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult> {
     return this.run(Operation.CryptoCoin, CryptoCoinInputSchema, input, (i, scope) => cryptoCoinOp(this.engine, i, scope));
+  }
+
+  stockQuote(input: StockQuoteInput): Promise<StockQuoteResult> {
+    return this.run(Operation.StockQuote, StockQuoteInputSchema, input, (i, scope) => stockQuoteOp(this.engine, i, scope));
+  }
+
+  stockHistory(input: StockHistoryInput): Promise<StockHistoryResult> {
+    return this.run(Operation.StockHistory, StockHistoryInputSchema, input, (i, scope) => stockHistoryOp(this.engine, i, scope));
+  }
+
+  stockFundamentals(input: StockFundamentalsInput): Promise<StockFundamentalsResult> {
+    return this.run(Operation.StockFundamentals, StockFundamentalsInputSchema, input, (i, scope) => stockFundamentalsOp(this.engine, i, scope));
   }
 
   /**
@@ -264,22 +246,4 @@ export class Mcpy implements McpyApi {
     if (this.context.defer) this.context.defer(write);
     else await write;
   }
-}
-
-/** Build the SDK from providers and (validated) settings. */
-export function createMcpy(options: McpyOptions = {}): Mcpy {
-  const config = McpyConfigSchema.parse({ limits: options.limits, retry: options.retry, breaker: options.breaker, userAgent: options.userAgent });
-  const engine = new Engine({
-    pageProviders: options.pages ?? [],
-    searchProviders: options.search ?? [],
-    paperProviders: options.papers ?? [],
-    listingProviders: options.listings ?? [],
-    cryptoProviders: options.crypto ?? [],
-    cache: options.cache ?? new LayeredCache(),
-    http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
-    breaker: new CircuitBreaker(config.breaker),
-    limits: config.limits,
-    userAgents: { defaultProfile: config.userAgent.default, customString: config.userAgent.custom },
-  });
-  return new Mcpy(engine, options.telemetry ?? Telemetry.noop(), config.userAgent.default, options.scripts);
 }

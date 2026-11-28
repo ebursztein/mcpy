@@ -1,8 +1,12 @@
 import {
+  alphaVantage,
   arxiv,
+  edgar,
+  nasdaq,
   openAlex,
   pubmed,
   semanticScholar,
+  yahoo,
   type PaperProvider,
   coinGecko,
   coinMetrics,
@@ -24,6 +28,7 @@ import {
   type ListingProvider,
   type PageProvider,
   type SearchProvider,
+  type StockProvider,
 } from "mcpy/providers";
 import { bindingRenderer, type BrowserBindingLike } from "./browser.js";
 import type { ServerEnv } from "./env.js";
@@ -47,13 +52,16 @@ export interface ProviderSetup {
   papers: PaperProvider[];
   listings: ListingProvider[];
   crypto: CryptoProvider[];
-  skipped: { pages: Skipped[]; search: Skipped[]; papers: Skipped[]; listings: Skipped[]; crypto: Skipped[] };
+  stocks: StockProvider[];
+  skipped: { pages: Skipped[]; search: Skipped[]; papers: Skipped[]; listings: Skipped[]; crypto: Skipped[]; stocks: Skipped[] };
 }
 
-type Build<P> = (env: ServerEnv, bindings: ProviderBindings) => P | null | typeof UNSUPPORTED;
-const UNSUPPORTED = Symbol("unsupported");
+/** A provider, or null when its credentials are missing. */
+type Build<P> = (env: ServerEnv, bindings: ProviderBindings) => P | null;
+/** The providers that can fill one role; an id listed for a role it has no builder for is skipped as not_supported. */
+type Builders<P> = Partial<Record<ProviderId, Build<P>>>;
 
-const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
+const PAGE_BUILDERS: Builders<PageProvider> = {
   [ProviderId.Direct]: () => direct(),
   // The binding needs no token; the REST API is the fallback for hosts without it.
   [ProviderId.CloudflareBrowser]: (e, b) =>
@@ -65,85 +73,28 @@ const PAGE_BUILDERS: Record<ProviderId, Build<PageProvider>> = {
   [ProviderId.Firecrawl]: (e) => (e.FIRECRAWL_API_KEY ? firecrawl(firecrawlOptions(e, e.FIRECRAWL_API_KEY)) : null),
   [ProviderId.BrightData]: (e) =>
     e.BRIGHTDATA_API_KEY && e.BRIGHTDATA_UNLOCKER_ZONE ? brightData({ apiKey: e.BRIGHTDATA_API_KEY, zone: e.BRIGHTDATA_UNLOCKER_ZONE }) : null,
-  [ProviderId.Serpent]: () => UNSUPPORTED,
-  [ProviderId.OpenAlex]: () => UNSUPPORTED,
-  [ProviderId.Arxiv]: () => UNSUPPORTED,
-  [ProviderId.SemanticScholar]: () => UNSUPPORTED,
-  [ProviderId.PubMed]: () => UNSUPPORTED,
-  [ProviderId.CoinGecko]: () => UNSUPPORTED,
-  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
-  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
-  [ProviderId.Kaspa]: () => UNSUPPORTED,
-  [ProviderId.Dash]: () => UNSUPPORTED,
-  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
-const SEARCH_BUILDERS: Record<ProviderId, Build<SearchProvider>> = {
-  [ProviderId.Direct]: () => UNSUPPORTED,
-  [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
+const SEARCH_BUILDERS: Builders<SearchProvider> = {
   [ProviderId.Firecrawl]: (e) => (e.FIRECRAWL_API_KEY ? firecrawlSearch(firecrawlOptions(e, e.FIRECRAWL_API_KEY)) : null),
   [ProviderId.BrightData]: (e) =>
     e.BRIGHTDATA_API_KEY && e.BRIGHTDATA_SERP_ZONE ? brightDataSearch({ apiKey: e.BRIGHTDATA_API_KEY, zone: e.BRIGHTDATA_SERP_ZONE }) : null,
   [ProviderId.Serpent]: (e) => (e.SERPENT_API_KEY ? serpentSearch({ apiKey: e.SERPENT_API_KEY }) : null),
-  [ProviderId.OpenAlex]: () => UNSUPPORTED,
-  [ProviderId.Arxiv]: () => UNSUPPORTED,
-  [ProviderId.SemanticScholar]: () => UNSUPPORTED,
-  [ProviderId.PubMed]: () => UNSUPPORTED,
-  [ProviderId.CoinGecko]: () => UNSUPPORTED,
-  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
-  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
-  [ProviderId.Kaspa]: () => UNSUPPORTED,
-  [ProviderId.Dash]: () => UNSUPPORTED,
-  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
-const PAPER_BUILDERS: Record<ProviderId, Build<PaperProvider>> = {
-  [ProviderId.Direct]: () => UNSUPPORTED,
-  [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
-  [ProviderId.Firecrawl]: () => UNSUPPORTED,
-  [ProviderId.BrightData]: () => UNSUPPORTED,
-  [ProviderId.Serpent]: () => UNSUPPORTED,
+const PAPER_BUILDERS: Builders<PaperProvider> = {
   // Works keyless on a small shared budget; a free key raises it.
   [ProviderId.OpenAlex]: (e) => openAlex({ apiKey: e.OPENALEX_API_KEY }),
   [ProviderId.Arxiv]: () => arxiv(),
   [ProviderId.SemanticScholar]: (e) => (e.SEMANTIC_SCHOLAR_API_KEY ? semanticScholar({ apiKey: e.SEMANTIC_SCHOLAR_API_KEY }) : null),
   [ProviderId.PubMed]: (e) => pubmed({ apiKey: e.NCBI_API_KEY, email: e.NCBI_EMAIL }),
-  [ProviderId.CoinGecko]: () => UNSUPPORTED,
-  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
-  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
-  [ProviderId.Kaspa]: () => UNSUPPORTED,
-  [ProviderId.Dash]: () => UNSUPPORTED,
-  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
-const LISTING_BUILDERS: Record<ProviderId, Build<ListingProvider>> = {
-  [ProviderId.Direct]: () => UNSUPPORTED,
-  [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
-  [ProviderId.Firecrawl]: () => UNSUPPORTED,
-  [ProviderId.BrightData]: () => UNSUPPORTED,
+const LISTING_BUILDERS: Builders<ListingProvider> = {
   [ProviderId.Serpent]: (e) => (e.SERPENT_API_KEY ? serpentListings({ apiKey: e.SERPENT_API_KEY }) : null),
-  [ProviderId.OpenAlex]: () => UNSUPPORTED,
-  [ProviderId.Arxiv]: () => UNSUPPORTED,
-  [ProviderId.SemanticScholar]: () => UNSUPPORTED,
-  [ProviderId.PubMed]: () => UNSUPPORTED,
-  [ProviderId.CoinGecko]: () => UNSUPPORTED,
-  [ProviderId.CoinMetrics]: () => UNSUPPORTED,
-  [ProviderId.MiningPoolStats]: () => UNSUPPORTED,
-  [ProviderId.Kaspa]: () => UNSUPPORTED,
-  [ProviderId.Dash]: () => UNSUPPORTED,
-  [ProviderId.Mempool]: () => UNSUPPORTED,
 };
 
-const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
-  [ProviderId.Direct]: () => UNSUPPORTED,
-  [ProviderId.CloudflareBrowser]: () => UNSUPPORTED,
-  [ProviderId.Firecrawl]: () => UNSUPPORTED,
-  [ProviderId.BrightData]: () => UNSUPPORTED,
-  [ProviderId.Serpent]: () => UNSUPPORTED,
-  [ProviderId.OpenAlex]: () => UNSUPPORTED,
-  [ProviderId.Arxiv]: () => UNSUPPORTED,
-  [ProviderId.SemanticScholar]: () => UNSUPPORTED,
-  [ProviderId.PubMed]: () => UNSUPPORTED,
+const CRYPTO_BUILDERS: Builders<CryptoProvider> = {
   // Keyless works on a small shared limit; the demo key makes it dependable.
   [ProviderId.CoinGecko]: (e) => coinGecko({ apiKey: e.COINGECKO_API_KEY }),
   [ProviderId.CoinMetrics]: () => coinMetrics(),
@@ -153,19 +104,23 @@ const CRYPTO_BUILDERS: Record<ProviderId, Build<CryptoProvider>> = {
   [ProviderId.Mempool]: () => mempool(),
 };
 
+const STOCK_BUILDERS: Builders<StockProvider> = {
+  [ProviderId.Yahoo]: () => yahoo(),
+  [ProviderId.Nasdaq]: () => nasdaq(),
+  // 25 requests a day on the free key: the last resort.
+  [ProviderId.AlphaVantage]: (e) => (e.ALPHAVANTAGE_API_KEY ? alphaVantage({ apiKey: e.ALPHAVANTAGE_API_KEY }) : null),
+  [ProviderId.Edgar]: (e) => edgar({ userAgent: e.SEC_USER_AGENT }),
+};
+
 const firecrawlOptions = (e: ServerEnv, apiKey: string) => ({ apiKey, apiUrl: e.FIRECRAWL_API_URL, usdPerCredit: e.FIRECRAWL_USD_PER_CREDIT });
 
-function resolve<P>(
-  order: ProviderId[],
-  builders: Record<ProviderId, Build<P>>,
-  env: ServerEnv,
-  bindings: ProviderBindings,
-): { chain: P[]; skipped: Skipped[] } {
+function resolve<P>(order: ProviderId[], builders: Builders<P>, env: ServerEnv, bindings: ProviderBindings): { chain: P[]; skipped: Skipped[] } {
   const chain: P[] = [];
   const skipped: Skipped[] = [];
   for (const id of order) {
-    const built = builders[id](env, bindings);
-    if (built === UNSUPPORTED) skipped.push({ id, reason: SkipReason.NotSupported });
+    const build = builders[id];
+    const built = build ? build(env, bindings) : undefined;
+    if (built === undefined) skipped.push({ id, reason: SkipReason.NotSupported });
     else if (built === null) skipped.push({ id, reason: SkipReason.MissingCredentials });
     else chain.push(built);
   }
@@ -179,12 +134,14 @@ export function buildProviders(env: ServerEnv, bindings: ProviderBindings = {}):
   const papers = resolve(env.PAPER_PROVIDERS, PAPER_BUILDERS, env, bindings);
   const listings = resolve(env.LISTING_PROVIDERS, LISTING_BUILDERS, env, bindings);
   const crypto = resolve(env.CRYPTO_PROVIDERS, CRYPTO_BUILDERS, env, bindings);
+  const stocks = resolve(env.STOCK_PROVIDERS, STOCK_BUILDERS, env, bindings);
   return {
     pages: pages.chain,
     search: search.chain,
     papers: papers.chain,
     listings: listings.chain,
     crypto: crypto.chain,
-    skipped: { pages: pages.skipped, search: search.skipped, papers: papers.skipped, listings: listings.skipped, crypto: crypto.skipped },
+    stocks: stocks.chain,
+    skipped: { pages: pages.skipped, search: search.skipped, papers: papers.skipped, listings: listings.skipped, crypto: crypto.skipped, stocks: stocks.skipped },
   };
 }

@@ -115,6 +115,8 @@ export const EnvSchema = z.object({
   LISTING_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Serpent]),
   /** Crypto market and network sources; the first with a value wins each field (network history first, then prices, then live network). */
   CRYPTO_PROVIDERS: csv(ProviderIdSchema, [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats]),
+  /** Stock sources, asked in order: a later one only for what earlier ones did not answer (quotes and history), or alone (fundamentals). */
+  STOCK_PROVIDERS: csv(ProviderIdSchema, [ProviderId.Yahoo, ProviderId.Nasdaq, ProviderId.AlphaVantage, ProviderId.Edgar]),
 
   // Limits
   ATTEMPT_TIMEOUT_MS: intVar(1_000, 300_000, 20_000),
@@ -141,6 +143,8 @@ export const EnvSchema = z.object({
   // User agent
   DEFAULT_USER_AGENT: UserAgentProfileSchema.default(UserAgentProfile.Default),
   USER_AGENT_STRING: z.string().min(1).max(512).optional(),
+  /** Optional user agent for SEC filings, naming your service and a contact (default: mcpy and its public npm page). */
+  SEC_USER_AGENT: z.string().min(1).max(512).optional(),
 
   // Telemetry
   LOG_LEVEL: LogLevelSchema.default(LogLevel.Info),
@@ -166,6 +170,8 @@ export const EnvSchema = z.object({
   OPENALEX_API_KEY: secret,
   /** CoinGecko demo key (free; shared with deepmine, 30 calls a minute). Keyless works on a small shared limit. */
   COINGECKO_API_KEY: secret,
+  /** Alpha Vantage free key (25 requests a day): the last stock source; skipped without it. */
+  ALPHAVANTAGE_API_KEY: secret,
   /** Semantic Scholar is enabled only with a key (anonymous calls are rate-limited). */
   SEMANTIC_SCHOLAR_API_KEY: secret,
   /** Optional: PubMed works without it (3 requests/s); a free NCBI key allows 10. */

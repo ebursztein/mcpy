@@ -33,8 +33,12 @@ function argsOf(input: Input): Record<string, unknown> {
 
 /** What every row of one call shares. */
 function baseRow(tool: Operation, input: Input, ctx: { client: string; callId: string; started: number; transport?: CallContext["transport"] }) {
-  // crypto calls name coins, not a URL or a query: their symbols stand in for the query.
-  const symbols = Array.isArray(input["symbols"]) ? input["symbols"].filter((s): s is string => typeof s === "string").join(",") : undefined;
+  // crypto and stock calls name symbols, not a URL or a query: their symbols stand in for the query.
+  const symbols = Array.isArray(input["symbols"])
+    ? input["symbols"].filter((s): s is string => typeof s === "string").join(",")
+    : typeof input["symbol"] === "string"
+      ? input["symbol"]
+      : undefined;
   input = input["url"] === undefined && input["query"] === undefined && symbols ? { ...input, query: symbols } : input;
   const searchType = SearchTypeSchema.safeParse(input["type"] ?? (tool === Operation.Search ? "web" : undefined));
   return {
@@ -126,6 +130,9 @@ const METHODS: Record<Logged, Operation> = {
   shoppingItem: Operation.ShoppingItem,
   cryptoMarket: Operation.CryptoMarket,
   cryptoCoin: Operation.CryptoCoin,
+  stockQuote: Operation.StockQuote,
+  stockHistory: Operation.StockHistory,
+  stockFundamentals: Operation.StockFundamentals,
 };
 
 /**

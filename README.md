@@ -1,6 +1,6 @@
 # mcpy
 
-Web and paper tools for AI agents (fetch, grep, search, paper search), as:
+Web, paper, shopping, crypto and stock tools for AI agents, as:
 
 - **an SDK** on npm: [`mcpy`](packages/mcpy), usable from any TypeScript project
 - **a hosted server** on Cloudflare Workers: [`apps/server`](apps/server), exposing the
@@ -30,6 +30,13 @@ which tool to use when, errors, and safety rules.
 | `web_grep` | `GET\|POST /v1/grep` | Find lines in a page (regex or plain text), with context |
 | `web_search` | `GET\|POST /v1/search` | Search the web, news, images, videos, shopping, jobs or places |
 | `paper_search` | `GET\|POST /v1/papers` | Search scholarly papers: authors, year, venue, citations, abstract, free PDF |
+| `shopping_search` | `GET\|POST /v1/shopping` | Search marketplaces' listings, store by store |
+| `shopping_item` | `GET\|POST /v1/shopping/item` | One product page's price, condition and seller |
+| `crypto_market` | `GET\|POST /v1/crypto/market` | The crypto market now: totals and up to 40 coins |
+| `crypto_coin` | `GET\|POST /v1/crypto/coin` | A few coins day by day: price, network, issuance, hashprice |
+| `stock_quote` | `GET\|POST /v1/stocks/quote` | Latest price of up to 25 stocks, ETFs, funds, indices, currencies or crypto pairs, on most exchanges |
+| `stock_history` | `GET\|POST /v1/stocks/history` | One symbol's daily, weekly or monthly bars, with dividends and splits |
+| `stock_fundamentals` | `GET\|POST /v1/stocks/fundamentals` | A US-listed company's fiscal years from its annual reports, latest balance sheet and shares outstanding |
 
 ### Parameters
 
@@ -39,6 +46,9 @@ which tool to use when, errors, and safety rules.
 | grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `render`, `wait_ms`, `method`, `body`, `headers`, `max_age` |
 | search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `max_age` |
 | papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `max_age` |
+| stock_quote | `symbols` (e.g. `AAPL`, `BRK-B`, `^GSPC`, `SAP.DE`, `EURUSD=X`, `BTC-USD`), `max_age` (default 60) |
+| stock_history | `symbol`, `from`, `to` (YYYY-MM-DD; default the last 30 days), `interval` (`day`\|`week`\|`month`), `max_age`; at most 400 bars a call |
+| stock_fundamentals | `symbol`, `years` (1-10, default 5), `max_age` (default a day) |
 
 - `user_agent`: `default` (honest mcpy agent), `chrome`, `safari`, `firefox`, `mobile`, `googlebot`.
 - `type`: `web`, `news`, `images`, `videos`, `shopping`, `jobs`, `places`.
@@ -170,6 +180,8 @@ Pushover itself.
 | `PAGE_PROVIDERS` | `direct,cloudflare_browser,firecrawl,brightdata` | Page fallback order |
 | `SEARCH_PROVIDERS` | `serpent,firecrawl,brightdata` | Search fallback order (cheapest first) |
 | `PAPER_PROVIDERS` | `openalex,arxiv,pubmed,semantic_scholar` | Paper index order |
+| `CRYPTO_PROVIDERS` | `coinmetrics,kaspa,dash,mempool,coingecko,miningpoolstats` | Crypto sources, merged field by field |
+| `STOCK_PROVIDERS` | `yahoo,nasdaq,alphavantage,edgar` | Stock sources: quotes and history go down the list for the symbols earlier ones did not know; fundamentals come from filings |
 | `LISTING_PROVIDERS` | `serpent` | Marketplace listing APIs, used only when no page source could fetch a shopping site's search page (today: the eBay sites) |
 | `ATTEMPT_TIMEOUT_MS` / `DEADLINE_MS` | `20000` / `60000` | Per attempt / per call |
 | `RETRIES` | `2` | Retries per upstream request |
@@ -182,6 +194,7 @@ Pushover itself.
 | `PAGE_CACHE_TTL_SECONDS` / `SEARCH_CACHE_TTL_SECONDS` / `PAPER_CACHE_TTL_SECONDS` | `3600` / `900` / `86400` | How long answers are kept. Each call reads only as old as its `max_age` allows, so keeping them longer only lets callers opt in to older copies |
 | `DEFAULT_USER_AGENT` | `default` | `default`, `chrome`, `safari`, `firefox`, `mobile`, `googlebot` |
 | `USER_AGENT_STRING` | - | Replace the `default` user-agent string |
+| `SEC_USER_AGENT` | `mcpy/1.0 (+https://www.npmjs.com/package/mcpy)` | User agent for company filings. SEC wants a tool or service and a contact, and refuses `default` (it links to github.com); set this only to name your own |
 | `ALLOWED_HOSTNAMES` | - | Accepted Host headers (set on custom domains) |
 | `ALLOWED_ORIGIN_HOSTNAMES` | - | Extra browser origins allowed to call `/mcp` |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
@@ -194,6 +207,7 @@ Pushover itself.
 | `BRIGHTDATA_API_KEY`, `BRIGHTDATA_UNLOCKER_ZONE`, `BRIGHTDATA_SERP_ZONE` | - | Bright Data |
 | `SERPENT_API_KEY` | - | Serpent (apiserpent.com): web, news and image search ($0.60 per 1,000 calls on the default tier) and the eBay listing fallback ($0.40 per 1,000). Prepaid credit; a 402 means it ran out and search falls back to the next source |
 | `OPENALEX_API_KEY` | - | Free at openalex.org/settings/api. Needed on Cloudflare: without it OpenAlex shares one small daily budget per IP, and Workers share IPs, so it answers 429 |
+| `ALPHAVANTAGE_API_KEY` | - | Free key from alphavantage.co (25 requests a day): the last stock source, for quotes and the last 100 days; skipped without it |
 | `SEMANTIC_SCHOLAR_API_KEY` | - | Enables Semantic Scholar (anonymous calls are rate-limited) |
 | `NCBI_API_KEY`, `NCBI_EMAIL` | - | Optional for PubMed: a free key raises the limit from 3 to 10 requests/s |
 | `PAPER_CACHE_TTL_SECONDS` | `86400` | Paper search cache TTL |

@@ -86,7 +86,7 @@ export const QuotaAlertKind = quotaAlertKind.values;
 export const QuotaAlertKindSchema = quotaAlertKind.schema;
 export type QuotaAlertKind = z.infer<typeof QuotaAlertKindSchema>;
 
-const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers", Shopping: "shopping", ShoppingItem: "shopping_item", CryptoMarket: "crypto_market", CryptoCoin: "crypto_coin" } as const);
+const operation = enumOf({ Fetch: "fetch", Grep: "grep", Search: "search", Papers: "papers", Shopping: "shopping", ShoppingItem: "shopping_item", CryptoMarket: "crypto_market", CryptoCoin: "crypto_coin", StockQuote: "stock_quote", StockHistory: "stock_history", StockFundamentals: "stock_fundamentals" } as const);
 export const Operation = operation.values;
 export const OperationSchema = operation.schema;
 export type Operation = z.infer<typeof OperationSchema>;

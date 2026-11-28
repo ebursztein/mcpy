@@ -8,7 +8,8 @@
  *   const page = await mcpy.fetch({ url: "https://example.com" });
  */
 
-export { createMcpy, Mcpy, McpyConfigSchema, type CallContext, type McpyConfig, type McpyOptions } from "./mcpy.js";
+export { Mcpy, type CallContext } from "./mcpy.js";
+export { createMcpy, McpyConfigSchema, type McpyConfig, type McpyOptions } from "./create.js";
 export { RestRoute, ToolName } from "./api/routes.js";
 export { MAX_GREP_OUTPUT_CHARS, MAX_SNIPPET_CHARS } from "./api/operations.js";
 export type { ScriptPage, ScriptRunner } from "./api/script.js";
@@ -27,6 +28,7 @@ export type { Telemetry } from "./telemetry/telemetry.js";
 export { EMPTY_SEARCH_TTL_SECONDS } from "./engine/engine.js";
 export * from "./schemas-papers.js";
 export * from "./schemas-crypto.js";
+export * from "./schemas-stocks.js";
 export * from "./schemas-batch.js";
 export { FETCH_BATCH_CONCURRENCY, FETCH_BATCH_DEADLINE_MS, FETCH_BATCH_PER_SITE, runFetchBatch, type FetchBatchOptions } from "./api/batch.js";
 export { MAX_ABSTRACT_CHARS } from "./api/papers.js";

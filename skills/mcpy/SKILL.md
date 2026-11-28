@@ -1,11 +1,11 @@
 ---
 name: mcpy
-description: Read web pages, search the web (news, images, videos, shopping, places), and search scholarly papers (journals, arXiv preprints, PubMed) through the mcpy API, over REST or MCP. Use whenever a task needs live web content, current information, page lookups, or academic literature, instead of built-in or third-party fetch/search tools.
+description: Read web pages, search the web (news, images, videos, shopping, places), search scholarly papers (journals, arXiv preprints, PubMed), and get stock quotes, price history and company fundamentals through the mcpy API, over REST or MCP. Use whenever a task needs live web content, current information, page lookups, academic literature or market data, instead of built-in or third-party fetch/search tools.
 ---
 
 # mcpy: web and paper tools for agents
 
-mcpy is one API for four tools. It picks the backend, retries, falls back
+mcpy is one API for web, paper and market-data tools. It picks the backend, retries, falls back
 when a site blocks it, caches results, and keeps responses small enough for
 your context. You never choose or see a backend.
 
@@ -15,6 +15,9 @@ your context. You never choose or see a backend.
 | grep | find lines in a page that match a pattern | `/v1/grep` | `web_grep` |
 | search | search the web, news, images, videos, shopping, places | `/v1/search` | `web_search` |
 | papers | search scholarly papers | `/v1/papers` | `paper_search` |
+| stock quote | latest price of stocks, ETFs, indices, currencies, crypto pairs | `/v1/stocks/quote` | `stock_quote` |
+| stock history | a symbol's daily, weekly or monthly bars | `/v1/stocks/history` | `stock_history` |
+| stock fundamentals | a US company's filed revenue, earnings, cash flow, balance sheet | `/v1/stocks/fundamentals` | `stock_fundamentals` |
 
 ## Connect
 
@@ -145,9 +148,25 @@ curl -s "$MCPY_URL/v1/grep" -H "Authorization: Bearer $MCPY_KEY" -H "content-typ
   -d '{"url":"https://www.cloudflare.com/plans/","pattern":"\\$[0-9]+","context":1}'
 ```
 
+**Need a price or a company's numbers?** Use the stock tools, not a page fetch.
+- `stock_quote`: `symbols` as markets write them: `AAPL`, `BRK-B`, `^GSPC` (S&P 500),
+  `SAP.DE` (other exchanges by suffix), `EURUSD=X`, `BTC-USD`; up to 25. Symbols no
+  source knows come back in `missing`. Prices are in each quote's `currency`.
+- `stock_history`: one `symbol`, `from`/`to` (YYYY-MM-DD, default the last 30 days),
+  `interval` `day`, `week` or `month`. At most 400 bars a call: use `month` for
+  years of history. `adj_close` accounts for splits and dividends: use it for returns.
+- `stock_fundamentals`: a US-listed `symbol`, `years` (default 5): per fiscal year
+  revenue, net income, diluted EPS, free cash flow and the year-end balance sheet, in USD,
+  as the company filed them.
+
+```bash
+curl -s "$MCPY_URL/v1/stocks/quote?symbols=AAPL,MSFT,%5EGSPC" -H "Authorization: Bearer $MCPY_KEY"
+curl -s "$MCPY_URL/v1/stocks/history?symbol=AAPL&from=2016-01-01&interval=month" -H "Authorization: Bearer $MCPY_KEY"
+```
+
 Every result has `meta`: `cache` (`hit`, `miss`, `bypass`), `latency_ms`,
 and `attempts`. Every call takes `max_age`: the oldest cached answer it
-accepts, in seconds (defaults: pages 3600, searches 900, papers 86400).
+accepts, in seconds (defaults: pages 3600, searches 900, papers 86400, quotes 60, price history 3600, fundamentals 86400).
 Pass 86400 for data that changes daily, a small value for live data, and
 0 to skip the cache. fetch, grep and scripts share the cached page of a
 URL (per `format` and `user_agent`, and per `render`, `method`, `body` and

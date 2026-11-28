@@ -24,6 +24,14 @@ const cacheName = enumOf({
   CryptoCoin: "crypto:coin",
   /** A whole-table crypto source's table, shared by every call. */
   CryptoTable: "crypto:table",
+  /** One symbol's stock_quote. */
+  StockQuote: "stock:quote",
+  /** A stock_history answer's daily bars. */
+  StockHistory: "stock:history",
+  /** What a company filed, as stock_fundamentals reads it. */
+  StockFundamentals: "stock:fundamentals",
+  /** A stock source's symbol-to-id list, shared by every call. */
+  StockDirectory: "stock:directory",
   /** The page provider that last served a site. */
   SiteRoute: "route",
   /** A site whose paid page sources all just failed. */
@@ -43,6 +51,10 @@ export const CACHE_VERSIONS: Readonly<Record<CacheName, number>> = {
   [CacheName.CryptoMarket]: 3,
   [CacheName.CryptoCoin]: 3,
   [CacheName.CryptoTable]: 1,
+  [CacheName.StockQuote]: 1,
+  [CacheName.StockHistory]: 1,
+  [CacheName.StockFundamentals]: 1,
+  [CacheName.StockDirectory]: 1,
   [CacheName.SiteRoute]: 1,
   [CacheName.PaidFailure]: 1,
 };

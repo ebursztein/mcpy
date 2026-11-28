@@ -12,13 +12,14 @@ npm install mcpy
 
 ```ts
 import { createMcpy, PaperSort, Recency, SearchMode, SearchType } from "mcpy";
-import { arxiv, coinGecko, coinMetrics, direct, firecrawl, firecrawlSearch, miningPoolStats, openAlex } from "mcpy/providers";
+import { arxiv, coinGecko, coinMetrics, direct, edgar, firecrawl, firecrawlSearch, miningPoolStats, nasdaq, openAlex, yahoo } from "mcpy/providers";
 
 const mcpy = createMcpy({
   pages: [direct(), firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })],
   search: [firecrawlSearch({ apiKey: process.env.FIRECRAWL_API_KEY! })],
   papers: [openAlex(), arxiv()],
   crypto: [coinMetrics(), coinGecko({ apiKey: process.env.COINGECKO_API_KEY }), miningPoolStats()],
+  stocks: [yahoo(), nasdaq(), edgar()],
 });
 
 const page = await mcpy.fetch({ url: "https://elie.net", max_chars: 5_000 });
@@ -46,6 +47,13 @@ const market = await mcpy.cryptoMarket({ symbols: ["BTC", "RVN"] });
 market.coins[0];                  // { price_usd, price_change_7d_pct, market_cap_usd, volume_24h_usd, network_hashrate_hs, difficulty, hashprice_usd_per_hs_day, ... }
 const zec = await mcpy.cryptoCoin({ symbols: ["ZEC"], days: 7 }); // or from/to; at most 40 day rows a call
 zec.coins[0].days;                // oldest first: complete days (final), then today live
+
+const quotes = await mcpy.stockQuote({ symbols: ["AAPL", "^GSPC", "SAP.DE"] });
+quotes.quotes[0];                 // { price, previous_close, change_pct, day_high, volume, fifty_two_week_high, market_date, currency, ... }
+const bars = await mcpy.stockHistory({ symbol: "AAPL", from: "2016-01-01", interval: "month" });
+bars.bars[0];                     // { date, open, high, low, close, adj_close, volume }; bars.dividends, bars.splits
+const filed = await mcpy.stockFundamentals({ symbol: "AAPL", years: 5 });
+filed.years[0];                   // { period_end, revenue_usd, net_income_usd, eps_diluted_usd, free_cash_flow_usd, assets_usd, ... }
 ```
 
 Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
@@ -57,7 +65,7 @@ Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
 | Import | What |
 | --- | --- |
 | `mcpy` | `createMcpy`, schemas, enums, errors, caches |
-| `mcpy/providers` | Backends: `direct`, `cloudflareBrowser`, `firecrawl`, `firecrawlSearch`, `brightData`, `brightDataSearch`, `openAlex`, `arxiv`, `semanticScholar` |
+| `mcpy/providers` | Backends: `direct`, `cloudflareBrowser`, `firecrawl`, `firecrawlSearch`, `brightData`, `brightDataSearch`, `openAlex`, `arxiv`, `semanticScholar`, the crypto sources, and the stock sources `yahoo`, `nasdaq`, `alphaVantage`, `edgar` |
 | `mcpy/telemetry` | OpenTelemetry-shaped spans and logs; sinks for console, OTLP, Analytics Engine, and an `@opentelemetry/api` bridge |
 | `mcpy/client` | `McpyClient`: typed client for a hosted mcpy server, same API as the SDK |
 | `mcpy/mcp` | `registerMcpyTools(server, api)`: mounts the tools on any MCP server |

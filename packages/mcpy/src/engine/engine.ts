@@ -5,6 +5,7 @@ import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
 import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
 import type { CryptoProvider } from "../providers/crypto-types.js";
+import type { StockProvider } from "../providers/stock-types.js";
 import type { ListingPage, ListingProvider, ListingRequest } from "../providers/listing-types.js";
 import { Attr } from "../telemetry/attributes.js";
 import type { Telemetry } from "../telemetry/telemetry.js";
@@ -42,6 +43,8 @@ export interface EngineDeps {
   listingProviders?: ListingProvider[];
   /** Crypto market and network sources (services/crypto). */
   cryptoProviders?: CryptoProvider[];
+  /** Stock quote, history and fundamentals sources (services/stocks). */
+  stockProviders?: StockProvider[];
   cache: LayeredCache;
   http: HttpClient;
   breaker: CircuitBreaker;
@@ -90,18 +93,12 @@ export class Engine {
     this.paidFailures = new PaidFailures(this.cache, deps.limits.paidFailureTtlSeconds);
   }
 
-  get providerIds() {
-    return {
-      pages: this.deps.pageProviders.map((p) => p.id),
-      search: this.deps.searchProviders.map((p) => p.id),
-      papers: this.deps.paperProviders.map((p) => p.id),
-      listings: (this.deps.listingProviders ?? []).map((p) => p.id),
-      crypto: this.cryptoProviders.map((p) => p.id),
-    };
-  }
-
   get cryptoProviders(): CryptoProvider[] {
     return this.deps.cryptoProviders ?? [];
+  }
+
+  get stockProviders(): StockProvider[] {
+    return this.deps.stockProviders ?? [];
   }
 
   /** Tunables an operation kept in its own module needs (grace period, cache lifetimes). */

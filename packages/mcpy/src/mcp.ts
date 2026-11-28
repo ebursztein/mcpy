@@ -8,6 +8,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { ToolName } from "./api/routes.js";
 import { toMcpyError } from "./errors.js";
 import { registerCryptoTools } from "./mcp-crypto.js";
+import { registerStockTools } from "./mcp-stocks.js";
 import {
   FetchInputSchema,
   FetchResultSchema,
@@ -219,4 +220,5 @@ export function registerMcpyTools(server: McpServer, api: McpyApi): void {
   );
 
   registerCryptoTools(server, api);
+  registerStockTools(server, api);
 }

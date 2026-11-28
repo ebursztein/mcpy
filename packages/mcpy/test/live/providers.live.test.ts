@@ -4,30 +4,12 @@
  * skipped when its credentials are missing. Costs a few provider credits.
  */
 
-import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CacheStatus, createMcpy, LayeredCache, PageFormat, PaperCollection, PaperSort, Recency, SearchType } from "mcpy";
+import { has, k } from "./keys.js";
 import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, mempool, openAlex, pubmed, serpentSearch } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
-const DEV_VARS = new URL("../../../../apps/server/.dev.vars", import.meta.url);
-
-function loadKeys(): Record<string, string> {
-  const fromFile = existsSync(DEV_VARS)
-    ? Object.fromEntries(
-        readFileSync(DEV_VARS, "utf8")
-          .split("\n")
-          .map((l) => l.trim())
-          .filter((l) => l && !l.startsWith("#") && l.includes("="))
-          .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
-      )
-    : {};
-  return { ...fromFile, ...(process.env as Record<string, string>) };
-}
-
-const k = loadKeys();
-const has = (...names: string[]) => names.every((n) => !!k[n]);
-
 function sdk(options: Parameters<typeof createMcpy>[0]) {
   return createMcpy({ cache: new LayeredCache(), ...options });
 }

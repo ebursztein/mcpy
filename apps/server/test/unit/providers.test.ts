@@ -38,7 +38,22 @@ describe("buildProviders", () => {
     expect(ids(setup.listings)).toEqual([ProviderId.Serpent]);
     // Network history first, then prices, then the live network: the first with a value wins each field. None needs a key.
     expect(ids(setup.crypto)).toEqual([ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats]);
-    expect(setup.skipped).toEqual({ pages: [], search: [], papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }], listings: [], crypto: [] });
+    // Yahoo first (worldwide, fastest); Nasdaq for US symbols it misses; Alpha Vantage, with its 25 requests a day, only with a key.
+    expect(ids(setup.stocks)).toEqual([ProviderId.Yahoo, ProviderId.Nasdaq, ProviderId.Edgar]);
+    expect(setup.skipped).toEqual({
+      pages: [],
+      search: [],
+      papers: [{ id: ProviderId.SemanticScholar, reason: "missing_credentials" }],
+      listings: [],
+      crypto: [],
+      stocks: [{ id: ProviderId.AlphaVantage, reason: "missing_credentials" }],
+    });
+  });
+
+  it("puts Alpha Vantage after the free stock sources when its key is set, and skips a stock id with no stock builder", () => {
+    const setup = buildProviders(loadEnv({ ALPHAVANTAGE_API_KEY: "test-key", STOCK_PROVIDERS: "yahoo,alphavantage,coingecko" }));
+    expect(ids(setup.stocks)).toEqual([ProviderId.Yahoo, ProviderId.AlphaVantage]);
+    expect(setup.skipped.stocks).toEqual([{ id: ProviderId.CoinGecko, reason: "not_supported" }]);
   });
 
   it("runs the browser on the Browser Rendering binding when bound, with no API token", () => {
@@ -99,4 +114,5 @@ describe("buildProviders", () => {
       { id: ProviderId.CloudflareBrowser, reason: SkipReason.NotSupported },
     ]);
   });
+
 });

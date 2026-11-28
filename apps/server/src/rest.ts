@@ -38,7 +38,7 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
 
 export const errorResponse = (err: McpyError, headers: Record<string, string> = {}) => json(err.toJSON(), err.httpStatus, headers);
 
-const NUMERIC = new Set(["limit", "days", "offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
+const NUMERIC = new Set(["limit", "days", "years", "offset", "max_chars", "max_age", "context", "max_matches", "max_results", "page", "year_from", "year_to"]);
 const BOOLEAN = new Set(["literal", "open_access", "paid_only", "errors_only", "cache_hits_only"]);
 const LIST = new Set(["sites", "exclude_sites", "symbols"]);
 
@@ -76,6 +76,9 @@ const OPERATIONS: Record<RestRoute, (api: McpyApi, input: unknown) => Promise<un
   [RestRoute.ShoppingItem]: (api, input) => api.shoppingItem(input as never),
   [RestRoute.CryptoMarket]: (api, input) => api.cryptoMarket(input as never),
   [RestRoute.CryptoCoin]: (api, input) => api.cryptoCoin(input as never),
+  [RestRoute.StockQuote]: (api, input) => api.stockQuote(input as never),
+  [RestRoute.StockHistory]: (api, input) => api.stockHistory(input as never),
+  [RestRoute.StockFundamentals]: (api, input) => api.stockFundamentals(input as never),
 };
 
 /** What a REST call is served with besides the SDK. */
@@ -115,6 +118,7 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
       papers: providers.papers.map((p) => p.id),
       listings: providers.listings.map((p) => p.id),
       crypto: providers.crypto.map((p) => p.id),
+      stocks: providers.stocks.map((p) => p.id),
       skipped: providers.skipped,
     });
   }

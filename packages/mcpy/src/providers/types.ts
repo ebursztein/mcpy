@@ -24,6 +24,10 @@ export const ProviderId = {
   Kaspa: "kaspa",
   Dash: "dash",
   Mempool: "mempool",
+  Yahoo: "yahoo",
+  Nasdaq: "nasdaq",
+  AlphaVantage: "alphavantage",
+  Edgar: "edgar",
 } as const;
 export const ProviderIdSchema = z.enum([
   ProviderId.Direct,
@@ -41,6 +45,10 @@ export const ProviderIdSchema = z.enum([
   ProviderId.Kaspa,
   ProviderId.Dash,
   ProviderId.Mempool,
+  ProviderId.Yahoo,
+  ProviderId.Nasdaq,
+  ProviderId.AlphaVantage,
+  ProviderId.Edgar,
 ]);
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 

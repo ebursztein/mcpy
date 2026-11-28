@@ -210,12 +210,14 @@ describe("admin", () => {
       papers: [ProviderId.OpenAlex, ProviderId.Arxiv, ProviderId.PubMed],
       listings: [],
       crypto: [ProviderId.CoinMetrics, ProviderId.Kaspa, ProviderId.Dash, ProviderId.Mempool, ProviderId.CoinGecko, ProviderId.MiningPoolStats],
+      stocks: [ProviderId.Yahoo, ProviderId.Nasdaq, ProviderId.Edgar],
       skipped: {
         pages: [],
         search: [{ id: ProviderId.Firecrawl, reason: SkipReason.MissingCredentials }],
         papers: [{ id: ProviderId.SemanticScholar, reason: SkipReason.MissingCredentials }],
         listings: [{ id: ProviderId.Serpent, reason: SkipReason.MissingCredentials }],
         crypto: [],
+        stocks: [{ id: ProviderId.AlphaVantage, reason: SkipReason.MissingCredentials }],
       },
     });
   });

@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { FetchBatchInput, FetchBatchResult } from "./schemas-batch.js";
 import type { PaperSearchInput, PaperSearchResult } from "./schemas-papers.js";
 import type { CryptoCoinInput, CryptoCoinResult, CryptoMarketInput, CryptoMarketResult } from "./schemas-crypto.js";
+import type { StockFundamentalsInput, StockFundamentalsResult, StockHistoryInput, StockHistoryResult, StockQuoteInput, StockQuoteResult } from "./schemas-stocks.js";
 import type { ShoppingItemInput, ShoppingItemResult, ShoppingSearchInput, ShoppingSearchResult } from "./services/shopping/schema.js";
 import {
   CacheStatusSchema,
@@ -247,6 +248,12 @@ export interface McpyApi {
   cryptoMarket(input: CryptoMarketInput): Promise<CryptoMarketResult>;
   /** crypto.coin: a few coins day by day. */
   cryptoCoin(input: CryptoCoinInput): Promise<CryptoCoinResult>;
+  /** stock_quote: the latest price of a few symbols. */
+  stockQuote(input: StockQuoteInput): Promise<StockQuoteResult>;
+  /** stock_history: one symbol's bars over a window. */
+  stockHistory(input: StockHistoryInput): Promise<StockHistoryResult>;
+  /** stock_fundamentals: a US-listed company's filed fiscal years. */
+  stockFundamentals(input: StockFundamentalsInput): Promise<StockFundamentalsResult>;
   /** fetch_batch: many fetches in one call, each answered on its own. */
   fetchBatch(input: FetchBatchInput): Promise<FetchBatchResult>;
 }

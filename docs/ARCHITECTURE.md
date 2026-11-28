@@ -1,6 +1,6 @@
 # mcpy architecture
 
-mcpy gives agents web tools (fetch, grep, search), scholarly paper search, shopping and crypto market data through one SDK. The SDK
+mcpy gives agents web tools (fetch, grep, search), scholarly paper search, shopping, crypto market data and stock data through one SDK. The SDK
 hides which backend serves a request; the hosted server and the MCP endpoint
 are thin layers on top of it.
 
@@ -62,7 +62,8 @@ Everything mcpy keeps between calls goes through one small module, `src/cache/`:
     second per key.
 - **Spaces** (`spaces.ts`): the whole inventory of what is cached, one `CacheName` per kind
   (`page`, `pin`, `search`, `papers`, `listings`, `crypto:market`, `crypto:coin`,
-  `crypto:table`, `route`, `paid-failed`) with its version in `CACHE_VERSIONS`. A key is
+  `crypto:table`, `stock:quote`, `stock:history`, `stock:fundamentals`, `stock:directory`,
+  `route`, `paid-failed`) with its version in `CACHE_VERSIONS`. A key is
   `v<version>:<name>:<id>`, so a key read off a log says what it holds. Bump a version when what
   a space stores changes shape or meaning: old entries are then never read again. Every space has
   a zod schema each value read back must pass: exact for pages, pins, routes, paused sites and
@@ -198,6 +199,41 @@ by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; ser
 - **Tracing**: the usage log writes one `crypto_coin` row per coin and kind of day
   (`store` = "ZEC complete") with the source behind it; every result's `meta.call_id` is its log
   id, so a caller can have an admin look a figure's source up.
+
+## Stocks: quotes, history and fundamentals
+
+`stock_quote` (`mcpy.stockQuote`, `/v1/stocks/quote`), `stock_history` (`mcpy.stockHistory`,
+`/v1/stocks/history`) and `stock_fundamentals` (`mcpy.stockFundamentals`,
+`/v1/stocks/fundamentals`). Contract: `schemas-stocks.ts`; sources: `providers/stock-types.ts`;
+service: `services/stocks/`.
+
+- **Sources** (`STOCK_PROVIDERS`, default `yahoo,nasdaq,alphavantage,edgar`): Yahoo's chart API
+  (keyless, worldwide: stocks, ETFs, funds, indices, currencies, crypto pairs; one call per symbol
+  gives the quote in its meta and the bars; no session needed, unlike its quote API, which wants
+  cookies and a crumb and answers 429 once an address asks often), Nasdaq's quote API (US stocks
+  and ETFs, keyless; answers a Worker only with a browser user agent; figures are display text;
+  its history lags a session or two), Alpha Vantage (`ALPHAVANTAGE_API_KEY`, 25 requests a day,
+  one a second: the last resort, at most 5 symbols a call) and SEC EDGAR for filings (keyless; one
+  company-concept call per XBRL tag, since the whole company-facts file is several MB; tickers map
+  to company ids through SEC's ticker list, kept a day; SEC refuses a user agent linking to
+  github.com, so EDGAR sends its own, `mcpy/1.0 (+https://www.npmjs.com/package/mcpy)`, naming no
+  deployment; `SEC_USER_AGENT` replaces it).
+- **Order, not merge**: unlike crypto, a later source only answers what earlier ones did not know.
+  Quotes go down the list symbol by symbol; history and fundamentals take the first source with an
+  answer. A source failing moves on; the call fails only when no source answered.
+- **Caching**: each symbol's quote is its own entry (a day; `max_age`, default 60 s, decides what
+  is young enough), so overlapping calls share entries and their reads reach KV as one bulk get.
+  A history window's daily bars are kept a week once the window is past, an hour while it reaches
+  today; week and month bars are built from them (`aggregate`), so sources and intervals agree.
+  Fundamentals are kept a day, worked out for 10 years and cut to each call's `years`.
+- **Filings** (`filings.ts`): fiscal years are 10-K periods of 350 to 380 days (52- and 53-week
+  years); for one period the latest filing's value wins (restatements) and `filed` is the first
+  filing that reported it. A measure reads several tags, preferred first (revenue moved from
+  `Revenues` or `SalesRevenueNet` to `RevenueFromContractWithCustomerExcludingAssessedTax`).
+  Shares outstanding are the cover page's count, else the balance sheet's (companies with several
+  share classes state the cover count per class, which the API leaves out).
+- **Bounds**: 25 symbols a quote call; 400 bars a history call, enforced on input by span (550
+  days of day bars, 2,750 of week bars, 30 years of month bars); 10 fiscal years.
 
 ## Reliability
 
