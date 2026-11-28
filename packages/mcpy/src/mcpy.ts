@@ -26,7 +26,7 @@ import type { CacheInspection } from "./cache/inspect.js";
 import { LayeredCache } from "./cache/layered.js";
 import { CacheReads } from "./cache/shared.js";
 import { targetAttributes, withCost } from "./api/call-meta.js";
-import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
+import { Engine, EngineLimitsSchema, type Admit, type CallScope, type Served } from "./engine/engine.js";
 import { SpendMeter, type SpendLimit } from "./engine/meter.js";
 import type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
@@ -100,6 +100,8 @@ export interface CallContext {
   onQuota?: QuotaAlertSink;
   /** Told which provider served a successful call (and each part of it), for the host's own records; callers never see it. */
   onServed?: (served: { provider: string; parts?: Record<string, string> }) => void;
+  /** Paces the calls to sites (a batch's): a request the cache cannot answer waits for it. */
+  admit?: Admit;
 }
 
 /** The SDK. Implements the same McpyApi as the REST client. */
@@ -131,7 +133,7 @@ export class Mcpy implements McpyApi {
 
   /** Each request is a fetch of its own: its own cache, spending, span and log line. */
   fetchBatch(input: FetchBatchInput): Promise<FetchBatchResult> {
-    return runFetchBatch((request) => this.fetch(request), input);
+    return runFetchBatch((request, admit) => this.with({ admit }).fetch(request), input);
   }
 
   grep(input: GrepInput): Promise<GrepResult> {
@@ -204,6 +206,7 @@ export class Mcpy implements McpyApi {
         onQuota: this.quotaReporter(telemetry, span.context),
         reads,
         ...(this.context.client ? { client: this.context.client } : {}),
+        ...(this.context.admit ? { admit: this.context.admit } : {}),
       });
       const facts = {
         ...reads.attributes(),

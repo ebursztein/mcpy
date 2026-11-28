@@ -38,7 +38,7 @@ export const FetchBatchResultSchema = z.object({
     latency_ms: z.number(),
     /** What the answered requests cost. A failed one's cost counts against the cap all the same (and is in the usage log). */
     cost_usd: z.number(),
-    /** Requests sent through fetch (cache hits included); identical reads count once. */
+    /** Requests run through fetch (cache hits included); identical reads count once, and one the deadline left unsent not at all. */
     fetched: z.number().int(),
     /** Requests answered by an identical read in the same batch. */
     deduplicated: z.number().int(),

@@ -133,11 +133,11 @@ const METHODS: Record<Logged, Operation> = {
  * fetches, each logged as a fetch of its own; their rows are written together.
  */
 export function recordingApi(mcpy: Mcpy, context: CallContext & { client: string }, write: (rows: CallRow[]) => void): McpyApi {
-  const call = (method: Logged, writeRows: (rows: CallRow[]) => void) => async (input: unknown) => {
+  const call = (method: Logged, writeRows: (rows: CallRow[]) => void, extra: CallContext = {}) => async (input: unknown) => {
     const started = Date.now();
     const spend = counting(context.spendLimit);
     let served: { provider: string; parts?: Record<string, string> } | undefined;
-    const api = mcpy.with({ ...context, spendLimit: spend, onServed: (s) => void (served = s) });
+    const api = mcpy.with({ ...context, ...extra, spendLimit: spend, onServed: (s) => void (served = s) });
     const ctx = { client: context.client, callId: crypto.randomUUID(), started, transport: context.transport };
     const args = input && typeof input === "object" && !Array.isArray(input) ? (input as Input) : {};
     try {
@@ -154,9 +154,9 @@ export function recordingApi(mcpy: Mcpy, context: CallContext & { client: string
   const api = Object.fromEntries(Object.keys(METHODS).map((m) => [m, call(m as Logged, write)])) as unknown as McpyApi;
   api.fetchBatch = async (input) => {
     const rows: CallRow[] = [];
-    const fetch = call("fetch", (r) => rows.push(...r)) as McpyApi["fetch"];
+    const push = (r: CallRow[]) => void rows.push(...r);
     try {
-      return await runFetchBatch(fetch, input);
+      return await runFetchBatch((request, admit) => call("fetch", push, { admit })(request) as ReturnType<McpyApi["fetch"]>, input);
     } finally {
       if (rows.length) write(rows);
     }

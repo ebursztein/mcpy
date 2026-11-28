@@ -17,7 +17,7 @@ export * from "./schemas.js";
 export { McpyError } from "./errors.js";
 export { CacheInspectionSchema, type CacheInspection } from "./cache/inspect.js";
 export { CacheTier, CacheTierSchema, LayeredCache, type KvLike, type LayeredCacheOptions, type MemoryOptions } from "./cache/layered.js";
-export { EngineLimitsSchema, type EngineLimits } from "./engine/engine.js";
+export { EngineLimitsSchema, type Admit, type EngineLimits } from "./engine/engine.js";
 export type { SpendLimit } from "./engine/meter.js";
 export type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
 export { BreakerPolicySchema, type BreakerPolicy } from "./engine/breaker.js";

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CacheStatus, ErrorCode, FETCH_BATCH_CONCURRENCY, FETCH_BATCH_MAX_REQUESTS, FETCH_BATCH_PER_SITE, HttpMethod, runFetchBatch } from "mcpy";
+import { CacheStatus, ErrorCode, type Admit, FETCH_BATCH_CONCURRENCY, FETCH_BATCH_MAX_REQUESTS, FETCH_BATCH_PER_SITE, HttpMethod, runFetchBatch } from "mcpy";
 import { direct } from "mcpy/providers";
 import { fakePages, page, responseAt, stubFetch, testMcpy } from "../helpers.js";
 
@@ -90,7 +90,7 @@ describe("fetch_batch", () => {
  * Regression (2026-11-27, owner): a batch must not overwhelm a site, nor queue requests in the
  * Worker runtime (it starts at most 6 at once, and a queued request's timeout runs while it waits).
  * At most 6 in flight, 4 per site (a browser opens 6 per host); identical reads fetched once; a
- * request not started by the batch's deadline answers timeout without being sent.
+ * request still waiting at the batch's deadline answers timeout without being sent.
  */
 describe("fetch_batch pacing", () => {
   /** A fetch that records how many requests are in flight, overall and per host. */
@@ -99,8 +99,10 @@ describe("fetch_batch pacing", () => {
     let overall = 0;
     const peak = { overall: 0, perHost: new Map<string, number>() };
     const seen: string[] = [];
-    const fetch = async (input: { url: string; id?: string }) => {
+    /** As the engine does on a cache miss: wait for the batch's leave to call the site. */
+    const fetch = async (input: { url: string; id?: string }, admit: Admit) => {
       const host = new URL(input.url).host;
+      const release = await admit(host);
       seen.push(input.url);
       overall++;
       inFlight.set(host, (inFlight.get(host) ?? 0) + 1);
@@ -109,6 +111,7 @@ describe("fetch_batch pacing", () => {
       await new Promise((r) => setTimeout(r, delayMs));
       overall--;
       inFlight.set(host, inFlight.get(host)! - 1);
+      release();
       return { url: input.url, content: input.url, meta: { cache: CacheStatus.Miss, cost_usd: 0 } } as never;
     };
     return { fetch, peak, seen };

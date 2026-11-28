@@ -55,7 +55,7 @@ describe("LayeredCache", () => {
     expect((await cache.read("k"))?.value).toEqual({ rows: [1] });
   });
 
-  it("sends reads issued in the same tick to KV as one bulk get, and later ones separately", async () => {
+  it("sends reads issued in the same turn to KV as one bulk get, and later ones separately", async () => {
     const kv = fakeKv();
     kv.data.set("a", "1");
     const cache = new LayeredCache({ kv });

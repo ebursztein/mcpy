@@ -62,7 +62,12 @@ export interface CallScope {
   client?: string;
   /** Counts the operation's cache reads by layer, for hit rates. */
   reads?: CacheReads;
+  /** Waits for leave to call a site, after the cache could not answer (a batch's pacing). */
+  admit?: Admit;
 }
+
+/** Resolves when a request may go to `site` (a host), with the function that frees its slot; rejects if it never may. */
+export type Admit = (site: string) => Promise<() => void>;
 
 /** Engine result. `provider` is for telemetry only; cost is totalled by the scope's meter. */
 export interface Served<T> {
@@ -147,6 +152,7 @@ export class Engine {
             ...this.chainCommon(deadlineAt, scope),
           }),
       }),
+      new URL(req.url).host,
     );
   }
 
@@ -254,7 +260,8 @@ export class Engine {
    * Serve entry `id` of `space` from the cache when it is young enough;
    * otherwise run the chain and cache the result. The chain only returns
    * usable or definitive results (blocked and challenge pages never reach the
-   * cache); salvaged results are returned but not cached.
+   * cache); salvaged results are returned but not cached. A miss for `site`
+   * waits for the scope's leave to call it first; its deadline starts then.
    */
   async cached<T>(
     space: CacheSpace<T>,
@@ -265,10 +272,18 @@ export class Engine {
     maxAgeSeconds: number,
     scope: CallScope,
     run: (deadlineAt: number) => Promise<ChainResult<T>>,
+    /** The host a miss calls, when it calls one: it waits for the scope's leave first. */
+    site?: string,
   ): Promise<Served<T>> {
     const hit = await this.cache.read(space, id, scope, maxAgeSeconds);
     if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider ?? "" };
-    const result = await run(Date.now() + this.deps.limits.deadlineMs);
+    const release = site !== undefined && scope.admit ? await scope.admit(site) : undefined;
+    let result: ChainResult<T>;
+    try {
+      result = await run(Date.now() + this.deps.limits.deadlineMs);
+    } finally {
+      release?.();
+    }
     const seconds = ttl(result.value, result.salvaged);
     if (seconds !== undefined) await this.cache.write(space, id, result.value, seconds, scope, result.provider);
     else scope.telemetry.log(LogLevel.Debug, "result not cached", { [Attr.CacheName]: space.name, [Attr.Provider]: result.provider }, scope.parent);

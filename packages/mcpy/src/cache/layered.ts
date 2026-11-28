@@ -2,10 +2,13 @@
  * LayeredCache: the one cache mcpy takes. The isolate's memory in front of
  * Cloudflare KV, presented as one store; callers never pick a layer.
  *
- * - Reads try memory first. Reads that reach KV in the same tick share one
- *   bulk get (up to 100 keys a request): a fetch whose page missed reads its
- *   site's route and paused flag in one KV round trip, not two. A KV hit is
- *   copied to memory.
+ * - Reads try memory first. Reads that reach KV together share one bulk get
+ *   (up to 100 keys a request): a fetch whose page missed reads its site's
+ *   route and paused flag in one KV round trip, not two, and a batch's 64
+ *   lookups go in one. Together means until a turn of the event loop passes
+ *   with no new key (at most GATHER_TURNS): each fetch hashes its key first,
+ *   asynchronously, so concurrent fetches reach KV a few moments apart. A KV
+ *   hit is copied to memory.
  * - Writes go to both. With KV behind it, memory keeps an entry at most
  *   `memoryTtlSeconds` (default 60, KV's own propagation delay), so another
  *   isolate's change shows as soon as KV would show it.
@@ -25,6 +28,19 @@ import { enumOf } from "../enums.js";
 import { KvStore, MemoryStore, type KvLike, type MemoryOptions } from "./store.js";
 
 export type { KvLike, MemoryOptions } from "./store.js";
+
+/** The host's timer as it was at load: a test's fake timers never hold a KV read. */
+const setTimer = globalThis.setTimeout.bind(globalThis);
+/** Most turns of the event loop a bulk get waits for more keys. */
+const GATHER_TURNS = 4;
+
+/** Resolves once a turn passes with no key added to `keys`, or after GATHER_TURNS turns. */
+async function gathered(keys: Set<string>): Promise<void> {
+  for (let turn = 0, seen = -1; turn < GATHER_TURNS && keys.size !== seen; turn++) {
+    seen = keys.size;
+    await new Promise((resolve) => setTimer(resolve, 0));
+  }
+}
 
 const cacheTier = enumOf({ Memory: "memory", Kv: "kv" } as const);
 export const CacheTier = cacheTier.values;
@@ -79,12 +95,12 @@ export class LayeredCache {
     await this.kv?.put(key, body, ttlSeconds);
   }
 
-  /** Every key asked for in this tick goes to KV in one bulk get. */
+  /** Keys asked for together go to KV in one bulk get. */
   private fromKv(key: string): Promise<string | null> {
     let batch = this.pending;
     if (!batch) {
       const keys = new Set<string>();
-      const texts = Promise.resolve().then(() => {
+      const texts = gathered(keys).then(() => {
         this.pending = undefined;
         return this.kv!.getMany([...keys]);
       });
