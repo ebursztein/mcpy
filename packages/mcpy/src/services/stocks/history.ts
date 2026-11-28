@@ -10,7 +10,7 @@ import { hashedId } from "../../cache/shared.js";
 import { cacheSpace, CacheName, requiredFields } from "../../cache/spaces.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import { roundPrice, type FoundBar, type FoundHistory } from "../../providers/stock-types.js";
-import { BarInterval, historyWindow, MAX_HISTORY_BARS, StockHistoryResultSchema, upperTicker, type StockBar, type StockHistoryQuery, type StockHistoryResult } from "../../schemas-stocks.js";
+import { BarInterval, coinSymbolWarning, historyWindow, MAX_HISTORY_BARS, StockHistoryResultSchema, upperTicker, type StockBar, type StockHistoryQuery, type StockHistoryResult } from "../../schemas-stocks.js";
 import { movesOnWhenEmpty, noSources, sourcesFor, unknownSymbol } from "./sources.js";
 
 const PAST_WINDOW_TTL_SECONDS = 7 * 86_400;
@@ -92,6 +92,7 @@ export async function stockHistoryOp(engine: Engine, input: StockHistoryQuery, s
       bars: bars.map(barRow),
       dividends: history.dividends?.length ? history.dividends : undefined,
       splits: history.splits?.length ? history.splits : undefined,
+      warning: coinSymbolWarning(symbol),
       meta: { cache: served.cache, latency_ms: Date.now() - startedAt, attempts: served.attempts },
     }),
   );

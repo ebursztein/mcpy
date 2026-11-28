@@ -11,7 +11,7 @@ import { CacheStatus, ErrorCode } from "../../enums.js";
 import { McpyError } from "../../errors.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import { roundPrice, type FoundQuote } from "../../providers/stock-types.js";
-import { cryptoRefusal, InstrumentType, StockQuoteResultSchema, upperTicker, type StockQuote, type StockQuoteQuery, type StockQuoteResult } from "../../schemas-stocks.js";
+import { coinSymbolWarning, cryptoRefusal, InstrumentType, StockQuoteResultSchema, upperTicker, type StockQuote, type StockQuoteQuery, type StockQuoteResult } from "../../schemas-stocks.js";
 import { movesOnWhenEmpty, noSources, sourcesFor } from "./sources.js";
 
 /** Entries live a day; max_age decides which are young enough to serve. */
@@ -42,6 +42,7 @@ export function quoteRow(q: FoundQuote): StockQuote {
     fifty_two_week_low: q.fiftyTwoWeekLow,
     market_date: q.marketDate,
     as_of: q.asOf,
+    warning: coinSymbolWarning(q.symbol, q.instrumentType),
   });
 }
 

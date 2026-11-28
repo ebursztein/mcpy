@@ -210,7 +210,10 @@ service: `services/stocks/`.
 - **No crypto**: crypto has its own tools (`crypto_coin`, `crypto_market`), so two tools never
   quote a coin differently. A crypto pair (`isCryptoPair`: a coin against a currency or a coin,
   BTC-USD, ETH-BTC; a one-letter share class like BRK-B is not one) is refused by the input
-  schema, before any source is asked; a symbol a source reports as crypto is refused after.
+  schema, before any source is asked; a symbol a source reports as crypto is refused after. A
+  bare coin symbol that a listed instrument also uses (BTC: Grayscale's Bitcoin Mini Trust ETF)
+  is answered, with a `warning` (`coinSymbolWarning`, worked out per answer, never cached) naming
+  what it is and where the coin's price is.
 - **Sources** (`STOCK_PROVIDERS`, default `yahoo,nasdaq,alphavantage,edgar`): Yahoo's chart API
   (keyless, worldwide: stocks, ETFs, funds, indices, currencies, crypto pairs; one call per symbol
   gives the quote in its meta and the bars; no session needed, unlike its quote API, which wants

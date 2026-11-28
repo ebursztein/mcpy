@@ -46,7 +46,7 @@ which tool to use when, errors, and safety rules.
 | grep | `url`, `pattern`, `literal`, `context`, `max_matches`, `format`, `user_agent`, `render`, `wait_ms`, `method`, `body`, `headers`, `max_age` |
 | search | `query`, `type`, `max_results`, `page`, `country`, `language`, `recency`, `device`, `sites`, `exclude_sites`, `mode`, `max_age` |
 | papers | `query` and/or `author`, `max_results`, `page`, `year_from`, `year_to`, `open_access`, `sort` (`relevance`\|`citations`\|`newest`), `collection` (`preprints`\|`biomedical`), `mode`, `max_age` |
-| stock_quote | `symbols` (e.g. `AAPL`, `BRK-B`, `^GSPC`, `SAP.DE`, `EURUSD=X`; a crypto pair such as `BTC-USD` is refused with `invalid_input` pointing to the crypto tools), `max_age` (default 60) |
+| stock_quote | `symbols` (e.g. `AAPL`, `BRK-B`, `^GSPC`, `SAP.DE`, `EURUSD=X`; a crypto pair such as `BTC-USD` is refused with `invalid_input` pointing to the crypto tools; a bare coin symbol a listed instrument also uses, such as `BTC` (an ETF), is answered with a `warning`), `max_age` (default 60) |
 | stock_history | `symbol`, `from`, `to` (YYYY-MM-DD; default the last 30 days), `interval` (`day`\|`week`\|`month`), `max_age`; at most 400 bars a call |
 | stock_fundamentals | `symbol`, `years` (1-10, default 5), `max_age` (default a day) |
 

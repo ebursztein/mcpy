@@ -71,6 +71,24 @@ export function cryptoRefusal(symbol: string): string {
   return `${symbol} is crypto, which the stock tools do not quote: ask crypto_coin or crypto_market (REST /v1/crypto/coin, /v1/crypto/market)${coin}`;
 }
 
+/**
+ * Symbols of the most-traded and the mined coins. Listed instruments use many
+ * of them too (BTC is Grayscale's Bitcoin Mini Trust ETF), so an answer for
+ * one carries a warning: the caller may have meant the coin.
+ */
+const COIN_SYMBOLS = new Set(
+  "BTC ETH USDT XRP BNB SOL USDC DOGE ADA TRX TON LINK AVAX XLM SHIB DOT BCH LTC XMR ETC ZEC KAS RVN NEAR UNI APT ATOM FIL ARB OP SUI PEPE HBAR ICP AAVE ALGO ERG DASH DCR FLUX".split(" "),
+);
+const WARNING = z.string().optional().describe("Set when the answer may not be what was meant, e.g. BTC answered by an ETF, not Bitcoin");
+
+/** The warning for a listed instrument whose symbol is also a coin's, if it is one. */
+export function coinSymbolWarning(symbol: string, type?: InstrumentType): string | undefined {
+  const coin = symbol.trim().toUpperCase();
+  if (!COIN_SYMBOLS.has(coin) || type === InstrumentType.Crypto) return undefined;
+  const what = type ? `${/^[aeiou]/.test(type) ? "an" : "a"} ${type}` : "a listed instrument";
+  return `${coin} is also a coin's symbol: this is ${what}, not the coin. For the coin, ask crypto_coin or crypto_market (REST /v1/crypto/coin, /v1/crypto/market) with symbol ${coin}`;
+}
+
 /** Tickers as markets write them: AAPL, BRK-B, ^GSPC, SAP.DE, EURUSD=X. Crypto is refused (crypto_coin, crypto_market). */
 const ticker = z
   .string()
@@ -118,6 +136,7 @@ export const StockQuoteSchema = z.object({
   fifty_two_week_low: price.optional(),
   market_date: isoDay.describe("The session price belongs to, in the exchange's own time zone"),
   as_of: isoTime.optional().describe("When price was set, where the source states the time"),
+  warning: WARNING,
 });
 
 export const StockQuoteResultSchema = z.object({
@@ -179,6 +198,7 @@ export const StockHistoryResultSchema = z.object({
   bars: z.array(StockBarSchema).describe("Oldest first; days the market was closed have no bar"),
   dividends: z.array(z.object({ date: isoDay, amount: price })).optional().describe("Cash dividends per share, by ex-dividend date, where the source states them"),
   splits: z.array(z.object({ date: isoDay, ratio: z.string().describe("New shares for old, e.g. 4:1") })).optional(),
+  warning: WARNING,
   meta: ResultMetaSchema,
 });
 

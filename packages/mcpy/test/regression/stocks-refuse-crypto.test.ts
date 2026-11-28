@@ -72,3 +72,28 @@ describe("the stock tools refuse crypto", () => {
     expect((await mcpy.stockHistory({ symbol: "BRK-B" })).bars).toHaveLength(1);
   });
 });
+
+/**
+ * Regression (2026-11-27, owner): a bare coin symbol is often also a listed ticker, BTC being the
+ * Grayscale Bitcoin Mini Trust ETF ($26.46 the day it was found), so a caller asking for Bitcoin
+ * got an ETF's price with nothing to say so. Such an answer now carries a warning naming what it
+ * is and where the coin's price is; other symbols carry none. Never delete these.
+ */
+describe("a bare coin symbol answered by a listed instrument", () => {
+  it("carries a warning on stock_quote, and other symbols none", async () => {
+    const { provider } = source({ BTC: InstrumentType.Etf });
+    const { mcpy } = testMcpy({ stocks: [provider] });
+    const out = await mcpy.stockQuote({ symbols: ["btc", "AAPL"] });
+    expect(out.quotes[0]!.warning).toMatch(/BTC is also a coin's symbol: this is an etf, not the coin.*crypto_coin.*symbol BTC/);
+    expect(out.quotes[1]).not.toHaveProperty("warning");
+    // From the cache too: the warning is worked out on every answer, not stored.
+    expect((await mcpy.stockQuote({ symbols: ["BTC"] })).quotes[0]!.warning).toBeDefined();
+  });
+
+  it("carries a warning on stock_history", async () => {
+    const { provider } = source();
+    const { mcpy } = testMcpy({ stocks: [provider] });
+    expect((await mcpy.stockHistory({ symbol: "ETH" })).warning).toMatch(/ETH is also a coin's symbol/);
+    expect(await mcpy.stockHistory({ symbol: "AAPL" })).not.toHaveProperty("warning");
+  });
+});
