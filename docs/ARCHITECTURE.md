@@ -48,13 +48,17 @@ Everything mcpy keeps between calls goes through one small module, `src/cache/`:
   - Reads try memory first; a KV hit is copied to memory. Reads that reach KV in the same tick
     share one bulk get (up to 100 keys a request): a fetch reads its page alone, so a hit costs
     no extra keys, and only after a miss reads its site's route and paused flag, together, in
-    one request (two KV round trips on a miss instead of three).
+    one request (two KV round trips on a miss instead of three). KV bills every key read
+    ($0.50 a million past 10M a month), bulk or not, so batching saves latency, not money;
+    what saves reads is memory, and not reading the route and paused flag on a hit.
   - Writes go to both. With KV behind it, memory keeps an entry at most 60 s (KV's own
     propagation delay), so another isolate's change shows as soon as KV would show it.
   - Memory keeps one deep-frozen copy made from the same JSON text KV stores: both layers serve
     the same value, a memory hit costs no parsing, and changing a served value throws instead
     of changing the next caller's (the schemas below hand callers fresh objects anyway).
   - A page's pin is written once per version: a pin already there is not written again.
+    Writes cost ten times reads ($5 a million past 1M a month) and are capped at one a
+    second per key.
 - **Spaces** (`spaces.ts`): the whole inventory of what is cached, one `CacheName` per kind
   (`page`, `pin`, `search`, `papers`, `listings`, `crypto:market`, `crypto:coin`,
   `crypto:table`, `route`, `paid-failed`) with its version in `CACHE_VERSIONS`. A key is
