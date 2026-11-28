@@ -6,28 +6,10 @@
  * version key, written before the first part returns, and later parts that
  * name the version read exactly that copy.
  */
-
-import { z } from "zod";
-import { ContentKindSchema, PageFormatSchema } from "../enums.js";
 import { sha256Hex } from "../http/url.js";
+import type { CacheContext, SharedCache } from "../cache/shared.js";
 import type { FetchedPage } from "../providers/types.js";
-import type { Cache } from "./cache.js";
-
-const PIN_VERSION = "v1";
-
-const PinnedSchema = z.object({
-  provider: z.string(),
-  value: z.object({
-    url: z.string(),
-    finalUrl: z.string(),
-    status: z.number().int(),
-    contentType: z.string(),
-    kind: ContentKindSchema,
-    title: z.string().optional(),
-    content: z.string(),
-    format: PageFormatSchema,
-  }),
-});
+import { PinSpace } from "./spaces.js";
 
 export interface Pinned {
   page: FetchedPage;
@@ -42,22 +24,26 @@ export async function pageVersion(page: FetchedPage): Promise<string> {
 
 export class PagePins {
   constructor(
-    private readonly cache: Cache,
+    private readonly cache: SharedCache,
     private readonly ttlSeconds: number,
   ) {}
 
-  /** Store this copy under its version. Awaited: the next part may be asked for right away. */
-  async pin(pageKey: string, page: FetchedPage, provider: string): Promise<string> {
+  /**
+   * Store this copy under its version, unless it is already there (a version
+   * names one exact copy, and KV takes one write a second per key). Awaited,
+   * never deferred: the next part may be asked for right away.
+   */
+  async pin(pageId: string, page: FetchedPage, provider: string, ctx?: CacheContext): Promise<string> {
     const version = await pageVersion(page);
-    await this.cache.put(key(pageKey, version), { value: page, provider }, this.ttlSeconds);
+    if (await this.cache.read(PinSpace, `${pageId}:${version}`, ctx)) return version;
+    const now = ctx ? { telemetry: ctx.telemetry, parent: ctx.parent } : undefined;
+    await this.cache.write(PinSpace, `${pageId}:${version}`, page, this.ttlSeconds, now, provider);
     return version;
   }
 
   /** The copy with this version, if it is still stored. */
-  async recall(pageKey: string, version: string): Promise<Pinned | undefined> {
-    const saved = PinnedSchema.safeParse(await this.cache.get(key(pageKey, version)));
-    return saved.success ? { page: saved.data.value, provider: saved.data.provider } : undefined;
+  async recall(pageId: string, version: string, ctx?: CacheContext): Promise<Pinned | undefined> {
+    const entry = await this.cache.read(PinSpace, `${pageId}:${version}`, ctx);
+    return entry ? { page: entry.value, provider: entry.provider ?? "" } : undefined;
   }
 }
-
-const key = (pageKey: string, version: string) => `pin:${PIN_VERSION}:${pageKey}:${version}`;

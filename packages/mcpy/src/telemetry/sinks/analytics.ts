@@ -22,6 +22,8 @@ const num = (a: Attributes, k: string) => (typeof a[k] === "number" ? (a[k] as n
  *   blob8   cache status   blob9 request id
  *   double1 duration ms    double2 content chars   double3 cost USD
  *   double4 target status  double5 attempts
+ *   double6 cache reads answered from memory   double7 from KV   double8 not answered
+ *   (operations only; a read's layer hit rate is double6 or double7 over double6 + double7 + double8)
  */
 export class AnalyticsEngineSink implements TelemetrySink {
   constructor(private readonly dataset: AnalyticsDatasetLike) {}
@@ -48,6 +50,9 @@ export class AnalyticsEngineSink implements TelemetrySink {
         num(a, Attr.CostUsd),
         num(a, Attr.TargetStatus),
         num(a, Attr.Attempts),
+        num(a, Attr.CacheReadsMemory),
+        num(a, Attr.CacheReadsKv),
+        num(a, Attr.CacheReadsMissed),
       ],
     });
   }

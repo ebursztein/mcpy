@@ -1,7 +1,6 @@
 import { AttemptOutcome, CacheStatus, ErrorCode, LogLevel, SearchMode, type UserAgentProfile } from "../enums.js";
 import { McpyError } from "../errors.js";
 import type { HttpClient } from "../http/client.js";
-import { sha256Hex } from "../http/url.js";
 import { resolveUserAgent, type UserAgentConfig } from "../http/user-agents.js";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, ProviderCall, SearchProvider, SearchRequest } from "../providers/types.js";
 import type { PaperProvider, PaperRequest } from "../providers/paper-types.js";
@@ -12,14 +11,17 @@ import type { Telemetry } from "../telemetry/telemetry.js";
 import type { SpanContext } from "../telemetry/types.js";
 import type { CircuitBreaker } from "./breaker.js";
 import type { EngineLimits } from "./limits.js";
-import { isYoungEnough, type Cache } from "./cache.js";
+import type { LayeredCache } from "../cache/layered.js";
+import { hashedId, SharedCache, type CacheReads } from "../cache/shared.js";
+import type { CacheSpace } from "../cache/spaces.js";
+import { ListingsSpace, PageSpace, PapersSpace, SearchSpace } from "./spaces.js";
 import { runChain, type ChainProvider, type ChainResult, type Judgement } from "./chain.js";
 import { EMPTY_SEARCH_TTL_SECONDS, emptyMovesOn, searchCost } from "./judgements.js";
 import { dedupe, mergeRanked, type MergedPage } from "./merge.js";
 import { capableProviders } from "./search-routing.js";
 import { capablePaperProviders, mergePapers, type MergedPaper } from "./papers.js";
 import { fanOut } from "./fanout.js";
-import { capablePageProviders, noCapableProvider, pageCacheKey, routeSite } from "./page-request.js";
+import { capablePageProviders, noCapableProvider, pageCacheId, routeSite } from "./page-request.js";
 import { assessPage } from "./quality.js";
 import type { SpendMeter } from "./meter.js";
 import type { QuotaAlert } from "./quota.js";
@@ -29,8 +31,6 @@ import { PagePins, type Pinned } from "./pins.js";
 
 export { EngineLimitsSchema, type EngineLimits } from "./limits.js";
 export type { PagePolicy } from "./page-chain.js";
-
-const CACHE_VERSION = "v2";
 
 export { EMPTY_SEARCH_TTL_SECONDS };
 
@@ -42,7 +42,7 @@ export interface EngineDeps {
   listingProviders?: ListingProvider[];
   /** Crypto market and network sources (services/crypto). */
   cryptoProviders?: CryptoProvider[];
-  cache: Cache;
+  cache: LayeredCache;
   http: HttpClient;
   breaker: CircuitBreaker;
   limits: EngineLimits;
@@ -60,6 +60,8 @@ export interface CallScope {
   onQuota?: (alert: QuotaAlert) => void; // a paid source refused a call for account reasons
   /** The caller's client name: a write's cached answer is kept for it alone. */
   client?: string;
+  /** Counts the operation's cache reads by layer, for hit rates. */
+  reads?: CacheReads;
 }
 
 /** Engine result. `provider` is for telemetry only; cost is totalled by the scope's meter. */
@@ -72,23 +74,19 @@ export interface Served<T> {
   parts?: Record<string, string>;
 }
 
-interface Cached<T> {
-  value: T;
-  provider: string;
-  /** Epoch ms of the write; absent on entries written before it was recorded. */
-  storedAt?: number;
-}
-
 /** Cache, fallback chain and provider plumbing behind every operation. */
 export class Engine {
   private readonly routes: SiteRoutes;
   private readonly pins: PagePins;
   private readonly paidFailures: PaidFailures;
+  /** The one reader and writer of the cache; every entry the engine and services keep goes through it. */
+  readonly cache: SharedCache;
 
   constructor(private readonly deps: EngineDeps) {
-    this.routes = new SiteRoutes(deps.cache, deps.limits.siteRouteTtlSeconds);
-    this.pins = new PagePins(deps.cache, deps.limits.pageTtlSeconds);
-    this.paidFailures = new PaidFailures(deps.cache, deps.limits.paidFailureTtlSeconds);
+    this.cache = new SharedCache(deps.cache);
+    this.routes = new SiteRoutes(this.cache, deps.limits.siteRouteTtlSeconds);
+    this.pins = new PagePins(this.cache, deps.limits.pageTtlSeconds);
+    this.paidFailures = new PaidFailures(this.cache, deps.limits.paidFailureTtlSeconds);
   }
 
   get providerIds() {
@@ -110,18 +108,14 @@ export class Engine {
     return this.deps.limits;
   }
 
-  private pageKey(req: PageRequest, scope: Pick<CallScope, "client">): Promise<string> {
-    return pageCacheKey(CACHE_VERSION, req, scope.client);
-  }
-
   /** Keep this copy of a page so its later parts come from it; returns its version. */
-  async pinPage(req: PageRequest, served: Served<FetchedPage>, scope: Pick<CallScope, "client">): Promise<string> {
-    return this.pins.pin(await this.pageKey(req, scope), served.value, served.provider);
+  async pinPage(req: PageRequest, served: Served<FetchedPage>, scope?: CallScope): Promise<string> {
+    return this.pins.pin(await pageCacheId(req, scope?.client), served.value, served.provider, scope);
   }
 
   /** The pinned copy of a page with this version, if it is still kept. */
-  async pinnedPage(req: PageRequest, version: string, scope: Pick<CallScope, "client">): Promise<Pinned | undefined> {
-    return this.pins.recall(await this.pageKey(req, scope), version);
+  async pinnedPage(req: PageRequest, version: string, scope?: CallScope): Promise<Pinned | undefined> {
+    return this.pins.recall(await pageCacheId(req, scope?.client), version, scope);
   }
 
   /** `maxAgeSeconds` (every cached operation): oldest cached answer to serve; 0 skips the cache. */
@@ -129,9 +123,9 @@ export class Engine {
     const capable = capablePageProviders(this.deps.pageProviders, req);
     if (capable.length === 0) throw noCapableProvider(req);
     if (policy.freeOnly && !capable.some(isFree)) throw noFreeProvider();
-    const key = await this.pageKey(req, scope);
+    const id = await pageCacheId(req, scope.client);
     const ttl = () => this.deps.limits.pageTtlSeconds;
-    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
+    return this.cached(PageSpace, id, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       runPageChain({
         capable,
         site: routeSite(req),
@@ -164,9 +158,9 @@ export class Engine {
   async search(req: SearchRequest, mode: SearchMode, scope: CallScope, maxAgeSeconds: number): Promise<Served<MergedPage[]>> {
     const providers = capableProviders(this.deps.searchProviders, req);
     const identity = [mode, req.query.toLowerCase(), req.type, req.limit, req.page, req.country, req.language, req.recency, req.device, req.sites, req.excludeSites];
-    const key = `${CACHE_VERSION}:search:${await sha256Hex(JSON.stringify(identity))}`;
+    const id = await hashedId(identity);
     const ttl = (hits: MergedPage[]) => (hits.length ? this.deps.limits.searchTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
-    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
+    return this.cached(SearchSpace, id, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       mode === SearchMode.Thorough ? this.searchAll(providers, req, deadlineAt, scope) : this.searchFirst(providers, req, deadlineAt, scope),
     );
   }
@@ -196,11 +190,11 @@ export class Engine {
   async papers(req: PaperRequest, mode: SearchMode, scope: CallScope, maxAgeSeconds: number): Promise<Served<MergedPaper[]>> {
     const providers = capablePaperProviders(this.deps.paperProviders, req);
     const identity = [mode, req.query?.toLowerCase(), req.author?.toLowerCase(), req.limit, req.page, req.yearFrom, req.yearTo, req.openAccess, req.sort, req.collection];
-    const key = `${CACHE_VERSION}:papers:${await sha256Hex(JSON.stringify(identity))}`;
+    const id = await hashedId(identity);
     const ttl = (hits: MergedPaper[]) => (hits.length ? this.deps.limits.paperTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
     const chain = (ps: PaperProvider[], deadlineAt: number) =>
       this.chain(ps, (p, call) => p.searchPapers(req, call), emptyMovesOn, deadlineAt, scope, (hits) => ({ [Attr.ContentChars]: hits.length }));
-    return this.cached(key, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
+    return this.cached(PapersSpace, id, ttl, maxAgeSeconds, scope, async (deadlineAt) => {
       if (mode === SearchMode.Thorough) {
         return fanOut(providers, (p) => chain([p], deadlineAt), (lists) => mergePapers(lists, req.limit, req.sort), this.deps.limits.thoroughGraceMs);
       }
@@ -218,9 +212,9 @@ export class Engine {
   async listings(req: ListingRequest, scope: CallScope, maxAgeSeconds: number): Promise<Served<ListingPage>> {
     const providers = (this.deps.listingProviders ?? []).filter((p) => p.markets.includes(req.market));
     if (!providers.length) throw new McpyError(ErrorCode.NoProviders, "no listing source serves this marketplace");
-    const key = `${CACHE_VERSION}:listings:${await sha256Hex(JSON.stringify([req.market, req.query.toLowerCase(), req.sort, req.minPrice, req.maxPrice, req.page]))}`;
+    const id = await hashedId([req.market, req.query.toLowerCase(), req.sort, req.minPrice, req.maxPrice, req.page]);
     const ttl = (p: ListingPage) => (p.rows.length ? this.deps.limits.pageTtlSeconds : EMPTY_SEARCH_TTL_SECONDS);
-    return this.cached(key, ttl, maxAgeSeconds, scope, (deadlineAt) =>
+    return this.cached(ListingsSpace, id, ttl, maxAgeSeconds, scope, (deadlineAt) =>
       runChain({
         providers,
         attempt: (p, signal, timeoutMs, parent) => p.searchListings(req, this.call(signal, timeoutMs, deadlineAt, scope, parent)),
@@ -257,13 +251,14 @@ export class Engine {
   }
 
   /**
-   * Serve from cache when possible; otherwise run the chain and cache the
-   * result. The chain only returns usable or definitive results (blocked and
-   * challenge pages never reach the cache); salvaged results are returned
-   * but not cached. The write is deferred off the request path when possible.
+   * Serve entry `id` of `space` from the cache when it is young enough;
+   * otherwise run the chain and cache the result. The chain only returns
+   * usable or definitive results (blocked and challenge pages never reach the
+   * cache); salvaged results are returned but not cached.
    */
   async cached<T>(
-    key: string,
+    space: CacheSpace<T>,
+    id: string,
     /** Seconds to cache the result, or undefined to not cache it. */
     ttl: (value: T, salvaged: boolean) => number | undefined,
     /** Oldest entry to serve; older ones are fetched again, and 0 skips the read. */
@@ -271,25 +266,17 @@ export class Engine {
     scope: CallScope,
     run: (deadlineAt: number) => Promise<ChainResult<T>>,
   ): Promise<Served<T>> {
-    const skip = maxAgeSeconds === 0;
-    if (!skip) {
-      const hit = await this.deps.cache.get<Cached<T>>(key);
-      if (hit && isYoungEnough(hit, maxAgeSeconds)) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider };
-    }
+    const hit = await this.cache.read(space, id, scope, maxAgeSeconds);
+    if (hit) return { value: hit.value, cache: CacheStatus.Hit, attempts: 0, provider: hit.provider ?? "" };
     const result = await run(Date.now() + this.deps.limits.deadlineMs);
     const seconds = ttl(result.value, result.salvaged);
-    if (seconds !== undefined) {
-      const write = this.deps.cache.put<Cached<T>>(key, { value: result.value, provider: result.provider, storedAt: Date.now() }, seconds).catch(() => undefined);
-      if (scope.defer) scope.defer(write);
-      else await write;
-    }
-    scope.telemetry.log(LogLevel.Debug, seconds === undefined ? "result not cached" : "cached result", { [Attr.Provider]: result.provider }, scope.parent);
+    if (seconds !== undefined) await this.cache.write(space, id, result.value, seconds, scope, result.provider);
+    else scope.telemetry.log(LogLevel.Debug, "result not cached", { [Attr.CacheName]: space.name, [Attr.Provider]: result.provider }, scope.parent);
     return {
       value: result.value,
-      cache: skip ? CacheStatus.Bypass : CacheStatus.Miss,
+      cache: maxAgeSeconds === 0 ? CacheStatus.Bypass : CacheStatus.Miss,
       attempts: result.attempts.length,
       provider: result.provider,
     };
   }
 }
-

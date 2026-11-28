@@ -66,7 +66,7 @@ Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
 
 1. Input validated (zod); URLs must be public http(s), and so must every
    redirect hop (hosted providers follow redirects on their side).
-2. Cache lookup (in memory by default, Cloudflare KV with `KvCache`).
+2. Cache lookup (in memory by default; memory in front of Cloudflare KV with `new LayeredCache({ kv })`).
 3. Providers tried in order. Each attempt has a timeout; the whole call has a
    deadline. Transient errors (network, 408, 429, 5xx) are retried with
    jittered backoff that honors `Retry-After`. A provider that keeps failing
@@ -82,7 +82,7 @@ Inputs and outputs are zod schemas (`FetchInputSchema`, `FetchResultSchema`,
 ```ts
 createMcpy({
   pages, search,
-  cache: new KvCache(env.CACHE),            // or MemoryCache, NoCache, your own Cache
+  cache: new LayeredCache({ kv: env.CACHE }), // memory in front of KV; without kv, memory only
   telemetry,                                 // see below
   limits: { attemptTimeoutMs: 20_000, deadlineMs: 45_000, maxResponseBytes: 5_000_000,
             pageTtlSeconds: 3_600, searchTtlSeconds: 900,

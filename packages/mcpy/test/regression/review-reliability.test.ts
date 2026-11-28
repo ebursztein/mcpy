@@ -4,9 +4,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CacheStatus, ContentKind, EMPTY_SEARCH_TTL_SECONDS, ErrorCode, KvCache, MemoryCache, type Cache } from "mcpy";
+import { CacheStatus, ContentKind, EMPTY_SEARCH_TTL_SECONDS, ErrorCode, LayeredCache, type KvLike } from "mcpy";
 import { direct } from "mcpy/providers";
-import { fakePages, fakeSearch, LONG_TEXT, page, responseAt, stubFetch, testMcpy } from "../helpers.js";
+import { KvStore, MemoryStore } from "../../src/cache/store.js";
+import { fakeKv, fakePages, fakeSearch, LONG_TEXT, page, responseAt, stubFetch, testMcpy } from "../helpers.js";
 
 const URL_A = "https://example.com/a";
 
@@ -97,9 +98,9 @@ describe("#10 attempt timeouts hold even when a provider ignores its signal", ()
 describe("#11 cache writes stay off the request path when deferral is available", () => {
   it("returns before a slow cache write completes", async () => {
     let release!: () => void;
-    const slow: Cache = { get: async () => null, put: () => new Promise<void>((r) => (release = r)) };
+    const slow: KvLike = { get: async (keys) => new Map(keys.map((k) => [k, null])), put: () => new Promise<void>((r) => (release = r)) };
     const deferred: Promise<unknown>[] = [];
-    const { mcpy } = testMcpy({ pages: [fakePages("p", page())], cache: slow });
+    const { mcpy } = testMcpy({ pages: [fakePages("p", page())], cache: new LayeredCache({ kv: slow, memory: false }) });
     const r = await mcpy.with({ defer: (w) => deferred.push(w) }).fetch({ url: URL_A });
     expect(r.meta.cache).toBe(CacheStatus.Miss);
     expect(deferred).toHaveLength(1);
@@ -111,39 +112,45 @@ describe("#11 cache writes stay off the request path when deferral is available"
 describe("#12 empty search results are not cached as long-lived answers", () => {
   it("caches zero hits briefly", async () => {
     const ttls: number[] = [];
-    const recording: Cache = { get: async () => null, put: async (_k, _v, ttl) => void ttls.push(ttl) };
-    const { mcpy } = testMcpy({ search: [fakeSearch("s", [])], cache: recording });
+    const recording: KvLike = { get: async (keys) => new Map(keys.map((k) => [k, null])), put: async (_k, _v, o) => void ttls.push(o!.expirationTtl!) };
+    const { mcpy } = testMcpy({ search: [fakeSearch("s", [])], cache: new LayeredCache({ kv: recording, memory: false }) });
     await mcpy.search({ query: "nothing" });
     expect(ttls).toEqual([EMPTY_SEARCH_TTL_SECONDS]);
   });
 });
 
 describe("#15 cache implementations", () => {
-  it("MemoryCache evicts the least recently used entry", async () => {
-    const c = new MemoryCache(2);
-    await c.put("a", 1, 60);
-    await c.put("b", 2, 60);
-    await c.get("a"); // a is now most recent
-    await c.put("c", 3, 60);
-    expect(await c.get("a")).toBe(1);
-    expect(await c.get("b")).toBeNull();
+  it("the memory layer evicts the least recently used entry", () => {
+    const c = new MemoryStore({ maxEntries: 2 });
+    c.put("a", "1", 1, 60);
+    c.put("b", "2", 1, 60);
+    c.get("a"); // a is now most recent
+    c.put("c", "3", 1, 60);
+    expect(c.get("a")).toBe("1");
+    expect(c.get("b")).toBeUndefined();
   });
 
-  it("KvCache enforces KV's minimum TTL, measures bytes, and never throws", async () => {
+  it("the KV layer enforces KV's minimum TTL and measures bytes", async () => {
     const puts: { key: string; ttl?: number }[] = [];
-    const kv = {
-      get: async () => {
-        throw new Error("kv down");
-      },
-      put: async (key: string, _v: string, o?: { expirationTtl?: number }) => void puts.push({ key, ttl: o?.expirationTtl }),
-    };
-    const c = new KvCache(kv);
-    await c.put("k", { a: 1 }, 5);
+    const kv: KvLike = { get: async () => new Map(), put: async (key, _v, o) => void puts.push({ key, ttl: o?.expirationTtl }) };
+    const c = new KvStore(kv);
+    await c.put("k", JSON.stringify({ a: 1 }), 5);
     expect(puts).toEqual([{ key: "k", ttl: 60 }]);
-    expect(await c.get("k")).toBeNull();
-    // 7M three-byte characters: ~21 MB in UTF-8, under 20 MB as UTF-16 units.
-    await c.put("big", "€".repeat(7_000_000), 60);
+    // 7M three-byte characters: ~21 MB in UTF-8, under 20 MB as UTF-16 units. Refused, never sent to KV.
+    await expect(c.put("big", "€".repeat(7_000_000), 60)).rejects.toThrow(/over the .*KV limit/);
     expect(puts).toHaveLength(1);
+  });
+
+  // The KV layer lets KV errors through so they can be reported; the cache
+  // layer above it (cache/shared.ts) keeps the guarantee that they never fail a call.
+  it("a KV that throws on every read and write never fails a call, and each failure is a warning", async () => {
+    const { mcpy, sink } = testMcpy({ pages: [fakePages("p", page())], cache: new LayeredCache({ kv: fakeKv({ failing: true }) }) });
+    const r = await mcpy.fetch({ url: URL_A });
+    expect(r.meta.cache).toBe(CacheStatus.Miss);
+    const failures = sink.logs.filter((l) => l.attributes["mcpy.cache.event"] === "failed");
+    // The page read and write, and the paused-sources and site-route reads a fetch makes first.
+    expect(failures.map((l) => l.attributes["mcpy.cache.name"]).sort()).toEqual(["page", "page", "paid-failed", "route"]);
+    expect(failures.every((l) => l.level === "warn" && l.attributes["exception.message"] === "kv down")).toBe(true);
   });
 
   it("records the target host on operation spans", async () => {

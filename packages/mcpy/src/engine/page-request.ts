@@ -22,12 +22,13 @@ function isPlain(req: PageRequest): boolean {
 }
 
 /**
- * Cache key of a page request. Every field that can change the answer is part
- * of it. A read's answer is shared by every client; a write's is kept for the
- * client that sent it (`client`), so one client's write never answers another's.
+ * Cache id of a page request (its key: `v2:page:<id>`). Every field that can
+ * change the answer is part of it. A read's answer is shared by every client;
+ * a write's is kept for the client that sent it (`client`), so one client's
+ * write never answers another's.
  */
-export async function pageCacheKey(version: string, req: PageRequest, client?: string): Promise<string> {
-  const base = `${version}:page:${req.format}:${req.userAgent}`;
+export async function pageCacheId(req: PageRequest, client?: string): Promise<string> {
+  const base = `${req.format}:${req.userAgent}`;
   const url = normalizeUrl(req.url);
   // Plain GETs keep the key they always had, so cached pages and page versions still match.
   if (isPlain(req)) return `${base}:${await sha256Hex(url)}`;

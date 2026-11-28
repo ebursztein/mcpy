@@ -43,13 +43,16 @@ export function noFreeProvider(): McpyError {
 }
 
 export async function runPageChain(c: PageChainContext): Promise<ChainResult<FetchedPage>> {
-  const paused = !c.policy.freeOnly && c.site !== undefined && (await c.failures.recent(c.site));
+  // Read together, after the page missed: one KV request for both. A hit never reads them.
+  const [paused, preferred] = await Promise.all([
+    !c.policy.freeOnly && c.site !== undefined ? c.failures.recent(c.site, c.scope) : false,
+    c.site ? c.routes.recall(c.site, c.scope) : undefined,
+  ]);
   const freeOnly = c.policy.freeOnly === true || paused;
   const pool = freeOnly ? c.capable.filter(isFree) : c.capable;
   if (pool.length === 0) throw c.policy.freeOnly ? noFreeProvider() : pausedError(c.failures.seconds);
   if (paused) c.scope.telemetry.log(LogLevel.Info, "paid sources paused for site", {}, c.scope.parent);
 
-  const preferred = c.site ? await c.routes.recall(c.site) : undefined;
   const providers = routeOrder(pool, preferred);
   if (providers[0] !== c.capable[0]) c.scope.telemetry.log(LogLevel.Debug, "site route", { [Attr.Provider]: providers[0].id }, c.scope.parent);
 
@@ -59,7 +62,7 @@ export async function runPageChain(c: PageChainContext): Promise<ChainResult<Fet
     result = await c.run(providers, (p) => (triedPaid ||= !isFree(p)));
   } catch (err) {
     if (!(err instanceof McpyError) || (err.code !== ErrorCode.UpstreamFailed && err.code !== ErrorCode.Timeout)) throw err;
-    if (triedPaid && c.site) await defer(c.scope, c.failures.remember(c.site));
+    if (triedPaid && c.site) await c.failures.remember(c.site, c.scope);
     if (paused) throw pausedError(c.failures.seconds, err.details);
     if (freeOnly) throw new McpyError(err.code, `${err.message} (free_only: paid sources were not tried)`, err.details);
     throw err;
@@ -81,12 +84,5 @@ function pausedError(seconds: number, details?: string[]): McpyError {
 function learnRoute(c: PageChainContext, preferred: string | undefined, served: string): Promise<void> {
   const isDefault = served === c.capable[0].id;
   if (served === preferred || (preferred === undefined && isDefault)) return Promise.resolve();
-  return defer(c.scope, c.routes.remember(c.site!, served));
-}
-
-/** Memory writes never fail a call, and run after the response when the host allows it. */
-async function defer(scope: CallScope, write: Promise<void>): Promise<void> {
-  const safe = write.catch(() => undefined);
-  if (scope.defer) scope.defer(safe);
-  else await safe;
+  return c.routes.remember(c.site!, served, c.scope);
 }

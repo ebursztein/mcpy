@@ -13,7 +13,7 @@
  * - The pager failing is logged, never paged through itself.
  */
 
-import { LogLevel, QuotaAlertKind, type KvLike, type QuotaAlert } from "mcpy";
+import { LogLevel, QuotaAlertKind, type QuotaAlert } from "mcpy";
 import { Attr, type Telemetry } from "mcpy/telemetry";
 import { z } from "zod";
 
@@ -74,10 +74,16 @@ export function capNearPush(client: string, capUsd: number, spentUsd: number): P
   };
 }
 
+/** The single-key reads and writes of a KV namespace the pager's cooldowns need (the CACHE binding). */
+export interface CooldownStore {
+  get(key: string, type: "json"): Promise<unknown>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+}
+
 export interface PagerOptions {
   keys: PushoverKeys;
   /** Holds the quota cooldown across isolates; without it, only this isolate remembers. */
-  store?: KvLike;
+  store?: CooldownStore;
   cooldownSeconds: number;
   fetch?: typeof fetch;
   now?: () => number;

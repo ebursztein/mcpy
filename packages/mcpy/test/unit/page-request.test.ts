@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { ErrorCode, HttpMethod, McpyError, PageFormat, UserAgentProfile } from "mcpy";
 import type { PageCapabilities, PageProvider, PageRequest } from "mcpy/providers";
 import { pageRequestOf, type PageInput } from "../../src/api/page-input.js";
-import { capablePageProviders, pageCacheKey } from "../../src/engine/page-request.js";
+import { cacheKey } from "../../src/cache/spaces.js";
+import { capablePageProviders, pageCacheId } from "../../src/engine/page-request.js";
+import { PageSpace } from "../../src/engine/spaces.js";
 import { normalizeUrl, sha256Hex } from "../../src/http/url.js";
 import { fakePages, page, testMcpy } from "../helpers.js";
 
@@ -59,9 +61,11 @@ describe("page request input", () => {
   });
 });
 
+const pageCacheKey = async (req: PageRequest) => cacheKey(PageSpace, await pageCacheId(req));
+
 describe("page routing and cache keys", () => {
   it("keeps the cache key a plain GET always had", async () => {
-    expect(await pageCacheKey("v2", plain)).toBe(`v2:page:markdown:default:${await sha256Hex(normalizeUrl(plain.url))}`);
+    expect(await pageCacheKey(plain)).toBe(`v2:page:markdown:default:${await sha256Hex(normalizeUrl(plain.url))}`);
   });
 
   it("keys every field that changes the answer", async () => {
@@ -73,11 +77,11 @@ describe("page routing and cache keys", () => {
         { ...plain, method: HttpMethod.Post, body: '{"a":1}' },
         { ...plain, method: HttpMethod.Post, body: '{"a":2}' },
         { ...plain, headers: { Origin: "https://a.example" } },
-      ].map((r) => pageCacheKey("v2", r)),
+      ].map((r) => pageCacheKey(r)),
     );
     expect(new Set(keys).size).toBe(keys.length);
     // Header names are case-insensitive and unordered.
-    expect(await pageCacheKey("v2", { ...plain, headers: { A: "1", b: "2" } })).toBe(await pageCacheKey("v2", { ...plain, headers: { B: "2", a: "1" } }));
+    expect(await pageCacheKey({ ...plain, headers: { A: "1", b: "2" } })).toBe(await pageCacheKey({ ...plain, headers: { B: "2", a: "1" } }));
   });
 
   it("sends each request only to providers that can do what it asks", () => {

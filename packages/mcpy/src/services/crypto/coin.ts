@@ -8,16 +8,17 @@
 
 import type { ChainResult } from "../../engine/chain.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
-import { sha256Hex } from "../../http/url.js";
+import { hashedId } from "../../cache/shared.js";
+import { z } from "zod";
+import { cacheSpace, CacheName, requiredFields } from "../../cache/spaces.js";
 import type { FoundCoinDay, FoundLiveCoin } from "../../providers/crypto-types.js";
-import { CoinDayStatus, coinWindow, cryptoMaxAgeOf, CryptoCoinResultSchema, MIN_CRYPTO_MAX_AGE_SECONDS, upperSymbols, type Coin, type CoinDay, type CryptoCoinQuery, type CryptoCoinResult } from "../../schemas-crypto.js";
+import { CoinDayStatus, coinWindow, cryptoMaxAgeOf, CoinSchema, CryptoCoinResultSchema, MIN_CRYPTO_MAX_AGE_SECONDS, upperSymbols, type Coin, type CoinDay, type CryptoCoinQuery, type CryptoCoinResult } from "../../schemas-crypto.js";
 import { blockIssuance, lacksIssuance, minerPerBlockOf } from "./issuance.js";
 import { mergeHistories, mergeSnapshots, sourcesOf, type Merged } from "./merge.js";
 import { coinFacts, nowFigures } from "./market.js";
 import { hashprice, minerEarned, minerFees, minerSubsidy } from "./rules.js";
 import { askHistories, askSnapshots, noSources, sourcesFor } from "./sources.js";
 
-const CACHE_KEY_VERSION = "v3";
 const DAY_MS = 86_400_000;
 /** Complete days are final once their sources have published them: a window ending this long ago is kept a day. */
 const SETTLED_AFTER_DAYS = 2;
@@ -29,6 +30,9 @@ export interface CoinAnswer {
   /** Every source behind "<SYMBOL> complete" / "<SYMBOL> live", for the usage log. */
   parts: Record<string, string>;
 }
+
+/** Coins are the public Coin schema itself: an answer is cached exactly as callers get its coins. */
+const CoinSpace = cacheSpace(CacheName.CryptoCoin, requiredFields<CoinAnswer>({ coins: z.array(CoinSchema), missing: z.array(z.string()), parts: z.record(z.string(), z.string()) }));
 
 const compact = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -118,10 +122,10 @@ export async function cryptoCoinOp(
   const history = wantsHistory ? sourcesFor(engine, "history") : [];
   if (!live.length && !history.length) throw noSources(wantsHistory ? "past days" : "coin data");
 
-  const key = `${CACHE_KEY_VERSION}:crypto:coin:${await sha256Hex(JSON.stringify([symbols, from, to]))}`;
+  const id = await hashedId([symbols, from, to]);
   const settled = Date.now() - Date.parse(to) > SETTLED_AFTER_DAYS * DAY_MS;
   const ttl = () => (settled ? SETTLED_TTL_SECONDS : MIN_CRYPTO_MAX_AGE_SECONDS);
-  const served = await engine.cached<CoinAnswer>(key, ttl, cryptoMaxAgeOf(input.max_age), scope, async (deadlineAt) => {
+  const served = await engine.cached(CoinSpace, id, ttl, cryptoMaxAgeOf(input.max_age), scope, async (deadlineAt) => {
     const req = { symbols, limit: symbols.length, totals: false };
     const run = await both(
       live.length ? askSnapshots(engine, live, req, deadlineAt, scope, cryptoMaxAgeOf(input.max_age)) : undefined,

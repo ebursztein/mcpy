@@ -144,7 +144,7 @@ describe("empty strings and memoization", () => {
   });
 
   it("ignores bindings and other non-string values", () => {
-    const config = loadEnv({ CACHE: { get: async () => null, put: async () => undefined }, RETRIES: 3 as unknown as string });
+    const config = loadEnv({ CACHE: { get: async () => null, put: async () => undefined } as unknown as Env["CACHE"], RETRIES: 3 as unknown as string });
     expect(config.RETRIES).toBe(2);
   });
 

@@ -1,24 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryCache, PageFormat, type Cache } from "mcpy";
+import { LayeredCache, PageFormat } from "mcpy";
 import { routeOrder, siteOf } from "../../src/engine/routes.js";
-import { fakePages, page, testMcpy } from "../helpers.js";
+import { cacheKey } from "../../src/cache/spaces.js";
+import { SiteRouteSpace } from "../../src/engine/spaces.js";
+import { fakeKv, fakePages, page, testMcpy } from "../helpers.js";
 
 const BLOCKED = page({ status: 403 });
 const GOOD = page();
-
-/** A cache that records every key written. */
-function recordingCache(): Cache & { keys: string[] } {
-  const inner = new MemoryCache();
-  const keys: string[] = [];
-  return {
-    keys,
-    get: (key) => inner.get(key),
-    put: (key, value, ttl) => {
-      keys.push(key);
-      return inner.put(key, value, ttl);
-    },
-  };
-}
 
 describe("site routes", () => {
   afterEach(() => vi.useRealTimers());
@@ -72,10 +60,10 @@ describe("site routes", () => {
   });
 
   it("writes nothing for sites the first source serves", async () => {
-    const cache = recordingCache();
-    const { mcpy } = testMcpy({ pages: [fakePages("direct", GOOD), fakePages("paid", GOOD, 0.001)], cache });
+    const kv = fakeKv();
+    const { mcpy } = testMcpy({ pages: [fakePages("direct", GOOD), fakePages("paid", GOOD, 0.001)], cache: new LayeredCache({ kv }) });
     await mcpy.fetch({ url: "https://blog.example/a" });
-    expect(cache.keys.filter((k) => k.startsWith("route:"))).toEqual([]);
+    expect(kv.puts.filter((k) => k.startsWith(cacheKey(SiteRouteSpace, "")))).toEqual([]);
   });
 });
 

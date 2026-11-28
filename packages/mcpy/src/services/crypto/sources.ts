@@ -5,6 +5,8 @@
  * the call while another answered.
  */
 
+import { z } from "zod";
+import { cacheSpace, CacheName, requiredFields } from "../../cache/spaces.js";
 import { AttemptOutcome, ErrorCode } from "../../enums.js";
 import { McpyError } from "../../errors.js";
 import type { ChainResult, Judgement } from "../../engine/chain.js";
@@ -31,8 +33,11 @@ function askAll<T>(engine: Engine, providers: CryptoProvider[], run: (p: CryptoP
   return fanOut(providers, tagged, (answers) => answers, engine.limits.thoroughGraceMs);
 }
 
-/** Cache key of a source's whole table, shared by every call whatever coins it asks for. */
-const tableKey = (id: string) => `v1:crypto:table:${id}`;
+/** A coin as a source saw it, as cached: its symbol and time checked, every figure kept. */
+export const FoundLiveCoinSchema = () => requiredFields<FoundLiveCoin>({ symbol: z.string().min(1), asOf: z.string() });
+
+/** A source's whole table, kept under the source's id and shared by every call whatever coins it asks for. */
+const TableSpace = cacheSpace(CacheName.CryptoTable, z.array(FoundLiveCoinSchema()));
 
 /**
  * A whole-table source's coins for this request: the table is read from the cache when it is
@@ -42,7 +47,7 @@ async function fromTable(engine: Engine, p: CryptoProvider, req: SnapshotRequest
   let fresh: ChainResult<FoundLiveCoin[]> | undefined;
   // An empty or salvaged table is never kept: one bad download must not blank the network figures for 5 minutes.
   const ttl = (coins: FoundLiveCoin[], salvaged: boolean) => (salvaged || coins.length === 0 ? undefined : MIN_CRYPTO_MAX_AGE_SECONDS);
-  const served = await engine.cached(tableKey(p.id), ttl, maxAgeSeconds, scope, async () => {
+  const served = await engine.cached(TableSpace, p.id, ttl, maxAgeSeconds, scope, async () => {
     fresh = await engine.chain([p], (q, call) => q.table!(call), (coins) => escalateEmpty(coins.length === 0), deadlineAt, scope);
     return fresh;
   });

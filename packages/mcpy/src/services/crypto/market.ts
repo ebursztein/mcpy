@@ -3,16 +3,16 @@
  * every live source at once, merged by symbol. Cached for at least 5 minutes.
  */
 
-import { sha256Hex } from "../../http/url.js";
+import { hashedId } from "../../cache/shared.js";
+import { z } from "zod";
+import { cacheSpace, CacheName, requiredFields } from "../../cache/spaces.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import type { FoundLiveCoin, FoundTotals } from "../../providers/crypto-types.js";
 import { cryptoMaxAgeOf, CryptoMarketResultSchema, HashrateUnit, MIN_CRYPTO_MAX_AGE_SECONDS, upperSymbols, type CryptoMarketQuery, type CryptoMarketResult, type MarketCoin } from "../../schemas-crypto.js";
 import { blockIssuance, coinsAtBlockTime, lacksIssuance } from "./issuance.js";
 import { mergeSnapshots } from "./merge.js";
 import { coinRule, hashprice, minerIssued } from "./rules.js";
-import { askSnapshots, noSources, sourcesFor } from "./sources.js";
-
-const CACHE_KEY_VERSION = "v3";
+import { askSnapshots, FoundLiveCoinSchema, noSources, sourcesFor } from "./sources.js";
 
 export interface MarketAnswer {
   totals?: FoundTotals;
@@ -20,6 +20,15 @@ export interface MarketAnswer {
   /** Coins miners received per block lately, for coins whose live sources state no issuance (issuance.ts). */
   minerPerBlock?: Record<string, number>;
 }
+
+const MarketSpace = cacheSpace(
+  CacheName.CryptoMarket,
+  requiredFields<MarketAnswer>({
+    totals: requiredFields<FoundTotals>({ asOf: z.string(), totalMarketCapUsd: z.number() }).optional(),
+    coins: z.array(FoundLiveCoinSchema()),
+    minerPerBlock: z.record(z.string(), z.number()).optional(),
+  }),
+);
 
 const compact = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 
@@ -124,8 +133,8 @@ export async function cryptoMarketOp(
   const providers = sourcesFor(engine, "live");
   if (!providers.length) throw noSources("market data");
   const symbols = input.symbols ? upperSymbols(input.symbols) : undefined;
-  const key = `${CACHE_KEY_VERSION}:crypto:market:${await sha256Hex(JSON.stringify([symbols ? [...symbols].sort() : null, input.limit]))}`;
-  const served = await engine.cached<MarketAnswer>(key, () => MIN_CRYPTO_MAX_AGE_SECONDS, cryptoMaxAgeOf(input.max_age), scope, async (deadlineAt) => {
+  const id = await hashedId([symbols ? [...symbols].sort() : null, input.limit]);
+  const served = await engine.cached(MarketSpace, id, () => MIN_CRYPTO_MAX_AGE_SECONDS, cryptoMaxAgeOf(input.max_age), scope, async (deadlineAt) => {
     const asked = await askSnapshots(engine, providers, { symbols, limit: input.limit, totals: true }, deadlineAt, scope, cryptoMaxAgeOf(input.max_age));
     const merged = mergeSnapshots(asked.value);
     const coins = [...merged.coins.values()].map((m) => m.value);

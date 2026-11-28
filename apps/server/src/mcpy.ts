@@ -1,11 +1,16 @@
-import { createMcpy, KvCache, MemoryCache, type Mcpy } from "mcpy";
+import { createMcpy, LayeredCache, type Mcpy } from "mcpy";
 import type { Telemetry } from "mcpy/telemetry";
 import type { Env, ServerEnv } from "./env.js";
 import { buildProviders, type ProviderSetup } from "./providers.js";
 import { workerLoaderScripts } from "./scripts.js";
 
-// Per-isolate fallback cache when no KV namespace is bound (local dev).
-const isolateCache = new MemoryCache(500);
+/**
+ * The isolate's memory, in front of KV when the CACHE namespace is bound (and
+ * the only store in local dev without it). JS strings take two bytes a
+ * character, so this keeps at most about 16 MB of a Worker's 128 MB; entries
+ * over 512k characters live in KV only.
+ */
+const MEMORY = { maxEntries: 2_000, maxChars: 8_000_000, maxEntryChars: 512_000 };
 
 /** One SDK instance per isolate, so circuit-breaker state persists across requests. */
 const instances = new WeakMap<object, { mcpy: Mcpy; providers: ProviderSetup }>();
@@ -21,7 +26,7 @@ export function sdkFor(env: Env, config: ServerEnv, telemetry: Telemetry): { mcp
       papers: providers.papers,
       listings: providers.listings,
       crypto: providers.crypto,
-      cache: env.CACHE ? new KvCache(env.CACHE) : isolateCache,
+      cache: new LayeredCache({ kv: env.CACHE, memory: MEMORY }),
       scripts: env.LOADER ? workerLoaderScripts(env.LOADER) : undefined,
       limits: {
         attemptTimeoutMs: config.ATTEMPT_TIMEOUT_MS,

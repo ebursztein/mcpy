@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CacheStatus, createMcpy, MemoryCache, PageFormat, PaperCollection, PaperSort, Recency, SearchType } from "mcpy";
+import { CacheStatus, createMcpy, LayeredCache, PageFormat, PaperCollection, PaperSort, Recency, SearchType } from "mcpy";
 import { arxiv, brightData, brightDataSearch, cloudflareBrowser, direct, firecrawl, firecrawlSearch, mempool, openAlex, pubmed, serpentSearch } from "mcpy/providers";
 
 const TARGET = "https://elie.net/";
@@ -29,7 +29,7 @@ const k = loadKeys();
 const has = (...names: string[]) => names.every((n) => !!k[n]);
 
 function sdk(options: Parameters<typeof createMcpy>[0]) {
-  return createMcpy({ cache: new MemoryCache(), ...options });
+  return createMcpy({ cache: new LayeredCache(), ...options });
 }
 
 async function expectRealPage(mcpy: ReturnType<typeof createMcpy>) {
@@ -119,7 +119,7 @@ describe("paper indexes (live, no keys needed)", () => {
 
 describe("retarget history (live, no keys needed)", () => {
   it("gives BTC's and LTC's last 30 complete days their difficulty at the last block", async () => {
-    const mcpy = createMcpy({ cache: new MemoryCache(), crypto: [mempool()] });
+    const mcpy = createMcpy({ cache: new LayeredCache(), crypto: [mempool()] });
     const to = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const from = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
     // One coin a call: 30 days each, under the 40 rows a call.

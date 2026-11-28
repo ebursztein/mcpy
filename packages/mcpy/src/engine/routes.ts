@@ -7,34 +7,27 @@
  * never shrinks, and the memory expires so cheaper providers are re-tried.
  */
 
-import { z } from "zod";
+import type { CacheContext, SharedCache } from "../cache/shared.js";
 import { Attr } from "../telemetry/attributes.js";
-import type { Cache } from "./cache.js";
-
-const ROUTE_VERSION = "v1";
-
-const SiteRouteSchema = z.object({ provider: z.string().min(1) });
+import { PaidFailureSpace, SiteRouteSpace } from "./spaces.js";
 
 /** Remembers, per site and format, the provider that last served it. */
 export class SiteRoutes {
   constructor(
-    private readonly cache: Cache,
+    private readonly cache: SharedCache,
     private readonly ttlSeconds: number,
   ) {}
 
   /** The site's remembered provider, if any. */
-  async recall(site: string): Promise<string | undefined> {
-    const saved = SiteRouteSchema.safeParse(await this.cache.get(key(site)));
-    return saved.success ? saved.data.provider : undefined;
+  async recall(site: string, ctx?: CacheContext): Promise<string | undefined> {
+    return (await this.cache.read(SiteRouteSpace, site, ctx))?.value;
   }
 
   /** Remember that `provider` served `site`. */
-  remember(site: string, provider: string): Promise<void> {
-    return this.cache.put(key(site), { provider }, this.ttlSeconds);
+  remember(site: string, provider: string, ctx?: CacheContext): Promise<void> {
+    return this.cache.write(SiteRouteSpace, site, provider, this.ttlSeconds, ctx);
   }
 }
-
-const key = (site: string) => `route:${ROUTE_VERSION}:${site}`;
 
 /**
  * Sites whose paid sources all just failed. A call that paid for every
@@ -45,7 +38,7 @@ const key = (site: string) => `route:${ROUTE_VERSION}:${site}`;
  */
 export class PaidFailures {
   constructor(
-    private readonly cache: Cache,
+    private readonly cache: SharedCache,
     private readonly ttlSeconds: number,
   ) {}
 
@@ -54,18 +47,15 @@ export class PaidFailures {
   }
 
   /** Whether the site's paid sources all failed within the last `seconds`. */
-  async recent(site: string): Promise<boolean> {
-    return PaidFailureSchema.safeParse(await this.cache.get(failureKey(site))).success;
+  async recent(site: string, ctx?: CacheContext): Promise<boolean> {
+    return (await this.cache.read(PaidFailureSpace, site, ctx)) !== undefined;
   }
 
   /** Remember that every paid source just failed for `site`. */
-  remember(site: string): Promise<void> {
-    return this.cache.put(failureKey(site), { at: Date.now() }, this.ttlSeconds);
+  remember(site: string, ctx?: CacheContext): Promise<void> {
+    return this.cache.write(PaidFailureSpace, site, true, this.ttlSeconds, ctx);
   }
 }
-
-const PaidFailureSchema = z.object({ at: z.number() });
-const failureKey = (site: string) => `paid-failed:${ROUTE_VERSION}:${site}`;
 
 /** The site a page request belongs to: its format and lowercase hostname. */
 export function siteOf(url: string, format: string): string | undefined {

@@ -35,6 +35,54 @@ Rules, each enforced by tests where possible:
 5. **Modules stay under 300 lines.** A test fails the build otherwise.
 6. **One folder per provider**: `providers/<name>/{index,schemas,...}.ts`.
 
+## Cache
+
+Everything mcpy keeps between calls goes through one small module, `src/cache/`:
+
+- **The cache** (`layered.ts`): `LayeredCache` is the only cache the SDK takes or exports:
+  `new LayeredCache({ kv, memory, memoryTtlSeconds })`. Its two layers (`store.ts`, internal)
+  are the isolate's memory and, when `kv` is given, Cloudflare KV; callers never choose one.
+  Without `kv` it is memory only (dev, tests, Node); `memory: false` and no `kv` keeps nothing.
+  The server passes the `CACHE` namespace and memory bounds of 2,000 entries, 8M characters,
+  none over 512k.
+  - Reads try memory first; a KV hit is copied to memory. Reads that reach KV in the same tick
+    share one bulk get (up to 100 keys a request): a fetch reads its page alone, so a hit costs
+    no extra keys, and only after a miss reads its site's route and paused flag, together, in
+    one request (two KV round trips on a miss instead of three).
+  - Writes go to both. With KV behind it, memory keeps an entry at most 60 s (KV's own
+    propagation delay), so another isolate's change shows as soon as KV would show it.
+  - Memory keeps one deep-frozen copy made from the same JSON text KV stores: both layers serve
+    the same value, a memory hit costs no parsing, and changing a served value throws instead
+    of changing the next caller's (the schemas below hand callers fresh objects anyway).
+  - A page's pin is written once per version: a pin already there is not written again.
+- **Spaces** (`spaces.ts`): the whole inventory of what is cached, one `CacheName` per kind
+  (`page`, `pin`, `search`, `papers`, `listings`, `crypto:market`, `crypto:coin`,
+  `crypto:table`, `route`, `paid-failed`) with its version in `CACHE_VERSIONS`. A key is
+  `v<version>:<name>:<id>`, so a key read off a log says what it holds. Bump a version when what
+  a space stores changes shape or meaning: old entries are then never read again. Every space has
+  a zod schema each value read back must pass: exact for pages, pins, routes, paused sites and
+  `crypto_coin`'s coins; for values typed by interfaces (search hits, papers, listings, crypto
+  sources), `requiredFields` checks the fields a value cannot do without and keeps the rest.
+- **Reads and writes** (`shared.ts`, `SharedCache`, the engine's `cache`): one envelope for
+  every entry (value, provider, write time), the caller's `max_age` applied on read, and no
+  exceptions: a backend error, an invalid entry or a stale one is a miss. A write runs after the
+  response when the call can defer, and is awaited otherwise (pins pass no `defer`). Engine
+  operations and services use `engine.cached(space, id, ttl, maxAge, scope, run)`; the route,
+  paused-source and pin stores call `read`/`write` directly.
+- **Debugging**: every read and write logs one record on the call's trace with
+  `mcpy.cache.name`, `mcpy.cache.key`, `mcpy.cache.event` (`hit`, `miss`, `stale`, `invalid`,
+  `bypass`, `stored`, `failed`), `mcpy.cache.tier` (`memory` or `kv`, the layer that answered)
+  and `mcpy.cache.age_s` or `mcpy.cache.ttl_s`. Hits and misses are debug records
+  (`LOG_LEVEL=debug`); `failed` and `invalid` are warnings at every level.
+- **Hit rates**: every operation span carries its cache reads by outcome,
+  `mcpy.cache.reads.memory`, `.kv` and `.missed` (miss, stale, invalid or failed; bypassed reads
+  are not counted), and Analytics Engine stores them as double6, double7 and double8. A layer's
+  hit rate is its count over the three summed. Route and paused-site reads count too, and most
+  of them miss by design: most sites have no route, and few are ever paused.
+  `GET /v1/admin/cache?cache_key=<key>` (admins only; not `key`, which carries API keys) shows
+  the entry under a key from a log: its space and version, whether the code still reads that
+  version, the provider, write time and age, and the first 20,000 characters of its value.
+
 ## Shopping: services, sites, fetcher
 
 `shopping_search` and `shopping_item` add a layer between the API and the engine:

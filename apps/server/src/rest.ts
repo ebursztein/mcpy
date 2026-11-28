@@ -8,12 +8,13 @@
  *   GET      /v1/admin/dashboard                   (admin clients only: the data dash.ly.tl shows)
  *   GET      /v1/admin/providers                   (admin clients only)
  *   GET      /v1/admin/spending                    (admin clients only: today's spend per client)
+ *   GET      /v1/admin/cache?cache_key=<key>       (admin clients only: one cache entry, key as logs show it)
  *
  * POST takes a JSON body; GET takes the same fields as query parameters so
  * URL-only agents can call it. Responses are JSON; errors use ErrorBody.
  */
 
-import { ErrorCode, FETCH_BATCH_MAX_REQUESTS, McpyError, RestRoute, type McpyApi } from "mcpy";
+import { ErrorCode, FETCH_BATCH_MAX_REQUESTS, McpyError, RestRoute, type CacheInspection, type McpyApi } from "mcpy";
 import { ClientRole, type Client } from "./clients.js";
 import { secondsUntilReset } from "./budget.js";
 import { budgetHeaders, resultHeaders, type CallBudget } from "./call-headers.js";
@@ -21,13 +22,15 @@ import type { ProviderSetup } from "./providers.js";
 import { batchSize, rateLimited } from "./rate-limit.js";
 import { dashboardData, UsageRoute, usageLogFor, usageSummary, type UsageDeps } from "./usage/api.js";
 
-export const AdminRoute = { Providers: "/v1/admin/providers", Spending: "/v1/admin/spending" } as const;
+export const AdminRoute = { Providers: "/v1/admin/providers", Spending: "/v1/admin/spending", Cache: "/v1/admin/cache" } as const;
 
 /** What the admin routes report on. */
 export interface AdminView {
   providers: ProviderSetup;
   /** Undefined when no BUDGET binding is configured. */
   spending?: () => Promise<unknown>;
+  /** One cache entry by its full key. */
+  cache?: (key: string) => Promise<CacheInspection>;
 }
 
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -96,6 +99,13 @@ export async function handleRest(request: Request, url: URL, api: McpyApi, clien
   if (url.pathname === AdminRoute.Spending) {
     if (!admin.spending) return errorResponse(new McpyError(ErrorCode.NotFound, "spending caps are not configured (no BUDGET binding)"));
     return json(await admin.spending());
+  }
+  if (url.pathname === AdminRoute.Cache) {
+    // Not `key`: that parameter carries the caller's API key.
+    const key = url.searchParams.get("cache_key");
+    if (!admin.cache) return errorResponse(new McpyError(ErrorCode.NotFound, "cache inspection is not available"));
+    if (!key) return errorResponse(new McpyError(ErrorCode.InvalidInput, "cache_key is required: the full cache key, as mcpy.cache.key in a log shows it"));
+    return json(await admin.cache(key));
   }
   if (url.pathname === AdminRoute.Providers) {
     const { providers } = admin;

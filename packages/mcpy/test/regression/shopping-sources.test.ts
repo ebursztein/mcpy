@@ -37,9 +37,9 @@ describe("render country", () => {
     const { fetch, calls } = stubFetch(() => json(scrape()));
     await firecrawl({ apiKey: "k" }).fetchPage({ ...req(UserAgentProfile.Chrome), render: true, country: "jp" }, providerCall(fetch));
     expect(calls[0]!.body).toMatchObject({ location: { country: "JP" } });
-    const { pageCacheKey } = await import("../../src/engine/page-request.js");
+    const { pageCacheId } = await import("../../src/engine/page-request.js");
     const plain = { url: "https://jp.mercari.com/search?keyword=x", format: PageFormat.Html, userAgent: UserAgentProfile.Chrome };
-    expect(await pageCacheKey("v2", { ...plain, country: "jp" })).not.toBe(await pageCacheKey("v2", plain));
+    expect(await pageCacheId({ ...plain, country: "jp" })).not.toBe(await pageCacheId(plain));
   });
 });
 

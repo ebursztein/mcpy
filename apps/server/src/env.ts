@@ -3,6 +3,7 @@
  * var or secret, so anyone can run their own deployment without code edits.
  */
 
+import type { CooldownStore } from "./alerts.js";
 import { LogLevel, LogLevelSchema, UserAgentProfile, UserAgentProfileSchema, type KvLike } from "mcpy";
 import { ProviderId, ProviderIdSchema } from "mcpy/providers";
 import type { AnalyticsDatasetLike } from "mcpy/telemetry";
@@ -17,7 +18,8 @@ export interface RateLimiterLike {
 
 /** Bindings and raw string vars, exactly as Workers provides them. */
 export interface Env {
-  CACHE?: KvLike;
+  /** One KV namespace: the SDK's cache (bulk reads) and the pager's cooldowns (single reads). */
+  CACHE?: KvLike & CooldownStore;
   TELEMETRY?: AnalyticsDatasetLike;
   RATE_LIMITER?: RateLimiterLike;
   /** Counts failed authentications per client IP, to slow down key guessing. */

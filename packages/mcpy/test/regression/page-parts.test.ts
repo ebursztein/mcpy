@@ -8,23 +8,20 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { ErrorCode, MemoryCache, type Cache } from "mcpy";
-import { fakePages, page, testMcpy } from "../helpers.js";
+import { ErrorCode, LayeredCache } from "mcpy";
+import { cacheKey } from "../../src/cache/spaces.js";
+import { PinSpace } from "../../src/engine/spaces.js";
+import { fakeKv, fakePages, page, testMcpy } from "../helpers.js";
+
+const PIN = cacheKey(PinSpace, "");
 
 const URL = "https://shop.example/wp-json/products?page=3";
 const NEW = page({ url: URL, finalUrl: URL, content: "n".repeat(250) });
 const OLD = page({ url: URL, finalUrl: URL, content: "o".repeat(120), title: "Old copy" });
 
-/** A cache whose page entries lag: reads keep serving the copy stored first, like a stale KV edge. */
-function laggingCache(): Cache {
-  const inner = new MemoryCache();
-  return {
-    get: (key) => inner.get(key),
-    put: async (key, value, ttl) => {
-      if (key.includes(":page:") && (await inner.get(key))) return;
-      await inner.put(key, value, ttl);
-    },
-  };
+/** KV whose page entries lag: reads keep serving the copy stored first, like a stale edge. No memory layer: this is KV's behavior. */
+function laggingCache(): LayeredCache {
+  return new LayeredCache({ kv: fakeKv({ keep: (key, exists) => !(key.includes(":page:") && exists) }), memory: false });
 }
 
 describe("page part regressions", () => {
@@ -48,10 +45,7 @@ describe("page part regressions", () => {
   });
 
   it("finds the copy in the shared entry when its pin has not arrived", async () => {
-    const pinsLost: Cache = (() => {
-      const inner = new MemoryCache();
-      return { get: (k) => inner.get(k), put: (k, v, t) => (k.startsWith("pin:") ? Promise.resolve() : inner.put(k, v, t)) };
-    })();
+    const pinsLost = new LayeredCache({ kv: fakeKv({ keep: (k) => !k.startsWith(PIN) }), memory: false });
     const direct = fakePages("direct", NEW);
     const { mcpy } = testMcpy({ pages: [direct], cache: pinsLost });
     const first = await mcpy.fetch({ url: URL, max_chars: 100 });
@@ -61,12 +55,10 @@ describe("page part regressions", () => {
   });
 
   it("a page that fits in one part carries no version and pins nothing", async () => {
-    const keys: string[] = [];
-    const inner = new MemoryCache();
-    const cache: Cache = { get: (k) => inner.get(k), put: (k, v, t) => (keys.push(k), inner.put(k, v, t)) };
-    const { mcpy } = testMcpy({ pages: [fakePages("direct", NEW)], cache });
+    const kv = fakeKv();
+    const { mcpy } = testMcpy({ pages: [fakePages("direct", NEW)], cache: new LayeredCache({ kv }) });
     const r = await mcpy.fetch({ url: URL, max_chars: 1000 });
     expect(r.version).toBeUndefined();
-    expect(keys.filter((k) => k.startsWith("pin:"))).toEqual([]);
+    expect(kv.puts.filter((k) => k.startsWith(PIN))).toEqual([]);
   });
 });

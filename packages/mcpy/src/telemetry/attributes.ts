@@ -23,6 +23,18 @@ export const Attr = {
   Outcome: "mcpy.outcome",
   Reason: "mcpy.reason",
   Cache: "mcpy.cache",
+  /** One cache read or write (cache/shared.ts): space, full key, event, entry age and TTL. */
+  CacheName: "mcpy.cache.name",
+  CacheKey: "mcpy.cache.key",
+  CacheEvent: "mcpy.cache.event",
+  CacheAgeSeconds: "mcpy.cache.age_s",
+  CacheTtlSeconds: "mcpy.cache.ttl_s",
+  /** The layer that answered a read (memory | kv). */
+  CacheTier: "mcpy.cache.tier",
+  /** On an operation span: its cache reads answered from memory, from KV, and not answered. */
+  CacheReadsMemory: "mcpy.cache.reads.memory",
+  CacheReadsKv: "mcpy.cache.reads.kv",
+  CacheReadsMissed: "mcpy.cache.reads.missed",
   CostUsd: "mcpy.cost.usd",
   ContentChars: "mcpy.content.chars",
   OutputChars: "mcpy.output.chars",

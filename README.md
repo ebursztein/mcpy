@@ -71,8 +71,9 @@ once, stacked by client x tool and day x tool, with today's spend against each
 cap. The maintainers' dashboard (dash.ly.tl, its own repository) reads it and
 `/v1/usage/log`; this server serves no pages.
 
-Operators also get `GET /v1/admin/providers` and `GET /v1/admin/spending`
-(today's estimated spend and cap per client), admin clients only.
+Operators also get `GET /v1/admin/providers`, `GET /v1/admin/spending`
+(today's estimated spend and cap per client) and `GET /v1/admin/cache?cache_key=<key>`
+(one cache entry, by the `mcpy.cache.key` a log shows), admin clients only.
 
 ```bash
 curl -s https://tools.example.com/v1/fetch \

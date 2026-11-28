@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QuotaAlertKind, RestRoute, type KvLike, type QuotaAlert } from "mcpy";
-import { Pager, PUSHOVER_MESSAGES_URL, PushPriority } from "../../src/alerts.js";
+import { QuotaAlertKind, RestRoute, type QuotaAlert } from "mcpy";
+import { Pager, PUSHOVER_MESSAGES_URL, PushPriority, type CooldownStore } from "../../src/alerts.js";
 import { crossed, dailySpendLimit, type CapWatch } from "../../src/budget.js";
 import { budgetNamespace, call, makeEnv, stubNetwork } from "./harness.js";
 
@@ -8,7 +8,7 @@ const KEYS = { token: "app-token", user: "user-key" };
 const OUT: QuotaAlert = { kind: QuotaAlertKind.OutOfCredits, provider: "firecrawl", status: 402 };
 
 /** In-memory KV with the two calls the pager uses. */
-function memoryKv(): KvLike {
+function memoryKv(): CooldownStore {
   const data = new Map<string, string>();
   return { get: async (k) => (data.has(k) ? JSON.parse(data.get(k)!) : null), put: async (k, v) => void data.set(k, v) };
 }

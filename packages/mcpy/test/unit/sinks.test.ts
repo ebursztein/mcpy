@@ -224,6 +224,7 @@ describe("AnalyticsEngineSink", () => {
           [Attr.ClientName]: "alice", [Attr.Operation]: "fetch", [Attr.Provider]: "firecrawl", [Attr.Outcome]: "ok",
           [Attr.TargetHost]: "example.com", [Attr.Reason]: "r".repeat(300), [Attr.Cache]: "miss", [Attr.RequestId]: "req-1",
           [Attr.ContentChars]: 1234, [Attr.CostUsd]: 0.001, [Attr.TargetStatus]: 200, [Attr.Attempts]: 2,
+          [Attr.CacheReadsMemory]: 1, [Attr.CacheReadsKv]: 2, [Attr.CacheReadsMissed]: 3,
         },
       }),
     );
@@ -231,7 +232,7 @@ describe("AnalyticsEngineSink", () => {
       {
         indexes: ["alice"],
         blobs: [SpanName.Operation, "fetch", "firecrawl", "ok", "example.com", "r".repeat(200), "alice", "miss", "req-1"],
-        doubles: [250, 1234, 0.001, 200, 2],
+        doubles: [250, 1234, 0.001, 200, 2, 1, 2, 3],
       },
     ]);
   });
@@ -239,7 +240,7 @@ describe("AnalyticsEngineSink", () => {
   it("writes attempt spans with empty strings and zeros for missing attributes", () => {
     const ds = dataset();
     new AnalyticsEngineSink(ds).onSpan(span({ name: SpanName.Attempt, attributes: { [Attr.Provider]: "direct", [Attr.TargetStatus]: "n/a" } }));
-    expect(ds.points[0]).toEqual({ indexes: [""], blobs: [SpanName.Attempt, "", "direct", "", "", "", "", "", ""], doubles: [250, 0, 0, 0, 0] });
+    expect(ds.points[0]).toEqual({ indexes: [""], blobs: [SpanName.Attempt, "", "direct", "", "", "", "", "", ""], doubles: [250, 0, 0, 0, 0, 0, 0, 0] });
   });
 
   it.each([SpanName.HttpClient, SpanName.Request])("ignores %s spans", (name) => {

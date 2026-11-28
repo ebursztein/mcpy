@@ -22,9 +22,12 @@ import { CryptoCoinInputSchema, CryptoMarketInputSchema, type CryptoCoinInput, t
 import { cryptoCoinOp } from "./services/crypto/coin.js";
 import { cryptoMarketOp } from "./services/crypto/market.js";
 import { BreakerPolicySchema, CircuitBreaker } from "./engine/breaker.js";
-import { MemoryCache, type Cache } from "./engine/cache.js";
+import type { CacheInspection } from "./cache/inspect.js";
+import { LayeredCache } from "./cache/layered.js";
+import { CacheReads } from "./cache/shared.js";
+import { targetAttributes, withCost } from "./api/call-meta.js";
 import { Engine, EngineLimitsSchema, type CallScope, type Served } from "./engine/engine.js";
-import { roundUsd, SpendMeter, type SpendLimit } from "./engine/meter.js";
+import { SpendMeter, type SpendLimit } from "./engine/meter.js";
 import type { QuotaAlert, QuotaAlertSink } from "./engine/quota.js";
 import { ErrorCode, LogLevel, Operation, SpanName, SpanStatus, Transport, UserAgentProfile, UserAgentProfileSchema } from "./enums.js";
 import { McpyError, toMcpyError } from "./errors.js";
@@ -73,8 +76,8 @@ export interface McpyOptions extends McpyConfig {
   listings?: ListingProvider[];
   /** Crypto market and network sources, merged field by field in this order. */
   crypto?: CryptoProvider[];
-  /** Defaults to an in-memory cache. */
-  cache?: Cache;
+  /** Defaults to a memory-only LayeredCache; give it `kv` to share entries across isolates. */
+  cache?: LayeredCache;
   /** Defaults to no telemetry. */
   telemetry?: Telemetry;
   /** Defaults to the global fetch. */
@@ -159,6 +162,14 @@ export class Mcpy implements McpyApi {
     return this.run(Operation.CryptoCoin, CryptoCoinInputSchema, input, (i, scope) => cryptoCoinOp(this.engine, i, scope));
   }
 
+  /**
+   * Operators only: one cache entry by its full key (a log's `mcpy.cache.key`),
+   * naming the provider that produced it. Not part of McpyApi, never a tool.
+   */
+  inspectCache(key: string): Promise<CacheInspection> {
+    return this.engine.cache.inspect(key);
+  }
+
   /** Validation, span, structured log line and error mapping for every operation. */
   private async run<S extends z.ZodType, R>(
     operation: Operation,
@@ -173,6 +184,7 @@ export class Mcpy implements McpyApi {
       ...(this.context.requestId ? { [Attr.RequestId]: this.context.requestId } : {}),
     });
     const span = telemetry.startSpan(SpanName.Operation, {}, this.context.parent);
+    const reads = new CacheReads();
     const meter = new SpendMeter(this.context.spendLimit, (err) =>
       telemetry.log(LogLevel.Error, "spending limit unavailable, allowing paid sources", { [Attr.Reason]: err instanceof Error ? err.message : String(err) }, span.context),
     );
@@ -190,9 +202,11 @@ export class Mcpy implements McpyApi {
         defer: this.context.defer,
         meter,
         onQuota: this.quotaReporter(telemetry, span.context),
+        reads,
         ...(this.context.client ? { client: this.context.client } : {}),
       });
       const facts = {
+        ...reads.attributes(),
         [Attr.Cache]: served.cache,
         [Attr.Attempts]: served.attempts,
         [Attr.Provider]: served.provider,
@@ -211,11 +225,10 @@ export class Mcpy implements McpyApi {
       // Telemetry keeps the original detail; callers get the sanitized error.
       const detail = err instanceof Error ? err.message : String(err);
       span.recordError(err);
-      span.setAttributes({ [Attr.ErrorType]: error.code });
+      // Failed operations still cost what their attempts cost. Set before end(): a span ignores writes after it.
+      span.setAttributes({ [Attr.ErrorType]: error.code, [Attr.CostUsd]: meter.spentUsd, ...reads.attributes() });
       span.end(SpanStatus.Error, detail);
       const level = error.httpStatus >= 500 ? LogLevel.Error : LogLevel.Warn;
-      // Failed operations still cost what their attempts cost.
-      span.setAttributes({ [Attr.CostUsd]: meter.spentUsd });
       telemetry.log(level, `${operation} failed`, { [Attr.ErrorType]: error.code, [Attr.CostUsd]: meter.spentUsd, [Attr.Reason]: detail.slice(0, 500) }, span.context);
       throw error;
     } finally {
@@ -249,27 +262,6 @@ export class Mcpy implements McpyApi {
   }
 }
 
-/** Every result's meta states what the call cost the caller, failed attempts included. */
-function withCost(result: unknown, usd: number): void {
-  const meta = (result as { meta?: Record<string, unknown> } | null)?.meta;
-  if (meta && typeof meta === "object") meta["cost_usd"] = roundUsd(usd);
-}
-
-/** Host and user-agent profile of a validated input, for spans and metrics. */
-function targetAttributes(input: unknown): Record<string, string> {
-  const { url, user_agent } = input as { url?: string; user_agent?: string };
-  const out: Record<string, string> = {};
-  if (url) {
-    try {
-      out[Attr.TargetHost] = new URL(url).host;
-    } catch {
-      // invalid URLs are rejected later with invalid_target
-    }
-  }
-  if (user_agent) out[Attr.UserAgentProfile] = user_agent;
-  return out;
-}
-
 /** Build the SDK from providers and (validated) settings. */
 export function createMcpy(options: McpyOptions = {}): Mcpy {
   const config = McpyConfigSchema.parse({ limits: options.limits, retry: options.retry, breaker: options.breaker, userAgent: options.userAgent });
@@ -279,7 +271,7 @@ export function createMcpy(options: McpyOptions = {}): Mcpy {
     paperProviders: options.papers ?? [],
     listingProviders: options.listings ?? [],
     cryptoProviders: options.crypto ?? [],
-    cache: options.cache ?? new MemoryCache(),
+    cache: options.cache ?? new LayeredCache(),
     http: new HttpClient({ fetch: options.fetch ?? globalThis.fetch.bind(globalThis), retry: config.retry }),
     breaker: new CircuitBreaker(config.breaker),
     limits: config.limits,

@@ -125,7 +125,7 @@ export default {
         const callBudget = cap !== undefined && budget ? { capUsd: cap, spentToday: () => spentToday(budget, client.name) } : undefined;
         const limiter = env.RATE_LIMITER;
         const charge = limiter ? (calls: number) => chargeCalls(limiter, client.name, calls) : undefined;
-        const options = { admin: { providers, spending }, usage, budget: callBudget, chargeCalls: charge };
+        const options = { admin: { providers, spending, cache: (key: string) => mcpy.inspectCache(key) }, usage, budget: callBudget, chargeCalls: charge };
         return finish(withHeaders(await handleRest(request, url, api, client, options), { ...ids, ...rateLimitPolicyHeaders() }));
       }
       return finish(withHeaders(await mcpHandler(config, api, usage && { client, deps: usage })(stripUrlKey(request, url), env, ctx), ids));

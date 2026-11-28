@@ -1,7 +1,7 @@
 /** Shared test doubles. Tests import the SDK through the `mcpy` aliases. */
 
 import { readFileSync } from "node:fs";
-import { ContentKind, createMcpy, MemoryCache, PageFormat, SearchType, type McpyOptions } from "mcpy";
+import { ContentKind, createMcpy, LayeredCache, PageFormat, SearchType, type KvLike, type McpyOptions } from "mcpy";
 import type { FetchedPage, FoundPage, PageProvider, PageRequest, SearchCapabilities, SearchProvider, SearchRequest } from "mcpy/providers";
 import { MemorySink, Telemetry } from "mcpy/telemetry";
 
@@ -112,7 +112,7 @@ export function testMcpy(options: McpyOptions = {}) {
   const sink = new MemorySink();
   const telemetry = new Telemetry([sink], {}, "debug");
   const mcpy = createMcpy({
-    cache: new MemoryCache(),
+    cache: new LayeredCache(),
     retry: { retries: 2, baseDelayMs: 1, maxDelayMs: 5 },
     ...options,
     telemetry: options.telemetry ?? telemetry,
@@ -135,4 +135,36 @@ export function mentionsProvider(value: unknown): boolean {
   const text = JSON.stringify(value);
   // Whole words: "redirected" is not the direct provider.
   return PROVIDER_IDS.some((id) => new RegExp(`(^|[^a-z_])${id}([^a-z_]|$)`, "i").test(text));
+}
+
+/**
+ * A KV namespace in memory, recording what reaches it: each bulk get's keys
+ * and each written key. `keep(key, exists)` can refuse a write (to model a
+ * lagging edge or a lost write); `failing` makes every call throw "kv down".
+ * Use it as `new LayeredCache({ kv, memory: false })` to test KV itself.
+ */
+export function fakeKv(options: { keep?: (key: string, exists: boolean) => boolean; failing?: boolean } = {}) {
+  const data = new Map<string, string>();
+  const bulkGets: string[][] = [];
+  const puts: string[] = [];
+  const down = () => Promise.reject(new Error("kv down"));
+  const kv = {
+    data,
+    bulkGets,
+    puts,
+    get(keys: string[] | string, type: "json" | "text"): Promise<never> {
+      if (options.failing) return down();
+      const one = (k: string) => (!data.has(k) ? null : type === "json" ? JSON.parse(data.get(k)!) : data.get(k)!);
+      if (typeof keys === "string") return Promise.resolve(one(keys) as never);
+      bulkGets.push([...keys]);
+      return Promise.resolve(new Map(keys.map((k) => [k, one(k)])) as never);
+    },
+    async put(key: string, value: string): Promise<void> {
+      if (options.failing) return down();
+      puts.push(key);
+      if (options.keep && !options.keep(key, data.has(key))) return;
+      data.set(key, value);
+    },
+  };
+  return kv satisfies KvLike;
 }
