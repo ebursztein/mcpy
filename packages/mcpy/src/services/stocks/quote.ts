@@ -7,10 +7,11 @@
 
 import { z } from "zod";
 import { cacheSpace, CacheName, requiredFields } from "../../cache/spaces.js";
-import { CacheStatus } from "../../enums.js";
+import { CacheStatus, ErrorCode } from "../../enums.js";
+import { McpyError } from "../../errors.js";
 import type { CallScope, Engine, Served } from "../../engine/engine.js";
 import { roundPrice, type FoundQuote } from "../../providers/stock-types.js";
-import { StockQuoteResultSchema, upperTicker, type StockQuote, type StockQuoteQuery, type StockQuoteResult } from "../../schemas-stocks.js";
+import { cryptoRefusal, InstrumentType, StockQuoteResultSchema, upperTicker, type StockQuote, type StockQuoteQuery, type StockQuoteResult } from "../../schemas-stocks.js";
 import { movesOnWhenEmpty, noSources, sourcesFor } from "./sources.js";
 
 /** Entries live a day; max_age decides which are young enough to serve. */
@@ -93,6 +94,9 @@ export async function stockQuoteOp(engine: Engine, input: StockQuoteQuery, scope
       }),
     );
   }
+  // A symbol a source says is crypto is refused, whatever its shape (crypto pairs never get this far).
+  const crypto = symbols.flatMap((s, i) => (quotes.get(s)?.instrumentType === InstrumentType.Crypto ? [`symbols.${i}: ${cryptoRefusal(s)}`] : []));
+  if (crypto.length) throw new McpyError(ErrorCode.InvalidInput, "invalid input", crypto);
   const cache = input.max_age === 0 ? CacheStatus.Bypass : wanted.length ? CacheStatus.Miss : CacheStatus.Hit;
   const result = StockQuoteResultSchema.parse({
     quotes: symbols.flatMap((s) => (quotes.has(s) ? [quoteRow(quotes.get(s)!)] : [])),

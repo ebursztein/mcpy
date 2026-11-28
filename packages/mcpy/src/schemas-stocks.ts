@@ -54,11 +54,29 @@ export const MAX_SPAN_DAYS: Readonly<Record<BarInterval, number>> = {
   [BarInterval.Month]: 30 * 366,
 };
 
-/** Tickers as markets write them: AAPL, BRK-B, ^GSPC, SAP.DE, EURUSD=X, XMR-USD. */
+/**
+ * What a crypto pair is quoted in (BTC-USD, ETH-EUR, ETH-BTC, SOL-USDT):
+ * currencies and the coins others trade against. A share class is one letter
+ * (BRK-B), so it never matches.
+ */
+const PAIR_QUOTES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "HKD", "SGD", "KRW", "INR", "BRL", "MXN", "RUB", "TRY", "ZAR", "NZD", "SEK", "NOK", "DKK", "PLN", "USDT", "USDC", "BTC", "ETH"];
+const CRYPTO_PAIR = new RegExp(`^[A-Z0-9]{2,10}-(${PAIR_QUOTES.join("|")})$`, "i");
+
+/** A coin against a currency or another coin: crypto, which the stock tools refuse. */
+export const isCryptoPair = (symbol: string) => CRYPTO_PAIR.test(symbol.trim());
+
+/** Why a crypto symbol is refused, and where to ask instead. */
+export function cryptoRefusal(symbol: string): string {
+  const coin = isCryptoPair(symbol) ? ` with symbol ${symbol.trim().split("-")[0]!.toUpperCase()}` : "";
+  return `${symbol} is crypto, which the stock tools do not quote: ask crypto_coin or crypto_market (REST /v1/crypto/coin, /v1/crypto/market)${coin}`;
+}
+
+/** Tickers as markets write them: AAPL, BRK-B, ^GSPC, SAP.DE, EURUSD=X. Crypto is refused (crypto_coin, crypto_market). */
 const ticker = z
   .string()
   .trim()
-  .regex(/^[A-Za-z0-9^][A-Za-z0-9.^=-]{0,19}$/, "a ticker like AAPL, BRK-B, ^GSPC or SAP.DE");
+  .regex(/^[A-Za-z0-9^][A-Za-z0-9.^=-]{0,19}$/, "a ticker like AAPL, BRK-B, ^GSPC or SAP.DE")
+  .refine((s) => !isCryptoPair(s), { error: (issue) => cryptoRefusal(String(issue.input)) });
 /** Tickers compare upper-case. */
 export const upperTicker = (s: string) => s.trim().toUpperCase();
 const eachOnce = (s: string[]) => new Set(s.map(upperTicker)).size === s.length;

@@ -76,7 +76,7 @@ export function registerStockTools(server: McpServer, api: McpyApi): void {
     {
       title: "Stock Quote",
       description:
-        `Latest price of up to ${MAX_QUOTE_SYMBOLS} stocks, ETFs, funds, indices (^GSPC), currencies (EURUSD=X) or crypto pairs (BTC-USD): price, change since the previous close, day range, volume and 52-week range. Most exchanges (SAP.DE, 7203.T). Answers are at most max_age seconds old (default 60).`,
+        `Latest price of up to ${MAX_QUOTE_SYMBOLS} stocks, ETFs, funds, indices (^GSPC) or currencies (EURUSD=X); not crypto (crypto_coin, crypto_market): price, change since the previous close, day range, volume and 52-week range. Most exchanges (SAP.DE, 7203.T). Answers are at most max_age seconds old (default 60).`,
       inputSchema: StockQuoteInputSchema,
       outputSchema: StockQuoteResultSchema,
       annotations: READ_ONLY,

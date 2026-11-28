@@ -207,6 +207,10 @@ by day. Contract: `schemas-crypto.ts`; sources: `providers/crypto-types.ts`; ser
 `/v1/stocks/fundamentals`). Contract: `schemas-stocks.ts`; sources: `providers/stock-types.ts`;
 service: `services/stocks/`.
 
+- **No crypto**: crypto has its own tools (`crypto_coin`, `crypto_market`), so two tools never
+  quote a coin differently. A crypto pair (`isCryptoPair`: a coin against a currency or a coin,
+  BTC-USD, ETH-BTC; a one-letter share class like BRK-B is not one) is refused by the input
+  schema, before any source is asked; a symbol a source reports as crypto is refused after.
 - **Sources** (`STOCK_PROVIDERS`, default `yahoo,nasdaq,alphavantage,edgar`): Yahoo's chart API
   (keyless, worldwide: stocks, ETFs, funds, indices, currencies, crypto pairs; one call per symbol
   gives the quote in its meta and the bars; no session needed, unlike its quote API, which wants

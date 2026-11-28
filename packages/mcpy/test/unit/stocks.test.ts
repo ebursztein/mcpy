@@ -84,8 +84,9 @@ describe("stock_quote", () => {
     await expect(testMcpy().mcpy.stockQuote({ symbols: ["AAPL"] })).rejects.toMatchObject({ code: ErrorCode.NoProviders });
   });
 
-  it("takes the tickers markets use, each once", () => {
-    expect(StockQuoteInputSchema.safeParse({ symbols: ["AAPL", "BRK-B", "^GSPC", "SAP.DE", "EURUSD=X", "BTC-USD"] }).success).toBe(true);
+  it("takes the tickers markets use, each once, and no crypto pair", () => {
+    expect(StockQuoteInputSchema.safeParse({ symbols: ["AAPL", "BRK-B", "^GSPC", "SAP.DE", "EURUSD=X"] }).success).toBe(true);
+    expect(StockQuoteInputSchema.safeParse({ symbols: ["BTC-USD"] }).success).toBe(false);
     expect(StockQuoteInputSchema.safeParse({ symbols: ["AAPL", "aapl"] }).success).toBe(false);
     expect(StockQuoteInputSchema.safeParse({ symbols: ["AA PL"] }).success).toBe(false);
   });
